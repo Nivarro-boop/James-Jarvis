@@ -1,0 +1,355 @@
+/*
+ * Dunkel, weil das Gegenstück am Rechner es auch ist — und weil ein weißes
+ * Telefon im dunklen Zimmer neben dem Bett niemanden freut.
+ *
+ * Alle Abstände unten gehen über env(safe-area-inset-*): Ohne das liegt die
+ * Sprechtaste auf einem iPhone unter dem Homebalken und lässt sich nicht
+ * drücken, ohne dass man aus Versehen die App wegwischt.
+ */
+
+:root {
+  --bg: #070a12;
+  --fg: #e4eaf6;
+  --dim: #8894ab;
+  --line: #1e2738;
+  /*
+     Hieß bis eben --violet und war es auch. Der Name war schon damals der
+     Fehler: Er sagt, welche Farbe es ist, statt wozu sie da ist — und beim
+     Umstellen auf Blau hätte im Stylesheet dann "violet: blau" gestanden.
+     `--glow` ist das Leuchtende an dieser Oberfläche, gleich welcher Ton.
+  */
+  --glow: #5b9dff;
+  --glow-dim: #2b5aa8;
+  --red: #d9566b;
+  --green: #52c08a;
+}
+
+* {
+  box-sizing: border-box;
+  -webkit-tap-highlight-color: transparent;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.45 -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  overscroll-behavior: none;
+}
+
+.screen {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  padding: calc(env(safe-area-inset-top) + 20px) 20px calc(env(safe-area-inset-bottom) + 20px);
+  gap: 12px;
+}
+
+.screen[hidden] {
+  display: none;
+}
+
+/* ── Koppeln ────────────────────────────────────────────── */
+
+h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.hint {
+  margin: 0;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+label {
+  color: var(--dim);
+  font-size: 13px;
+  margin-top: 8px;
+}
+
+input {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #0d1420;
+  color: var(--fg);
+  font-size: 16px; /* Kleiner, und iOS zoomt beim Antippen hinein. */
+  font-family: inherit;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--glow-dim);
+}
+
+button {
+  font-family: inherit;
+  font-size: 16px;
+  border: none;
+  border-radius: 12px;
+  cursor: pointer;
+}
+
+.primary {
+  margin-top: 16px;
+  padding: 16px;
+  background: var(--glow);
+  color: #fff;
+  font-weight: 600;
+}
+
+.primary:active {
+  background: var(--glow-dim);
+}
+
+.ghost {
+  padding: 10px 14px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--dim);
+}
+
+.ghost:active {
+  background: #101a2a68;
+}
+
+.error {
+  margin: 4px 0 0;
+  color: var(--red);
+  font-size: 14px;
+}
+
+/* ── Kopf ───────────────────────────────────────────────── */
+
+header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+header .ghost {
+  margin-left: auto;
+  padding: 6px 12px;
+}
+
+.dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--dim);
+  flex: none;
+}
+
+.dot[data-state='offline'] {
+  background: #414d63;
+}
+.dot[data-state='connecting'] {
+  background: #c9a227;
+}
+.dot[data-state='idle'] {
+  background: var(--green);
+}
+.dot[data-state='paused'] {
+  background: var(--red);
+}
+/* Derselbe Ton wie die Kugel darunter — sonst sagen zwei Anzeigen auf einem
+   Bildschirm dasselbe in zwei Farben. */
+.dot[data-state='listening'] {
+  background: #35e0ff;
+}
+.dot[data-state='speaking'] {
+  background: #8cbcff;
+}
+.dot[data-state='thinking'],
+.dot[data-state='tool'] {
+  background: #ff8c1a;
+}
+.dot[data-state='research'] {
+  background: #3f86f5;
+}
+
+.note {
+  min-height: 20px;
+  color: var(--dim);
+  font-size: 14px;
+}
+
+/* ── Die Kugel ──────────────────────────────────────────── */
+
+.stage {
+  flex: 1;
+  display: grid;
+  place-items: center;
+}
+
+/*
+  Die Kugel, in klein und flach.
+
+  Sie nimmt jetzt die Zustandsfarbe mit, statt in jedem Zustand gleich zu
+  leuchten und den Unterschied allein der Atemfrequenz zu überlassen. Am
+  Rechner ist die Farbe die ganze Sprache der Oberfläche; wer auf dem Sofa
+  aufs Telefon sieht, soll dasselbe lesen und nicht ein zweites Vokabular
+  lernen. Die Töne stammen aus derselben Tabelle wie dort — src/renderer/
+  styles.css, die Zustandsfarben unter `.home[data-state=…]`.
+
+  Drei Werte je Zustand: die Farbe selbst, ein dunkler Auslauf nach außen und
+  der Schein darum. Bewusst als drei Hexwerte und nicht über color-mix
+  gerechnet — diese Seite läuft in fremden Telefonbrowsern, und ein Zustand,
+  der auf einem älteren iPhone farblos bleibt, wäre schlimmer als etwas
+  Wiederholung im Stylesheet.
+*/
+.crystal {
+  --orb: #6ea8ff;
+  --orb-deep: #123a7a;
+  --orb-dim: #2b5aa8;
+
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  /* Der helle Fleck ist Weiß mit Deckkraft, keine eigene Farbe: So sitzt das
+     Licht in jedem Zustand richtig, ohne dass es dafür einen vierten Wert
+     braucht. */
+  background: radial-gradient(
+    circle at 38% 34%,
+    rgba(255, 255, 255, 0.92) 0%,
+    var(--orb) 42%,
+    var(--orb-deep) 100%
+  );
+  box-shadow: 0 0 60px -8px var(--orb-dim);
+  transition: box-shadow 0.4s ease, opacity 0.4s ease, background 0.6s ease;
+}
+
+.crystal[data-state='listening'] {
+  --orb: #35e0ff;
+  --orb-deep: #0a4a63;
+  --orb-dim: #1a7f96;
+}
+
+.crystal[data-state='speaking'] {
+  --orb: #8cbcff;
+  --orb-deep: #1d4a91;
+  --orb-dim: #3e6fb8;
+}
+
+/* Arbeit ist warm — der einzige Bruch in der kalten Farbwelt, und derselbe
+   wie am Rechner: Zwei Blautöne nebeneinander unterscheidet niemand im
+   Vorbeisehen. */
+.crystal[data-state='thinking'],
+.crystal[data-state='tool'] {
+  --orb: #ff8c1a;
+  --orb-deep: #6b3200;
+  --orb-dim: #96521a;
+}
+
+.crystal[data-state='research'] {
+  --orb: #3f86f5;
+  --orb-deep: #0f2f6b;
+  --orb-dim: #26538f;
+}
+
+.crystal[data-state='confirm'] {
+  --orb: #ff5c3d;
+  --orb-deep: #6e1e10;
+  --orb-dim: #96331f;
+}
+
+.crystal[data-state='error'] {
+  --orb: #f4483a;
+  --orb-deep: #661410;
+  --orb-dim: #8f2a22;
+}
+
+.crystal[data-state='connecting'] {
+  --orb: #7f9ce0;
+  --orb-deep: #2a3a6b;
+  --orb-dim: #45568f;
+}
+
+/* Aus ist aus: kein Schein, keine Farbe, nur noch ein Körper im Dunkeln. */
+.crystal[data-state='offline'],
+.crystal[data-state='paused'] {
+  --orb: #4d5566;
+  --orb-deep: #171c26;
+  background: radial-gradient(
+    circle at 38% 34%,
+    rgba(255, 255, 255, 0.35) 0%,
+    var(--orb) 42%,
+    var(--orb-deep) 100%
+  );
+  box-shadow: none;
+  opacity: 0.7;
+}
+
+.crystal[data-state='listening'] {
+  animation: breathe 2.4s ease-in-out infinite;
+}
+
+.crystal[data-state='speaking'] {
+  animation: breathe 1.1s ease-in-out infinite;
+}
+
+.crystal[data-state='thinking'],
+.crystal[data-state='tool'],
+.crystal[data-state='research'] {
+  animation: breathe 3.4s ease-in-out infinite;
+}
+
+@keyframes breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 60px -8px var(--orb-dim);
+  }
+  50% {
+    box-shadow: 0 0 90px 4px var(--orb);
+  }
+}
+
+/* Wer Bewegung abgeschaltet hat, bekommt keine — der Zustand steht daneben. */
+@media (prefers-reduced-motion: reduce) {
+  .crystal {
+    animation: none !important;
+  }
+}
+
+/* ── Sprechen ───────────────────────────────────────────── */
+
+.talk {
+  padding: 22px;
+  background: #101a2e;
+  border: 1px solid var(--glow-dim);
+  color: var(--fg);
+  font-weight: 600;
+  touch-action: none; /* Sonst wird aus dem Halten ein Scrollen. */
+  user-select: none;
+}
+
+.talk.active {
+  background: var(--glow);
+  color: #fff;
+  border-color: var(--glow);
+}
+
+.say {
+  display: flex;
+  gap: 8px;
+}
+
+.say input {
+  flex: 1;
+}
+
+footer {
+  display: flex;
+  gap: 8px;
+}
+
+footer .ghost {
+  flex: 1;
+}

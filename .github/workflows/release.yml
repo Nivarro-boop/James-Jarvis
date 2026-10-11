@@ -1,0 +1,65 @@
+# Bei jedem Push auf main: testen, bauen und als neues Release veröffentlichen.
+#
+# Die Versionsnummer setzt sich aus package.json und der Laufnummer zusammen:
+# steht dort 1.3.4, wird der 2. Lauf zu 1.3.6 (letzte Stelle plus Laufnummer).
+# Jeder Lauf ist damit höher als der vorige, und die installierten Apps finden
+# ihn beim nächsten Start (electron-updater, siehe src/main/updater.ts). Für
+# einen größeren Sprung Haupt- oder Nebennummer in package.json erhöhen und
+# die letzte Stelle dort nie verkleinern.
+#
+# Veröffentlicht wird in diesem Repo selbst (Nivarro-boop/James-Jarvis,
+# öffentlich). Die App braucht zum Prüfen kein Token, und die Action kommt
+# mit dem eingebauten GITHUB_TOKEN aus, weil sie nur ins eigene Repo schreibt.
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# Kommen zwei Pushes kurz hintereinander, zählt nur der neuere.
+concurrency:
+  group: release
+  cancel-in-progress: true
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 40
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+
+      - name: Abhängigkeiten
+        run: npm ci
+
+      - name: Versionsnummer
+        shell: pwsh
+        run: |
+          $base = (Get-Content package.json -Raw | ConvertFrom-Json).version.Split('.')
+          # Laufnummer auf die letzte Stelle aufschlagen: Der erste Lauf in
+          # diesem Repo hätte sonst 1.3.1 gebaut, unter lokal gebauten 1.3.x.
+          $version = "$($base[0]).$($base[1]).$([int]$base[2] + [int]$env:GITHUB_RUN_NUMBER)"
+          npm version $version --no-git-tag-version --allow-same-version
+          "VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Output "Version $version"
+
+      - name: Typen prüfen
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Bauen und veröffentlichen
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_NOTES: ${{ github.event.head_commit.message }}
+        run: npm run release

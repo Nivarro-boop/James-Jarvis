@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Void James — Kurzanleitung</title>
+    <style>
+      /* Für Papier gebaut, nicht für den Bildschirm. Wer diese Seite braucht,
+         legt sie neben die Tastatur — dunkles Design und Schnörkel wären hier
+         genau falsch. */
+      @page {
+        size: A4;
+        margin: 16mm;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", system-ui, sans-serif;
+        font-size: 11.5pt;
+        line-height: 1.55;
+        color: #1a1a1a;
+        background: #fff;
+        max-width: 19cm;
+        margin: 0 auto;
+        padding: 20px 24px 40px;
+      }
+
+      h1 {
+        font-size: 20pt;
+        margin: 0 0 2px;
+        letter-spacing: -0.01em;
+      }
+
+      .sub {
+        color: #555;
+        margin: 0 0 22px;
+        font-size: 10.5pt;
+      }
+
+      h2 {
+        font-size: 12.5pt;
+        margin: 20px 0 7px;
+        padding-bottom: 4px;
+        border-bottom: 1.5px solid #d3dbe6;
+      }
+
+      p,
+      li {
+        margin: 5px 0;
+      }
+
+      ul,
+      ol {
+        margin: 6px 0;
+        padding-left: 20px;
+      }
+
+      li {
+        padding-left: 2px;
+      }
+
+      strong {
+        color: #000;
+      }
+
+      kbd {
+        font-family: inherit;
+        font-size: 10pt;
+        border: 1px solid #b3bccb;
+        border-bottom-width: 2px;
+        border-radius: 4px;
+        padding: 1px 6px;
+        background: #f4f7fb;
+        white-space: nowrap;
+      }
+
+      .box {
+        border: 1.5px solid #d3dbe6;
+        border-left: 4px solid #2f6fd0;
+        border-radius: 5px;
+        padding: 11px 14px;
+        margin: 12px 0;
+        background: #f8fbfe;
+      }
+
+      .box p:first-child {
+        margin-top: 0;
+      }
+
+      .box p:last-child {
+        margin-bottom: 0;
+      }
+
+      .quiet {
+        color: #555;
+        font-size: 10pt;
+      }
+
+      footer {
+        margin-top: 26px;
+        padding-top: 10px;
+        border-top: 1px solid #ddd;
+        color: #666;
+        font-size: 9.5pt;
+      }
+
+      /* Auf Papier ist Tinte teuer und der Rahmen überflüssig. */
+      @media print {
+        body {
+          padding: 0;
+        }
+
+        .box {
+          background: none;
+        }
+
+        /* Das Ganze braucht zwei Seiten — auf eine gequetscht bekäme man es
+           nur, indem man die Hälfte wegließe oder die Schrift auf eine Größe
+           schrumpfte, die der Adressat dieser Seite nicht mehr liest.
+           Wichtiger als die Seitenzahl ist deshalb, wo umgebrochen wird:
+           Eine Überschrift allein am Fuß der ersten Seite oder eine Liste,
+           die mitten im Satz umbricht, macht eine Anleitung unbrauchbar. */
+        h2 {
+          break-after: avoid;
+          page-break-after: avoid;
+        }
+
+        ul,
+        ol,
+        .box,
+        footer {
+          break-inside: avoid;
+          page-break-inside: avoid;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Void James</h1>
+    <p class="sub">Ein Assistent, mit dem man spricht. Diese Seite reicht für den Anfang.</p>
+
+    <h2>1. Beim allerersten Öffnen meldet sich Windows</h2>
+    <p>
+      Es erscheint ein blaues Fenster: <strong>„Der Computer wurde durch Windows
+      geschützt"</strong>. Das ist kein Virus und kein Fehler — Windows sagt das bei jedem
+      Programm, für das kein Zertifikat gekauft wurde. So geht es weiter:
+    </p>
+    <ol>
+      <li>Auf <strong>Weitere Informationen</strong> klicken (kleiner Text in der Mitte).</li>
+      <li>Dann auf <strong>Trotzdem ausführen</strong>.</li>
+    </ol>
+    <p class="quiet">Das passiert nur einmal, bei der Installation.</p>
+
+    <h2>2. So sprichst du mit ihm</h2>
+    <p>Auf dem Bildschirm schwebt eine kleine leuchtende Kugel. Es gibt drei Wege:</p>
+    <ul>
+      <li>
+        <strong>„Hey James"</strong> laut sagen. Er wartet ständig auf diese zwei Wörter — das
+        geschieht auf diesem Rechner und wird nirgendwo hingeschickt. Erst danach hört er
+        richtig zu.
+      </li>
+      <li>
+        <kbd>Alt</kbd> + <kbd>Leertaste</kbd> drücken. Funktioniert auch, wenn ein anderes
+        Programm im Vordergrund ist.
+      </li>
+      <li><strong>Die Kugel anklicken.</strong></li>
+    </ul>
+    <p>
+      Danach einfach reden, ganz normal, in ganzen Sätzen. Er antwortet laut. Du darfst ihn
+      dabei jederzeit unterbrechen — einfach weiterreden, er hört auf.
+    </p>
+
+    <h2>3. So bringst du ihn zum Schweigen</h2>
+    <div class="box">
+      <p>
+        <strong>Dreimal <kbd>Esc</kbd> drücken</strong> — das ist der Not-Aus. Er hört sofort
+        auf, egal womit er gerade beschäftigt ist. <kbd>Esc</kbd> ist die Taste ganz links oben
+        auf der Tastatur.
+      </p>
+    </div>
+    <ul>
+      <li><strong>Die Kugel anklicken</strong>, während er redet: Er wird still.</li>
+      <li>
+        <strong>Ruhe für längere Zeit:</strong> Rechtsklick auf das kleine James-Symbol unten
+        rechts neben der Uhr → <em>James stilllegen</em>. Dort geht er auch wieder an.
+      </li>
+      <li><strong>Ganz beenden:</strong> dasselbe Menü → <em>Beenden</em>.</li>
+    </ul>
+
+    <h2>4. Was du ihn fragen kannst</h2>
+    <ul>
+      <li>„Wie wird das Wetter morgen?"</li>
+      <li>„Was habe ich diese Woche für Termine?" — wenn der Kalender verbunden ist.</li>
+      <li>„Lies mir meine neuen E-Mails vor." — wenn Gmail verbunden ist.</li>
+      <li>„Stell einen Wecker auf zwanzig nach drei."</li>
+      <li>„Mach mir YouTube auf." / „Such mir, wann der Baumarkt zusperrt."</li>
+      <li>„Ruf die Anna an." — er fragt vorher nach, bevor er wirklich wählt.</li>
+    </ul>
+    <p class="quiet">
+      Wenn er etwas nicht kann, sagt er das. Er tut nicht so, als hätte er es erledigt.
+    </p>
+
+    <h2>5. Was er von sich aus nie tut</h2>
+    <ul>
+      <li>Etwas kaufen oder eine Bestellung abschicken.</li>
+      <li>Ein Passwort, eine Kontonummer oder Kartendaten eintippen.</li>
+      <li>In einem Bank- oder Bezahlfenster irgendetwas anklicken.</li>
+    </ul>
+    <p>
+      Vor allem, was sich nicht zurücknehmen lässt — eine Mail verschicken, einen Termin
+      absagen, etwas löschen, jemanden anrufen — <strong>fragt er vorher laut nach</strong> und
+      wartet auf ein Ja.
+    </p>
+
+    <h2>6. Wenn etwas nicht funktioniert</h2>
+    <ol>
+      <li>Zahnrad oben im Fenster anklicken (oder Rechtsklick auf das Symbol neben der Uhr).</li>
+      <li>Links unten auf <strong>Über</strong>.</li>
+      <li>
+        Auf <strong>Protokoll zeigen</strong> klicken. Es öffnet sich ein Ordner mit einer
+        Datei namens <strong>jarvis.log</strong>.
+      </li>
+      <li>Diese Datei an denjenigen schicken, der dir James eingerichtet hat.</li>
+    </ol>
+    <p class="quiet">
+      In der Datei steht, was zuletzt schiefgegangen ist. Zugangsschlüssel und Passwörter
+      werden darin automatisch unkenntlich gemacht.
+    </p>
+    <p>
+      <strong>Er hört mich nicht?</strong> Meistens ist das falsche Mikrofon eingestellt. Im
+      Einstellungsfenster unter <em>Über</em> → <em>Einrichtung erneut durchgehen</em> gibt es
+      einen Balken, der sich bewegen muss, wenn du sprichst.
+    </p>
+
+    <footer>
+      Void James läuft auf diesem Rechner. Gesprochenes geht zur Verarbeitung an Google und
+      wird nicht dauerhaft gespeichert. Das Zuhören auf „Hey James" bleibt hier.
+    </footer>
+  </body>
+</html>

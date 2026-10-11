@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <!--
+      viewport-fit=cover plus die safe-area-Abstände im Stylesheet: Ohne das
+      sitzt die Sprechtaste auf einem iPhone unter dem Homebalken.
+      user-scalable=no, weil ein Doppeltipp auf die Sprechtaste sonst
+      hineinzoomt statt zu senden.
+    -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+    />
+    <meta name="theme-color" content="#070a12" />
+    <!-- Vom Startbildschirm aus ohne Safari-Leisten starten. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="James" />
+    <title>James</title>
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="icon.png" />
+    <link rel="icon" href="icon.png" />
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- ── Koppeln ───────────────────────────────────────────── -->
+    <section id="pairing" class="screen">
+      <h1>James koppeln</h1>
+      <p class="hint">
+        Die Marke steht am Rechner unter <strong>Einstellungen, Telefon</strong>.
+      </p>
+      <label for="host">Rechner</label>
+      <input id="host" type="text" inputmode="url" autocapitalize="off" autocorrect="off"
+             spellcheck="false" placeholder="192.168.1.20:8788" />
+      <label for="token">Marke</label>
+      <input id="token" type="text" autocapitalize="off" autocorrect="off" spellcheck="false"
+             placeholder="…" />
+      <button id="pair" class="primary">Verbinden</button>
+      <p id="pair-error" class="error" hidden></p>
+    </section>
+
+    <!-- ── Betrieb ───────────────────────────────────────────── -->
+    <section id="main" class="screen" hidden>
+      <header>
+        <div id="dot" class="dot" data-state="offline" aria-hidden="true"></div>
+        <span id="status">nicht verbunden</span>
+        <button id="settings" class="ghost" aria-label="Einstellungen">⋯</button>
+      </header>
+
+      <div id="note" class="note"></div>
+
+      <!--
+        Die Kugel ist hier bewusst nur ein Kreis und kein Three.js-Nachbau:
+        Die Seite soll auf einem Telefon in Sekunden laden und den Akku nicht
+        für eine Zierde verheizen. Der Puls kommt aus der Lautstärke.
+      -->
+      <div class="stage">
+        <div id="crystal" class="crystal" role="button" tabindex="0"
+             aria-label="James ansprechen oder stilllegen"></div>
+      </div>
+
+      <button id="talk" class="talk">
+        <span class="talk-label">Halten zum Sprechen</span>
+      </button>
+
+      <form id="say-form" class="say">
+        <input id="say" type="text" placeholder="oder tippen…" autocomplete="off" />
+        <button type="submit" class="ghost" aria-label="Senden">↑</button>
+      </form>
+
+      <footer>
+        <button id="wake" class="ghost">Rechner wecken</button>
+        <button id="pause" class="ghost">Stilllegen</button>
+      </footer>
+    </section>
+
+    <script src="app.js" type="module"></script>
+  </body>
+</html>

@@ -1,0 +1,26 @@
+{
+  "compilerOptions": {
+    "composite": true,
+
+    // Siehe tsconfig.node.json: `composite` verlangt Emit, gebaut wird hier
+    // aber von electron-vite. Ohne `outDir` legt ein tsc-Aufruf ohne `--noEmit`
+    // seine Ausgabe neben die Quellen.
+    "outDir": "out/tsc/web",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["vite/client"],
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "paths": {
+      "@shared/*": ["./src/shared/*"],
+      "@renderer/*": ["./src/renderer/*"]
+    }
+  },
+  "include": ["src/renderer/**/*", "src/shared/**/*", "src/preload/index.d.ts"]
+}

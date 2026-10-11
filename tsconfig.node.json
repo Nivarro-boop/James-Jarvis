@@ -1,0 +1,49 @@
+{
+  "compilerOptions": {
+    "composite": true,
+
+    // Wohin, falls doch einmal emittiert wird.
+    //
+    // Hier baut electron-vite, tsc prüft nur — deshalb steht in beiden
+    // npm-Skripten `--noEmit`. `composite` verlangt aber Emit, und wer tsc
+    // einmal ohne das Flag aufruft (von Hand, aus dem Editor, über `tsc -b`),
+    // bekam ohne `outDir` die übersetzten .js und .d.ts direkt neben die
+    // Quellen gelegt: siebenundvierzig Stück, mitten in src/. Sie tun nichts,
+    // bis eines Tages ein Import auf die veraltete .js statt auf die .ts
+    // auflöst — und dann sucht man lange.
+    //
+    // out/ ist ohnehin ignoriert, also landet der Unfall dort, wo er niemanden
+    // stört.
+    "outDir": "out/tsc/node",
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    // DOM ist hier nicht für den Main-Prozess gedacht, sondern für die
+    // Rückrufe in page.evaluate(): die laufen im Browser und brauchen
+    // document, HTMLElement und Verwandte.
+    "lib": ["ES2023", "DOM"],
+    "types": ["node", "electron-vite/node"],
+    "strict": true,
+    "noUnusedLocals": false,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "allowSyntheticDefaultImports": true,
+    "paths": {
+      "@shared/*": ["./src/shared/*"],
+      "@main/*": ["./src/main/*"]
+    }
+  },
+  // Die Tests stehen mit hier drin, obwohl sie nicht zum Hauptprozess gehören.
+  // Der Grund: Gebaut werden sie von esbuild, und das entfernt Typen, ohne sie
+  // zu prüfen. Ohne diesen Eintrag wäre ein Tippfehler im Test erst zur
+  // Laufzeit sichtbar — bei einer Zeile, die eine Zusicherung hätte sein
+  // sollen, unter Umständen gar nicht.
+  "include": [
+    "src/main/**/*",
+    "src/preload/**/*",
+    "src/shared/**/*",
+    "tests/**/*",
+    "electron.vite.config.ts"
+  ]
+}

@@ -1,0 +1,56 @@
+# Abgespeckte Fassung von hey_james.yml für wenig Plattenplatz (SLIM=1 in prepare_data.py).
+# Weniger Beispiele und Schritte; Hintergrund ist künstliches Rauschen und Stimmengewirr statt MUSAN.
+
+model_name: "hey_james"
+target_phrase:
+  - "hey james"
+# Klingt ähnlich, darf aber nicht auslösen.
+custom_negative_phrases:
+  - "hey jim"
+  - "hey jane"
+  - "hey jens"
+  - "james"
+  - "games"
+  - "hey dreams"
+  - "es geht"
+  - "hey chef"
+
+n_samples: 20000
+n_samples_val: 2000
+tts_batch_size: 50
+augmentation_batch_size: 16
+piper_sample_generator_path: "./piper-sample-generator"
+output_dir: "./out"
+
+rir_paths:
+  - "./rirs"
+background_paths:
+  - "./background/noise"
+  - "./background/music"
+background_paths_duplication_rate:
+  - 1
+  - 1
+
+false_positive_validation_data_path: "./features/validation.npy"
+augmentation_rounds: 1
+
+# Ausdrücklich NICHT die ACAV100M-Merkmale aus dem openWakeWord-Beispiel:
+# deren Lizenz ist ungeklärt. Stattdessen selbst berechnet aus LibriSpeech,
+# MUSAN und deutschen Piper-Sätzen, siehe prepare_data.py.
+feature_data_files:
+  "librispeech": "./features/librispeech.npy"
+  "german_tts": "./features/german_tts.npy"
+  "musan": "./features/musan.npy"
+
+batch_n_per_class:
+  "librispeech": 512
+  "german_tts": 256
+  "musan": 256
+  "adversarial_negative": 50
+  "positive": 50
+
+model_type: "dnn"
+layer_size: 32
+steps: 30000
+max_negative_weight: 1500
+target_false_positives_per_hour: 0.2

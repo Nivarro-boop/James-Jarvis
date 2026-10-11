@@ -1,0 +1,54 @@
+node_modules/
+out/
+dist/
+
+# Wake-Word-Modelle werden per `npm run wakeword` geholt, nicht eingecheckt.
+src/renderer/public/wakeword/*.onnx
+# Ausnahme: das eigene, selbst trainierte Modell.
+!src/renderer/public/wakeword/hey_james.onnx
+
+# Laufzeitausgaben beim Debuggen
+*.log
+*.tsbuildinfo
+
+# Übersetzte Ausgabe, die neben den Quellen gelandet ist.
+#
+# Der eigentliche Riegel steckt im `outDir` der beiden tsconfigs. Dieser hier
+# ist der zweite: Einmal standen siebenundvierzig solcher Dateien in src/,
+# unbemerkt eingecheckt hätten sie später einen Import auf veralteten Code
+# umgelenkt. Dieses Projekt ist vollständig TypeScript — die einzigen echten
+# .js sind die beiden Audio-Worklets, die der Browser roh laden muss, und die
+# einzige echte .d.ts beschreibt die Preload-Brücke.
+src/**/*.js
+!src/renderer/worklets/*.js
+src/**/*.d.ts
+!src/preload/index.d.ts
+
+# Zugangsdaten gehören nicht hierher.
+#
+# Die App liest keine .env — ihre Schlüssel liegen DPAPI-verschlüsselt im
+# Benutzerprofil. Der Eintrag steht trotzdem hier: Wer beim Ausprobieren einmal
+# einen Schlüssel in eine .env legt, soll ihn nicht versehentlich mit einchecken.
+# Ein Schlüssel, der einmal in der Historie steht, ist auch nach dem Löschen
+# noch darin.
+.env
+.env.*
+*.pem
+secrets.bin
+google-tokens.bin
+
+# Betriebssystem und Editor
+.DS_Store
+Thumbs.db
+.idea/
+
+# Python legt seinen Bytecode neben das Skript. resources/piper-host.py wird zur
+# Laufzeit ausgeführt, also entsteht der Ordner bei jedem Start neu — er gehört
+# so wenig ins Archiv wie ein Übersetzungsergebnis.
+__pycache__/
+
+# Aufnahmen und Standbilder aus einem Review-Durchlauf. Sie entstehen beim
+# Ansehen der laufenden App, gehören zu einem einzelnen Durchgang und sind
+# nach ihm wertlos — fünf Megabyte Ton und Bild, die in der Historie für
+# immer stehenblieben.
+.codex-video-review/

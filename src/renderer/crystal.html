@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!--
+      Strenge CSP: der Renderer lädt nichts aus dem Netz außer den beiden
+      Gegenstellen, die er zum Reden braucht. connect-src ist deshalb eng
+      gefasst — als Liste von Namen, nicht als Erlaubnis für alles.
+
+      'wasm-unsafe-eval' ist nötig, damit die Wake-Word-Erkennung ihre
+      ONNX-Modelle instanziieren kann. Es erlaubt ausschließlich das
+      Kompilieren von WebAssembly — kein eval() für JavaScript.
+
+      ws://127.0.0.1:* ist die Brücke zum Telefon: Der Server sitzt im
+      Hauptprozess, der Ton aber hier, und der Kristall hängt sich als
+      gewöhnlicher Client an ihn (siehe live/companionBridge.ts). Der Port ist
+      einstellbar, deshalb der Platzhalter — die Adresse selbst bleibt der
+      eigene Rechner, von außen ist damit nichts erreichbar.
+
+      api.elevenlabs.io ist die Stimme. Ohne diesen Eintrag scheitert der
+      Sprech-Sockel wortlos: Die Verbindung wird abgewiesen, bevor sie
+      zustande kommt, und im Programm sieht das aus wie ein Anbieter, der
+      nicht antwortet. Genau daran ist der erste Anlauf gescheitert.
+
+      http://127.0.0.1:* und http://localhost:* sind Ollama. Der Port ist
+      einstellbar, deshalb der Platzhalter. Dass hier http steht und nicht
+      https, ist kein Versehen: Ein Dienst auf demselben Rechner hat kein
+      Zertifikat und braucht keines — die Verbindung verlässt die Maschine
+      nicht, es gibt also niemanden, der mithören könnte.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self';
+               script-src 'self' 'wasm-unsafe-eval';
+               style-src 'self' 'unsafe-inline';
+               img-src 'self' data: blob:;
+               media-src 'self' blob:;
+               worker-src 'self' blob:;
+               connect-src 'self' blob: data:
+                 ws://127.0.0.1:*
+                 http://127.0.0.1:*
+                 http://localhost:*
+                 https://generativelanguage.googleapis.com
+                 wss://generativelanguage.googleapis.com
+                 https://api.elevenlabs.io
+                 wss://api.elevenlabs.io
+                 wss://api.openai.com;"
+    />
+    <title>James-Jarvis</title>
+  </head>
+  <body class="crystal-body">
+    <div id="root"></div>
+    <script type="module" src="/crystal.tsx"></script>
+  </body>
+</html>

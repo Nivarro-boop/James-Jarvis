@@ -1,0 +1,14 @@
+{
+  "name": "jarvis-error-dashboard",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@netlify/blobs": "^10.1.0"
+  },
+  "scripts": {
+    "test": "node --test tests/report.test.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

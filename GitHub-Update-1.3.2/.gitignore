@@ -1,0 +1,5 @@
+# Release-Dateien werden als GitHub-Release-Anhänge hochgeladen.
+*.exe
+*.blockmap
+*.sha256
+latest.yml

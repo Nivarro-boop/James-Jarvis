@@ -1,0 +1,101 @@
+appId: dev.void.jarvis
+productName: James-Jarvis
+directories:
+  output: dist
+  buildResources: resources
+
+files:
+  - out/**/*
+  - '!out/tests/**/*'
+  - '!out/audit/**/*'
+  # Während des Packens geschriebene Logs würden die ASAR-Dateigrößen verändern.
+  - '!out/**/*.log'
+  - '!out/tsc/**/*'
+  - package.json
+
+# Die beiden PowerShell-Skripte und das Tray-Symbol werden zur Laufzeit über
+# process.resourcesPath gesucht (siehe src/main/resources.ts) — sie müssen
+# deshalb unentpackt danebenliegen und dürfen nicht im asar-Archiv landen.
+# PowerShell kann aus einem asar nicht lesen; ohne input-server.ps1 wäre die
+# gesamte Bildschirmsteuerung im fertigen Installer tot.
+extraResources:
+  - from: resources/windows-helper.ps1
+    to: windows-helper.ps1
+  - from: resources/input-server.ps1
+    to: input-server.ps1
+  # Der Bedienbaum der Fenster. Aus demselben Grund hier und nicht im Archiv.
+  - from: resources/uia-server.ps1
+    to: uia-server.ps1
+  # Programmsymbole für die Denkblase.
+  - from: resources/app-icons.ps1
+    to: app-icons.ps1
+  # Der Sprachdienst wird als eigener Python-Prozess gestartet — Python liest
+  # so wenig aus dem asar-Archiv wie PowerShell.
+  - from: resources/vibevoice-server.py
+    to: vibevoice-server.py
+  # Stellt das Zertifikat für die Fernbedienung aus. Aus demselben Grund hier:
+  # PowerShell liest nicht aus dem Archiv.
+  - from: resources/companion-cert.ps1
+    to: companion-cert.ps1
+  # Listet die Ausgabegeräte auf, stellt das Standardgerät um und liest aus,
+  # was gerade spielt. Ohne diese Datei landet Apple Music nie auf dem Echo
+  # Dot — Spotify hat dafür Connect, alles andere hat nur diesen Weg.
+  - from: resources/audio-devices.ps1
+    to: audio-devices.ps1
+  - from: resources/tray.png
+    to: tray.png
+  # Die Kurzanleitung zum Ausdrucken. Nicht ins asar-Archiv: Sie wird über
+  # `shell.openPath` an den Standardbrowser übergeben, und der öffnet keinen
+  # Pfad, der in einem Archiv liegt.
+  - from: resources/kurzanleitung.html
+    to: kurzanleitung.html
+  # Der Wirt für die gepflegte piper-Fassung. Python liest so wenig aus einem
+  # asar-Archiv wie PowerShell — ohne diese Zeile fehlt die Datei im fertigen
+  # Installer, und der Ausweichweg für die abstürzende .exe wäre genau dort tot,
+  # wo er gebraucht wird. Gesucht wird sie über piperHostScript() in
+  # src/main/local/paths.ts.
+  - from: resources/piper-host.py
+    to: piper-host.py
+  # Die Seite fürs Telefon wird roh über den Companion-Server ausgeliefert.
+  # Aus einem asar-Archiv ginge das zwar zu lesen, aber sie soll auch von Hand
+  # austauschbar bleiben — und sie ist ohnehin unabhängig vom Renderer-Build.
+  - from: resources/companion
+    to: companion
+  # Namensnennungen für Open-Source-Teile und Trainingsdaten des Weckworts.
+  - from: THIRD_PARTY_NOTICES.md
+    to: THIRD_PARTY_NOTICES.md
+
+asar: true
+
+win:
+  forceCodeSigning: false
+  target:
+    - target: nsis
+      arch: [x64]
+  # Das ICO, nicht das PNG. Aus einem einzelnen PNG rechnet electron-builder
+  # die kleinen Größen selbst herunter, und bei 16 × 16 ist das Ergebnis der
+  # Mittelwert aus je 256 Bildpunkten — ein blassblauer Fleck. Im ICO liegt
+  # stattdessen jede Größe einzeln gezeichnet, mit einer eigenen Abstimmung von
+  # Kern, Kante und Schein. Erzeugt von scripts/make-icon.mjs.
+  icon: resources/icon.ico
+
+nsis:
+  # One-Click: Der Installer liest den bisherigen Installationsort aus der
+  # Registry. Ist James schon da, wird dort still aktualisiert (Daten bleiben),
+  # sonst frisch nach %LOCALAPPDATA%\Programs installiert. Die frühere
+  # Ordnerwahl hängte bei eigenen Pfaden einen zweiten Unterordner an.
+  oneClick: true
+  perMachine: false
+  runAfterFinish: true
+  createDesktopShortcut: true
+  shortcutName: James-Jarvis
+
+# Auto-Update: Installer gehen als Releases in das öffentliche Repo
+# Nivarro-boop/James-Jarvis, in dem auch der Quellcode liegt. Früher hieß es
+# void-james-releases; GitHub leitet den alten Namen weiter, deshalb finden
+# ältere Installationen die neuen Releases weiterhin. Siehe src/main/updater.ts.
+publish:
+  provider: github
+  owner: Nivarro-boop
+  repo: James-Jarvis
+  releaseType: release
