@@ -3,7 +3,7 @@ import type { ActivityItem } from '@shared/types'
 import { getSettings } from '../store/settings'
 import { thinkText } from '../providers/text'
 import { activityEnd, activityStart } from './activity'
-import { listSkills, saveSkill } from './skills'
+import { findSkill, listSkills, saveSkill } from './skills'
 
 /**
  * Die Lernschleife.
@@ -33,6 +33,18 @@ const IGNORED = /^(plan_update|skill_|delegate_|memory_tidy|remember|recall|forg
 let burst: ActivityItem[] = []
 let timer: NodeJS.Timeout | null = null
 let reviewing = false
+/** Fertigkeiten, die James in diesem Ablauf mit skill_view gelesen hat. */
+let usedSkills = new Set<string>()
+
+/**
+ * Vom Werkzeug `skill_view` gerufen. Wie bei Hermes verbessert sich eine
+ * Fertigkeit nach ihrer Benutzung selbst: Lief der Ablauf anders als in der
+ * Anleitung, wird sie danach überarbeitet — auch bei kurzen Abläufen.
+ */
+export function noteSkillUsed(name: string): void {
+  if (!getSettings().learnSkills) return
+  usedSkills.add(name)
+}
 
 /** Vom Runner nach jedem abgeschlossenen Schritt der Sprachschleife gerufen. */
 export function noteFinishedStep(item: ActivityItem): void {
@@ -68,12 +80,24 @@ async function review(): Promise<void> {
   timer = null
   const steps = burst
   burst = []
-  if (reviewing || steps.filter((s) => s.status === 'ok').length < MIN_STEPS || steps.at(-1)?.status !== 'ok' || getSettings().tokenSaver.enabled || getSettings().gamingMode || !getSettings().learnSkills) return
+  const used = [...usedSkills]
+  usedSkills = new Set()
+  if (reviewing || getSettings().tokenSaver.enabled || getSettings().gamingMode || !getSettings().learnSkills) return
+  // Mit gelesener Fertigkeit genügt ein Schritt: Gerade Fehlschläge zeigen,
+  // wo die Anleitung nicht mehr stimmt. Ohne bleibt es bei längeren,
+  // erfolgreichen Abläufen.
+  const refine = used.length > 0 && steps.length > 0
+  if (!refine && (steps.filter((s) => s.status === 'ok').length < MIN_STEPS || steps.at(-1)?.status !== 'ok')) return
   reviewing = true
 
   const id = randomUUID()
   activityStart({ id, label: 'Lernschleife — prüft, ob sich eine Anleitung lohnt', source: 'learning' })
   try {
+    const usedText = used
+      .map((name) => findSkill(name))
+      .filter((s): s is NonNullable<typeof s> => s !== null)
+      .map((s) => `### ${s.name}\n${s.description}\n${s.steps}`)
+      .join('\n\n')
     const existing = listSkills()
       .slice(0, 40)
       .map((s) => `- ${s.name}: ${s.description}`)
@@ -93,11 +117,13 @@ async function review(): Promise<void> {
         'Gibt es schon eine passende Fertigkeit, nimm genau ihren Namen und schreib eine verbesserte Fassung.',
         'Fehlgeschlagene Schritte gehören nicht in die Schritte, aber als „Fallstricke:" ans Ende, mit dem,',
         'was stattdessen funktioniert hat.',
+        'Wurde eine Fertigkeit benutzt und wich der Ablauf von ihr ab (Fehler, Umweg, fehlender Schritt),',
+        'speichere unter genau ihrem Namen die berichtigte Fassung. Lief alles wie beschrieben: save false.',
         '',
         'Antworte nur mit JSON: {"save": true|false, "name": "...", "description": "ein Satz, wann man',
         'sie braucht", "steps": "nummerierte Schritte mit den Werkzeugnamen und Hinweisen"}'
       ].join('\n'),
-      user: `Vorhandene Fertigkeiten:\n${existing || '(keine)'}\n\nAblauf:\n${log}`,
+      user: `Vorhandene Fertigkeiten:\n${existing || '(keine)'}\n\n${usedText ? `Benutzte Fertigkeiten im Volltext:\n${usedText}\n\n` : ''}Ablauf:\n${log}`,
       maxTokens: 900
     })
 

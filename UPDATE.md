@@ -1,4 +1,19 @@
-# James-Jarvis Update 1.3.4 – 11.10.2026
+# James-Jarvis Update 1.3.6 – 12.10.2026
+
+## Selbstverbessernde Fertigkeiten (nach Hermes)
+
+- Liest James eine Fertigkeit mit `skill_view` und weicht der Ablauf danach ab
+  (Fehler, Umweg, fehlender Schritt), überarbeitet die Lernschleife genau diese
+  Fertigkeit – auch bei kurzen Abläufen. Lief alles wie beschrieben, bleibt sie.
+- Neues Werkzeug `skill_patch`: ersetzt eine Stelle in einer Fertigkeit, statt
+  sie neu zu schreiben (wie Hermes' `skill_manage patch`).
+- Gilt nur bei eingeschalteter Einstellung „Fertigkeiten lernen“, nicht im
+  Sparmodus oder Spielemodus.
+
+Prüfung: TypeScript bestanden, 1.926 Tests bestanden. Echte Lernläufe offen.
+Versionsnummer: package.json bleibt 1.3.4; die Release-Action zählt Lauf 2 dazu.
+
+## Vorheriges Update 1.3.4 – 11.10.2026
 
 ## Fähigkeitslücken melden
 

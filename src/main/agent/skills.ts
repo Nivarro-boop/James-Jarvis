@@ -163,6 +163,25 @@ export function saveSkill(input: {
   return { skill, created: !existing }
 }
 
+/**
+ * Gezielte Änderung wie Hermes' `skill_manage patch`: ersetzt genau eine
+ * Stelle, statt die ganze Anleitung neu zu schreiben.
+ */
+export function patchSkill(nameOrSlug: string, oldText: string, newText: string): Skill {
+  const skill = findSkill(nameOrSlug)
+  if (!skill) throw new Error(`Keine Fertigkeit „${nameOrSlug}".`)
+  if (!oldText) throw new Error('Die zu ersetzende Stelle fehlt.')
+  const count = skill.steps.split(oldText).length - 1
+  if (count === 0) throw new Error('Die Stelle steht so nicht in der Anleitung. Erst mit skill_view nachlesen.')
+  if (count > 1) throw new Error('Die Stelle kommt mehrfach vor. Mehr Umgebung angeben.')
+  return saveSkill({
+    name: skill.name,
+    description: skill.description,
+    steps: skill.steps.replace(oldText, () => newText),
+    source: skill.source
+  }).skill
+}
+
 export function deleteSkill(nameOrSlug: string): boolean {
   const skill = findSkill(nameOrSlug)
   if (!skill) return false

@@ -2,7 +2,8 @@ import { clipboard, shell } from 'electron'
 import { z } from 'zod'
 import { defineTool, type ToolDefinition } from '../registry'
 import { clearPlan, setPlan } from '../../agent/activity'
-import { deleteSkill, listSkills, saveSkill, skillsDir, useSkill } from '../../agent/skills'
+import { deleteSkill, listSkills, patchSkill, saveSkill, skillsDir, useSkill } from '../../agent/skills'
+import { noteSkillUsed } from '../../agent/learning'
 import { MAX_PARALLEL, runSubagents } from '../../agent/subagent'
 import { tidyMemories } from '../../agent/memoryCare'
 import { capabilityGaps } from '../../agent/capabilityGaps'
@@ -66,6 +67,7 @@ const skillView = defineTool({
   async execute({ name }) {
     const skill = useSkill(name)
     if (!skill) throw new Error(`Keine Fertigkeit „${name}". skill_list zeigt, was es gibt.`)
+    noteSkillUsed(skill.name)
     return { name: skill.name, description: skill.description, steps: skill.steps }
   }
 })
@@ -85,6 +87,23 @@ const skillSave = defineTool({
   async execute({ name, description, steps }) {
     const { skill, created } = saveSkill({ name, description, steps, source: 'manual' })
     return `${created ? 'Gespeichert' : 'Verbessert'}: ${skill.name}. Gilt ab der nächsten Verbindung auch im Überblick.`
+  }
+})
+
+const skillPatch = defineTool({
+  name: 'skill_patch',
+  group: 'agent',
+  description:
+    'Berichtigt eine Stelle in einer Fertigkeit, ohne sie neu zu schreiben. Nutzen, sobald ein ' +
+    'Schritt der Anleitung nicht mehr stimmt. Die alte Stelle muss genau einmal vorkommen.',
+  schema: z.object({
+    name: z.string().describe('Name der Fertigkeit'),
+    old_text: z.string().describe('Genau die Stelle, die ersetzt wird'),
+    new_text: z.string().describe('Die berichtigte Fassung')
+  }),
+  async execute({ name, old_text, new_text }) {
+    const skill = patchSkill(name, old_text, new_text)
+    return `Berichtigt: ${skill.name}.`
   }
 })
 
@@ -197,6 +216,7 @@ export const agentTools: ToolDefinition[] = [
   skillList,
   skillView,
   skillSave,
+  skillPatch,
   skillDelete,
   skillFolder,
   delegateTasks,
