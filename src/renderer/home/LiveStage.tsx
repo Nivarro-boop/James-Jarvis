@@ -25,7 +25,7 @@ export function LiveStage({ snapshot }: { snapshot: ActivitySnapshot }): JSX.Ele
   }, [])
 
   const busy = ['thinking', 'speaking', 'confirm', 'research', 'tool'].includes(state) || snapshot.items.some(i => i.status === 'running' || i.status === 'waiting')
-  const lines = captions.filter((c) => busy || now - c.at < FADE_MS).slice(-2)
+  const lines = captions.filter((c) => busy || now - c.at < FADE_MS).slice(-1)
   const steps = snapshot.items
     .filter((i) => i.source !== 'learning')
     .filter((i) => i.status === 'running' || i.status === 'waiting' || now - (i.startedAt + (i.durationMs ?? 0)) < FADE_MS)

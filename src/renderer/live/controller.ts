@@ -127,7 +127,8 @@ export class JarvisController {
    * Hauptprozess; ob daraus ein Bericht wird, entscheiden dort die Einstellungen.
    */
   private readonly gaps = new TurnGapWatcher({
-    report: (turn) => { void window.jarvis.invoke('gaps:turn', turn).catch(() => {}) }
+    report: (turn) => { void window.jarvis.invoke('gaps:turn', turn).catch(() => {}) },
+    completed: (turn) => { void window.jarvis.invoke('context:turn', { request: turn.request, answer: turn.answer }).catch(() => {}) }
   })
 
   private readonly onDeviceChange = (): void => {

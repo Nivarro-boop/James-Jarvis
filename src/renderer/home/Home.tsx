@@ -1,3 +1,7 @@
+import { SkillsPanel } from './SkillsPanel'
+import { ContextPanel } from './ContextPanel'
+import { SkillProposalPanel } from './SkillProposalPanel'
+import { Conversation } from './Conversation'
 import { useEffect, useState, type CSSProperties, type FormEvent, type JSX } from 'react'
 import { ORB_LOOKS, PixelOrb } from '../crystal/PixelOrb'
 import { useCrystal } from '../store/crystalStore'
@@ -85,6 +89,7 @@ function TextBar({ disabled }: { disabled: boolean }): JSX.Element {
     event.preventDefault()
     const message = text.trim()
     if (!message || disabled || sending) return
+    if (message.toLowerCase() === '/skills') { window.dispatchEvent(new Event('jarvis:skills')); setText(''); return }
     setSending(true)
     // Sofort leeren: Der Aufbau der Sitzung dauert, und ein stehen
     // gebliebener Satz sieht aus, als wäre nichts passiert.
@@ -102,7 +107,7 @@ function TextBar({ disabled }: { disabled: boolean }): JSX.Element {
         className="home-ask-field"
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={disabled ? 'Erst einrichten — oben rechts' : 'Oder tippen…'}
+        placeholder={disabled ? 'Erst einrichten — oben rechts' : 'Frag James oder beschreibe eine Aufgabe…'}
         aria-label="Nachricht an James"
         disabled={disabled}
         autoComplete="off"
@@ -357,8 +362,14 @@ export function Home(): JSX.Element {
         <div className="home-top-left">
           <ActivityToggle open={activity.open} busy={activity.busy} onToggle={activity.toggle} />
           <span className="home-brand"><span className="home-mark">James<span className="brand-dot">.</span></span></span>
+          {(() => {
+            // Statt live zuzusehen: nur der aktuelle Schritt als eine Zeile oben.
+            const now = [...activity.snapshot.items].reverse().find((i) => i.status === 'running' || i.status === 'waiting')
+            return now && <span className="home-status" role="status" title={now.label}>{now.status === 'waiting' ? 'Wartet auf dich · ' : ''}{now.label}</span>
+          })()}
         </div>
         <div className="home-actions">
+          <button className="home-gear" onClick={() => window.dispatchEvent(new Event('jarvis:skills'))}>Fertigkeiten</button>
           <HealthPanel />
           <button className="home-gear" title="Einstellungen" aria-label="Einstellungen" onClick={() => openSettings()}>
             <GearIcon /><span>Einstellungen</span>
@@ -375,6 +386,10 @@ export function Home(): JSX.Element {
             <h1>{paused ? 'Ich bin gleich wieder da.' : ['thinking', 'tool', 'research'].includes(state) ? 'Ich kümmere mich darum.' : state === 'speaking' ? 'Hier ist meine Antwort.' : 'Wie kann ich dir helfen?'}</h1>
             <p className="home-hint" role={state === 'error' ? 'alert' : undefined}>{hint}</p>
           </main>
+          <SkillsPanel />
+          <ContextPanel />
+          <SkillProposalPanel />
+          <Conversation snapshot={activity.snapshot} />
           <WeatherCard />
           <div className="home-context">
             {hasCards && (

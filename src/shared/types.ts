@@ -584,11 +584,13 @@ export interface Settings {
    * Deshalb greift diese Einstellung genau dort, wo sie auch wirkt, und die
    * Oberfläche sagt das dazu, statt eine Wahlfreiheit vorzuspiegeln.
    */
-  brainProvider: 'gemini' | 'ollama' | 'openrouter' | 'openai' | 'anthropic' | 'chatgpt'
+  brainProvider: 'gemini' | 'ollama' | 'openrouter' | 'openai' | 'anthropic' | 'chatgpt' | 'lmstudio'
   /** Account-specific slug returned by Sign in with ChatGPT model discovery. */
   chatGptModel: string
   /** Modell, das bei `brainProvider: 'openrouter'` benutzt wird. */
   openRouterModel: string
+  /** LM Studio: lokaler OpenAI-kompatibler Server; leeres Modell = das gerade geladene. */
+  lmStudio: { baseUrl: string; model: string }
   /** Modell bei `brainProvider: 'openai'`. */
   openAiModel: string
   /** Modell bei `brainProvider: 'anthropic'`. */
@@ -1616,7 +1618,13 @@ export interface SourcesCard extends CardBase {
 }
 
 /** Was ein Werkzeug auf der Startseite zeigen kann. */
-export type DisplayCard = StockCard | WeatherCard | PlacesCard | RouteCard | AgendaCard | SourcesCard
+export interface BrowserHandoffCard extends CardBase {
+  kind: 'browser-handoff'
+  query: string
+  domain: string
+  message: string
+}
+export type DisplayCard = StockCard | WeatherCard | PlacesCard | RouteCard | AgendaCard | SourcesCard | BrowserHandoffCard
 export type DisplayCardKind = DisplayCard['kind']
 
 export interface ActivitySnapshot {

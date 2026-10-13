@@ -1,3 +1,6 @@
+import type { WebsiteAccountInfo, WebsiteAccountInput } from './websiteAccounts'
+import type { WorkingContext } from './workingContext'
+import type { SkillProposal } from './skillProposal'
 /**
  * Typisierter IPC-Vertrag.
  *
@@ -278,7 +281,7 @@ export interface IpcInvokeMap {
    */
   'app:pauseGet': { req: void; res: PauseState }
   /** Zieht die System-Prompt-Bausteine inkl. abgerufener Erinnerungen. */
-  'agent:systemPrompt': { req: void; res: string }
+  'agent:systemPrompt': { req: { query?: string } | void; res: string }
   /** Verfügbare Tools als Gemini-functionDeclarations für den Live-Socket. */
   'agent:toolDeclarations': { req: void; res: unknown[] }
   /**
@@ -366,6 +369,15 @@ export interface IpcInvokeMap {
   /** Zustand jedes Servers nach dem letzten Laden. */
   'mcp:status': { req: void; res: Record<string, McpServerStatus> }
   /** Stand der Live-Anzeige beim Öffnen des Fensters. */
+  'context:get': { req: void; res: WorkingContext }
+  'context:clear': { req: void; res: void }
+  'context:turn': { req: { request: string; answer: string }; res: void }
+  'accounts:list': { req: void; res: WebsiteAccountInfo[] }
+  'accounts:save': { req: WebsiteAccountInput; res: WebsiteAccountInfo[] }
+  'accounts:remove': { req: { origin: string }; res: WebsiteAccountInfo[] }
+  'skills:list': { req: void; res: { name: string; description: string; uses: number; steps: string }[] }
+  'skills:proposals': { req: void; res: SkillProposal[] }
+  'skills:decide': { req: { id: string; accept: boolean }; res: void }
   'activity:get': { req: void; res: ActivitySnapshot }
   /** Bei einem fernen Server im Systembrowser anmelden, danach neu laden. */
   'mcp:login': { req: { id: string }; res: { ok: boolean; error?: string } }
@@ -410,6 +422,7 @@ export interface IpcInvokeMap {
   /** Ruft die eingetragene Adresse des Nutzers zur Probe an. */
   'sip:testCall': { req: void; res: { ok: boolean; message: string } }
   'openrouter:models': { req: void; res: { id: string; name: string; context: number }[] }
+  'lmstudio:models': { req: { baseUrl?: string }; res: { reachable: boolean; models: string[] } }
   /** Was auf diesem Rechner liegt, und ob Ollama überhaupt antwortet. */
   'ollama:health': { req: void; res: OllamaHealth }
 
@@ -474,6 +487,8 @@ export interface IpcEventMap {
   'research:progress': { id: string; thought: string }
   'research:done': { id: string; summary: string }
   /** Die Live-Anzeige hat sich geändert: Schritte, Plan, Unteragenten. */
+  'context:changed': WorkingContext
+  'skills:proposed': SkillProposal[]
   'activity:update': ActivitySnapshot
   /** Ein Werkzeug zeigt etwas auf der Startseite, z. B. eine Aktienkarte. */
   'display:card': DisplayCard
@@ -632,6 +647,15 @@ export const IPC_INVOKE_CHANNELS = [
   'mcp:setSecret',
   'mcp:clearSecrets',
   'mcp:status',
+  'context:get',
+  'context:clear',
+  'context:turn',
+  'accounts:list',
+  'accounts:save',
+  'accounts:remove',
+  'skills:list',
+  'skills:proposals',
+  'skills:decide',
   'activity:get',
   'mcp:login',
   'mcp:logout',
@@ -653,6 +677,7 @@ export const IPC_INVOKE_CHANNELS = [
   'update:postpone',
   'sip:testCall',
   'openrouter:models',
+  'lmstudio:models',
   'ollama:health',
   'whisper:health',
   'whisper:transcribe',
@@ -671,6 +696,8 @@ export const IPC_EVENT_CHANNELS = [
   'speak:request',
   'research:progress',
   'research:done',
+  'context:changed',
+  'skills:proposed',
   'activity:update',
   'display:card',
   'update:status',

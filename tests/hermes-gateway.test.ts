@@ -1,3 +1,4 @@
+import { checkpoint, clearWorkingContext } from '@main/agent/workingContext'
 import assert from 'node:assert/strict'
 import { it } from 'node:test'
 import { createServer } from 'node:http'
@@ -76,6 +77,7 @@ it('streamt Unicode früh, verwirft doppelte/fremde Events, ergänzt abgebrochen
 it('prüft echtes HTTP, Gesprächskontext, autonome Freigaben und serverseitigen Stopp', async t => {
   const root = mkdtempSync(join(tmpdir(), 'james-hermes-'))
   t.mock.method(app, 'getPath', () => root)
+  checkpoint({ goal: 'Gateway-Aufgabe', decisions: ['Nur lokal arbeiten'], completed: [], next: ['Ergebnis prüfen'], blockers: [], status: 'paused' })
   const paths: string[] = []
   let state: 'approval' | 'completed' = 'approval'
   let abortOnStart: AbortController | null = null
@@ -89,6 +91,9 @@ it('prüft echtes HTTP, Gesprächskontext, autonome Freigaben und serverseitigen
       const input = JSON.parse(body)
       assert.equal(input.session_id, 'test-session')
       assert.equal(input.input, 'Testauftrag')
+      assert.match(input.instructions, /Gateway-Aufgabe/)
+      assert.match(input.instructions, /Nur lokal arbeiten/)
+      assert.match(input.instructions, /dort tatsächlich verfügbaren Werkzeuge/)
       abortOnStart?.abort()
       return res.end(JSON.stringify({ run_id: 'run_test' }))
     }
@@ -104,7 +109,7 @@ it('prüft echtes HTTP, Gesprächskontext, autonome Freigaben und serverseitigen
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   const address = server.address() as { port: number }
   t.after(() => {
-    server.closeAllConnections(); server.close(); closeDb()
+    server.closeAllConnections(); server.close(); closeDb(); clearWorkingContext()
     assert.ok(root.startsWith(join(tmpdir(), 'james-hermes-')))
     rmSync(root, { recursive: true, force: true })
   })

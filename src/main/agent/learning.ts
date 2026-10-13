@@ -1,9 +1,10 @@
+import { proposeSkill } from './skillProposals'
 import { randomUUID } from 'node:crypto'
 import type { ActivityItem } from '@shared/types'
 import { getSettings } from '../store/settings'
 import { thinkText } from '../providers/text'
 import { activityEnd, activityStart } from './activity'
-import { findSkill, listSkills, saveSkill } from './skills'
+import { findSkill, listSkills } from './skills'
 
 /**
  * Die Lernschleife.
@@ -132,13 +133,13 @@ async function review(): Promise<void> {
       activityEnd(id, true, 'Nichts Wiederverwendbares dabei.')
       return
     }
-    const { skill, created } = saveSkill({
+    const proposal = proposeSkill({
       name: verdict.name,
       description: verdict.description ?? '',
       steps: verdict.steps,
       source: 'auto'
     })
-    activityEnd(id, true, `${created ? 'Neue Fertigkeit' : 'Fertigkeit verbessert'}: ${skill.name}`)
+    activityEnd(id, true, `Vorschlag wartet auf deine Freigabe: ${proposal.name}`)
   } catch (err) {
     activityEnd(id, false, err instanceof Error ? err.message : String(err))
   } finally {

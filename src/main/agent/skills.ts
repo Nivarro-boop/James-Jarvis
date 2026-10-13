@@ -1,3 +1,4 @@
+import { rankSkills } from '@shared/workingContext'
 import { app } from 'electron'
 import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -190,8 +191,8 @@ export function deleteSkill(nameOrSlug: string): boolean {
 }
 
 /** Der Abschnitt im System-Prompt: was es gibt, nicht wie es geht. */
-export function skillIndexForPrompt(limit = 30): string {
-  const skills = listSkills().slice(0, limit)
+export function skillIndexForPrompt(limit = 30, query = ''): string {
+  const skills = rankSkills(listSkills(), query).slice(0, limit)
   if (skills.length === 0) return ''
   const lines = skills.map((s) => `- ${s.name}: ${s.description}`)
   return [

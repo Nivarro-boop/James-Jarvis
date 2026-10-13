@@ -964,6 +964,7 @@ export function appendTranscript(role: 'user' | 'assistant', text: string): void
     role,
     text
   ])
+  conn().run('DELETE FROM conversations WHERE id NOT IN (SELECT id FROM conversations ORDER BY id DESC LIMIT 1000)')
 }
 
 /**
@@ -1092,3 +1093,9 @@ export function openIncidents(sinceMs: number): (IncidentRow & { count: number }
 export function clearIncidents(): void {
   conn().run(`DELETE FROM incidents`)
 }
+
+/** Local desktop history is written only by the owner window. Expire prompt recall after 12 h. */
+export function recentDesktopTranscript(limit: number, since: number): { role: string; text: string }[] {
+  return (conn().all('SELECT role, text FROM conversations WHERE ts >= ? ORDER BY id DESC LIMIT ?', [since, limit]) as { role: string; text: string }[]).reverse()
+}
+export function clearTranscript(): void { conn().run('DELETE FROM conversations') }

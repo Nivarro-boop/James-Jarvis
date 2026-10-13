@@ -1,0 +1,41 @@
+const {build}=require('esbuild')
+const {chromium}=require('playwright-core')
+const {resolve}=require('node:path')
+const assert=require('node:assert/strict')
+require('../tests/helpers/register-electron.cjs')
+;(async()=>{
+ await build({entryPoints:['src/main/automation/websiteLogin.ts'],bundle:true,platform:'node',format:'cjs',packages:'external',outfile:'out/website-login-test.cjs',alias:{'@shared':resolve('src/shared')}})
+ const {performWebsiteLogin}=require('../out/website-login-test.cjs')
+ const browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true})
+ try{
+  const context=await browser.newContext();let html='';let requests=0
+  await context.route('**/*',r=>{requests++;return r.fulfill({contentType:'text/html',body:html})})
+  const account={loginUrl:'https://example.test/login',username:'fixture@example.test',password:' fixture-secret '}
+  const page=await context.newPage()
+  const set=async(body,url=account.loginUrl)=>{html=`<html><title>Anmelden</title><body>${body}</body></html>`;await page.goto(url)}
+  const signal=new AbortController().signal
+  await set(`<form onsubmit="event.preventDefault();window.submitted={user:this.querySelector('[type=email]').value,pass:this.querySelector('[type=password]').value};document.body.innerHTML='<h1>Mein Konto</h1>'"><label>E-Mail<input type=email autocomplete=username></label><label>Passwort<input type=password autocomplete=current-password></label><button>Anmelden</button></form>`)
+  let result=await performWebsiteLogin(page,account,signal)
+  assert.equal(result.status,'submitted');assert.deepEqual(await page.evaluate(()=>window.submitted),{user:account.username,pass:account.password})
+  assert.equal(JSON.stringify(result).includes(account.password),false)
+  await set('<p>Verify you are human</p><form><input type=email><input type=password><button>Anmelden</button></form>')
+  result=await performWebsiteLogin(page,account,signal)
+  assert.equal(result.status,'needs-user');assert.equal(await page.locator('[type=password]').inputValue(),'')
+  await set('<form action="https://other.test/post"><input type=email><input type=password><button>Anmelden</button></form>')
+  result=await performWebsiteLogin(page,account,signal)
+  assert.equal(result.status,'needs-user');assert.equal(await page.locator('[type=password]').inputValue(),'')
+  await set('<form><input type=email><input type=password><button>Anmelden</button></form>','https://other.test/login')
+  result=await performWebsiteLogin(page,account,signal)
+  assert.equal(result.status,'needs-user');assert.equal(await page.locator('[type=password]').inputValue(),'')
+  await set(`<form onsubmit="event.preventDefault();document.body.innerHTML='<p>Sicherheitscode</p><input autocomplete=one-time-code>'"><input type=email><input type=password><button>Anmelden</button></form>`)
+  result=await performWebsiteLogin(page,account,signal);assert.equal(result.status,'needs-user')
+  await set(`<form onsubmit="event.preventDefault();document.body.innerHTML='<form onsubmit=&quot;event.preventDefault();document.body.innerHTML=String(123)&quot;><input type=password autocomplete=current-password><button>Anmelden</button></form>'"><input type=email><button>Weiter</button></form>`)
+  result=await performWebsiteLogin(page,account,signal);assert.equal(result.status,'submitted')
+  await set('<form><input type=email><input type=password autocomplete=new-password><button>Anmelden</button></form>')
+  result=await performWebsiteLogin(page,account,signal);assert.equal(result.status,'needs-user');assert.equal(await page.locator('[type=email]').inputValue(),'')
+  await set('<form><input type=email><input type=password><button>Anmelden</button></form>')
+  const aborted=new AbortController();aborted.abort();result=await performWebsiteLogin(page,account,aborted.signal)
+  assert.equal(result.status,'needs-user');assert.equal(await page.locator('[type=password]').inputValue(),'')
+  console.log('PASS: same-origin login, exact credential values, no secrets in results, CAPTCHA/2FA pause, foreign form/origin rejected, two-step login, registration rejected, cancellation')
+ }finally{await browser.close()}
+})().catch(e=>{console.error(e);process.exitCode=1})

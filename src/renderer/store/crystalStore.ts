@@ -144,11 +144,11 @@ export const useCrystal = create<CrystalStore>((set, get) => ({
     // Gemini liefert Bruchstücke im Strom; sie gehören zur selben Zeile,
     // solange niemand dazwischen redet und keine lange Pause war.
     if (last && last.who === who && Date.now() - last.at < 8000) {
-      const joined = (last.text + clean).replace(/\s+/g, ' ').slice(-400)
+      const joined = (last.text + clean).replace(/\s+/g, ' ').slice(-12000)
       set({ captions: [...captions.slice(0, -1), { ...last, text: joined, at: Date.now() }] })
       return
     }
-    set({ captions: [...captions, { id: ++captionSeq, who, text: clean.trim(), at: Date.now() }].slice(-4) })
+    set({ captions: [...captions, { id: ++captionSeq, who, text: clean.trim(), at: Date.now() }].slice(-80) })
   },
   clearCaptions: () => set({ captions: [] }),
 

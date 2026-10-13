@@ -56,13 +56,13 @@ function fakeClock() {
   }
 }
 
-async function harness(report?: (turn: Turn) => void) {
+async function harness(report?: (turn: Turn) => void, completed?: (turn: Turn) => void) {
   const { TurnGapWatcher } = await loadModule()
   const clock = fakeClock()
   const reports: Turn[] = []
   const watcher: Watcher = new TurnGapWatcher({
     // Kopie, weil Objekte aus dem fremden Kontext einen anderen Prototyp haben.
-    report: report ?? ((turn: Turn) => reports.push({ ...turn })), now: clock.now, schedule: clock.schedule
+    report: report ?? ((turn: Turn) => reports.push({ ...turn })), completed, now: clock.now, schedule: clock.schedule
   })
   return { watcher, reports, clock }
 }
@@ -305,4 +305,27 @@ it('ein scheiternder Bericht hält die Erkennung nicht auf', async () => {
   }
   assert.equal(calls, 2)
   assert.doesNotThrow(() => watcher.userText(undefined as unknown as string))
+})
+
+it('liefert erfolgreiche Beiträge einmal an den lokalen Kontext, ohne Fehlerbericht', async () => {
+  const completed: Turn[] = []
+  const { watcher, clock, reports } = await harness(undefined, turn => completed.push({ ...turn }))
+  watcher.typed('Bereite den Stream vor')
+  watcher.state('thinking')
+  watcher.modelText('Der Stream ist vorbereitet.')
+  watcher.state('listening')
+  clock.advance(2000)
+  assert.equal(completed.length, 1)
+  assert.equal(completed[0].request, 'Bereite den Stream vor')
+  assert.equal(reports.length, 0)
+  watcher.state('idle'); clock.advance(20000)
+  assert.equal(completed.length, 1)
+})
+it('speichert Timer- und Systembeiträge nicht als Nutzerauftrag im lokalen Kontext', async () => {
+  const completed: Turn[] = []
+  const { watcher, clock } = await harness(undefined, turn => completed.push({ ...turn }))
+  watcher.systemPrompt('Timer ist abgelaufen')
+  watcher.modelText('Dein Timer ist fertig.')
+  watcher.state('listening'); clock.advance(20000)
+  assert.equal(completed.length, 0)
 })

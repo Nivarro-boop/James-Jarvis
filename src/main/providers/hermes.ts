@@ -1,3 +1,4 @@
+import { buildSystemPrompt } from '../agent/prompt'
 import { getSettings } from '../store/settings'
 import { getSecret } from '../secrets/keystore'
 import { readHermesEvents } from './hermesEvents'
@@ -59,7 +60,7 @@ export async function hermesRun(input: string, sessionId: string, parentSignal?:
   // still be stopped on the server. The request itself has a bounded deadline.
   const start = await request(base, '/v1/runs', { method: 'POST', body: JSON.stringify({
     model: settings.hermes.model, input, session_id: sessionId,
-    instructions: 'Du arbeitest für den persönlichen Assistenten James. Antworte auf Deutsch. Nutze deine verfügbaren Hermes-Funktionen. Behaupte keine erledigte Aktion ohne Werkzeugergebnis.'
+    instructions: buildSystemPrompt({ lazyTools: false, query: input, desktopContext: true }) + '\nDu arbeitest über den Hermes-Gateway. Nutze ausschließlich die dort tatsächlich verfügbaren Werkzeuge; Jarvis-Werkzeugnamen im Kontext sind Referenzen, keine Zusage ihrer Verfügbarkeit. Antworte auf Deutsch.'
   }) })
   const runId = String(start.run_id ?? start.id ?? '')
   if (!/^run_[a-zA-Z0-9_-]+$/.test(runId)) throw new Error('Hermes hat keine gültige Auftragskennung geliefert.')

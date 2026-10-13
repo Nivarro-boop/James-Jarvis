@@ -1,5 +1,6 @@
 import { friendlyGeminiError, geminiAvailable, generateWithFallback } from './gemini'
 import { ollamaReachable, ollamaThink } from './ollama'
+import { lmStudioReachable, lmStudioThink } from './lmstudio'
 import { openRouterAvailable, think as openRouterThink } from './openrouter'
 import { cloudTextAvailable, cloudThink } from './cloudText'
 import { getSettings } from '../store/settings'
@@ -29,7 +30,7 @@ import { consumeModelCall } from '../agent/modelBudget'
  * können, sonst hält er eine Wolkenantwort für eine lokale.
  */
 
-export type TextProvider = 'gemini' | 'ollama' | 'openrouter' | 'openai' | 'anthropic' | 'chatgpt'
+export type TextProvider = 'gemini' | 'ollama' | 'openrouter' | 'openai' | 'anthropic' | 'chatgpt' | 'lmstudio'
 
 export interface TextAnswer {
   text: string
@@ -67,6 +68,9 @@ async function usable(provider: TextProvider, chosen: TextProvider): Promise<boo
     case 'openai':
     case 'anthropic':
       return cloudTextAvailable(provider)
+    // Nur wenn ausdrücklich gewählt: ein LM-Studio-Server, der zufällig läuft, ist keine Zusage.
+    case 'lmstudio':
+      return chosen === 'lmstudio' && lmStudioReachable(settings.lmStudio?.baseUrl)
     case 'ollama': {
       const local = settings.localFallback
       if (!local?.model) return false
@@ -105,6 +109,13 @@ async function callProvider(provider: TextProvider, req: TextRequest): Promise<T
     })
     if (!text.trim()) throw new Error(`${local.model} hat nichts geliefert.`)
     return { text: text.trim(), provider, model: local.model }
+  }
+
+  if (provider === 'lmstudio') {
+    const { baseUrl, model } = settings.lmStudio ?? { baseUrl: '', model: '' }
+    const text = await lmStudioThink(model, req.system, req.user, { baseUrl, maxTokens: req.maxTokens, signal: req.signal })
+    if (!text.trim()) throw new Error('LM Studio hat nichts geliefert.')
+    return { text: text.trim(), provider, model: model || 'LM Studio' }
   }
 
   if (provider === 'openrouter') {
@@ -155,7 +166,7 @@ async function callProvider(provider: TextProvider, req: TextRequest): Promise<T
 function fallbackOrder(chosen: TextProvider): TextProvider[] {
   // Choosing the subscription must never silently incur separately billed API usage.
   if (chosen === 'chatgpt') return ['chatgpt']
-  const rest: TextProvider[] = (['gemini', 'ollama', 'openrouter', 'openai', 'anthropic'] as const).filter(
+  const rest: TextProvider[] = (['gemini', 'lmstudio', 'ollama', 'openrouter', 'openai', 'anthropic'] as const).filter(
     (p) => p !== chosen
   )
   return [chosen, ...rest]
@@ -220,6 +231,8 @@ function unavailableReason(provider: TextProvider): string {
         'Das lokale Modell antwortet nicht. Prüf in den Einstellungen unter Zugänge, ob Ollama ' +
         'läuft und ein Modell ausgewählt ist.'
       )
+    case 'lmstudio':
+      return 'LM Studio antwortet nicht. In LM Studio unter „Developer" den Server starten und ein Modell laden.'
     case 'openrouter':
       return 'Es ist kein OpenRouter Zugang hinterlegt.'
     case 'openai':
@@ -244,6 +257,7 @@ export function fallbackNote(answer: TextAnswer): string | undefined {
     chatgpt: 'ChatGPT (Abo)',
     gemini: 'Gemini',
     ollama: 'dem lokalen Modell',
+    lmstudio: 'LM Studio',
     openrouter: 'OpenRouter',
     openai: 'ChatGPT',
     anthropic: 'Claude'

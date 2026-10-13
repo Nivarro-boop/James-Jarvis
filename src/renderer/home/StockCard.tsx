@@ -30,7 +30,7 @@ export function useDisplayCards(): { cards: DisplayCard[]; dismiss: (id: string)
     if (cards.length === 0) return
     const timer = window.setInterval(() => {
       setCards((prev) => {
-        const alive = prev.filter((c) => Date.now() - (c.at ?? Date.now()) < STOCK_TTL_MS)
+        const alive = prev.filter((c) => c.kind === 'browser-handoff' || Date.now() - (c.at ?? Date.now()) < STOCK_TTL_MS)
         return alive.length === prev.length ? prev : alive
       })
     }, 10_000)

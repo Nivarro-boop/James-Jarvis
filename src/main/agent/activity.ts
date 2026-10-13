@@ -1,3 +1,4 @@
+import { saveContextPlan, workingContext } from './workingContext'
 import type { ActivityItem, ActivityPlan, ActivitySnapshot, PlanStep } from '@shared/types'
 import { broadcast } from '../ipc/emit'
 
@@ -18,7 +19,7 @@ import { broadcast } from '../ipc/emit'
 const MAX_ITEMS = 40
 
 const items: ActivityItem[] = []
-let plan: ActivityPlan | null = null
+let plan: ActivityPlan | null = workingContext().plan
 
 let pending: NodeJS.Timeout | null = null
 
@@ -171,12 +172,15 @@ export function activityEnd(id: string, ok: boolean, detail?: string): ActivityI
 }
 
 export function setPlan(title: string, steps: PlanStep[]): ActivityPlan {
-  plan = { title, steps, updatedAt: Date.now() }
+  const next = { title, steps, updatedAt: Date.now() }
+  saveContextPlan(next)
+  plan = next
   publish()
   return plan
 }
 
 export function clearPlan(): void {
+  saveContextPlan(null)
   plan = null
   publish()
 }

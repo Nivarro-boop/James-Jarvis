@@ -1,3 +1,4 @@
+import { WebsiteAccounts } from './WebsiteAccounts'
 import { useEffect, useMemo, useState, type JSX } from 'react'
 import type {
   SipStatus,
@@ -229,6 +230,7 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
   return (
     <>
       <h2>Zugänge</h2>
+      <WebsiteAccounts />
       <p className="lede">
         Lege deinen Standardort fest und entscheide, ob James technische Fehlerberichte senden darf.
         Den Sprachzugang richtest du unter „Stimme“ ein. Weitere Dienste findest du unten.
@@ -799,6 +801,35 @@ function LinphoneSetup({ settings, patch }: Props): JSX.Element {
  * freigegeben hat, siehe `providers/chatgptAuth` — bis dahin bleibt es beim
  * API-Schlüssel, und hier steht nichts.
  */
+/** LM Studio: Serveradresse und Modell, mit Live-Prüfung ob der Server läuft. */
+function LmStudioSetup({ settings, patch }: Props): JSX.Element {
+  const lm = settings.lmStudio ?? { baseUrl: 'http://127.0.0.1:1234/v1', model: '' }
+  const [status, setStatus] = useState<{ reachable: boolean; models: string[] } | null>(null)
+  useEffect(() => {
+    let current = true
+    const timer = window.setTimeout(() => {
+      void window.jarvis.invoke('lmstudio:models', { baseUrl: lm.baseUrl }).then((s) => { if (current) setStatus(s) })
+    }, 300)
+    return () => { current = false; window.clearTimeout(timer) }
+  }, [lm.baseUrl])
+  return (
+    <>
+      <input type="text" value={lm.baseUrl} placeholder="http://127.0.0.1:1234/v1" aria-label="LM-Studio-Adresse"
+        onChange={(e) => patch({ lmStudio: { ...lm, baseUrl: e.target.value } })} style={{ marginTop: 8 }} />
+      <select value={lm.model} aria-label="LM-Studio-Modell" onChange={(e) => patch({ lmStudio: { ...lm, model: e.target.value } })} style={{ marginTop: 8 }}>
+        <option value="">Das gerade geladene Modell</option>
+        {status?.models.map((m) => <option key={m} value={m}>{m}</option>)}
+        {lm.model && !status?.models.includes(lm.model) && <option value={lm.model}>{lm.model}</option>}
+      </select>
+      <div className={status?.reachable === false ? 'hint err' : 'hint'} style={{ marginTop: 8 }}>
+        {status === null ? 'Prüfe LM Studio …'
+          : status.reachable ? `LM Studio läuft · ${status.models.length} Modell${status.models.length === 1 ? '' : 'e'} verfügbar.`
+            : 'LM Studio antwortet nicht. In LM Studio unter „Developer" den Server starten und ein Modell laden — bis dahin läuft es über Gemini weiter.'}
+      </div>
+    </>
+  )
+}
+
 function TextProviderChoice({
   settings,
   patch,
@@ -847,6 +878,7 @@ function TextProviderChoice({
       >
         <option value="gemini">Gemini — schnell, braucht Netz</option>
         <option value="ollama">Ollama — lokal, kostet nichts, langsamer</option>
+        <option value="lmstudio">LM Studio — lokal, kostet nichts</option>
         <option value="openrouter">OpenRouter</option>
         <option value="openai">OpenAI API — separate API-Abrechnung</option>
         <option value="chatgpt">ChatGPT-Abo — Plan-Kontingent</option>
@@ -887,6 +919,8 @@ function TextProviderChoice({
                 'ohne das läuft weiter alles über Gemini.'}
         </div>
       )}
+
+      {chosen === 'lmstudio' && <LmStudioSetup settings={settings} patch={patch} />}
 
       {chosen === 'openrouter' && !openRouterPresent && (
         <div className="hint err" style={{ marginTop: 8 }}>

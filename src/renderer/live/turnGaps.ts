@@ -25,6 +25,7 @@ export interface GapTurn {
 
 export interface TurnGapDeps {
   report(turn: GapTurn): void
+  completed?(turn: GapTurn): void
   now?: () => number
   /** Plant `fn` in `ms` und gibt das Abbrechen zurück. */
   schedule?: (fn: () => void, ms: number) => () => void
@@ -280,7 +281,9 @@ export class TurnGapWatcher {
     if (turn.origin === 'system') return
     const request = flat(turn.request)
     const answer = flat(turn.answer)
-    if (!request || !answer || !detectRefusal(answer)) return
+    if (!request || !answer) return
+    try { this.deps.completed?.({ request, answer, channel: turn.channel }) } catch { /* optional local history */ }
+    if (!detectRefusal(answer)) return
     try {
       this.deps.report({ request, answer, channel: turn.channel })
     } catch {

@@ -42,7 +42,7 @@ const TIMEOUT_MS = 4 * 60 * 1000
 export const MAX_PARALLEL = 3
 
 /** Werkzeuge, die ein Unteragent nie bekommt, egal was unter „Rechte" steht. */
-const EXCLUDED_NAME = /^(computer_|desktop_|window_|screen|mouse|keyboard|camera_|delegate_|skill_|plan_|memory_tidy|claude_design|self_repair|settings_|tool_)/
+const EXCLUDED_NAME = /^(computer_|desktop_|window_|screen|mouse|keyboard|camera_|website_login|delegate_|skill_|plan_|context_|memory_tidy|claude_design|self_repair|settings_|tool_)/
 const EXCLUDED_GROUPS = new Set(['chrome', 'agent'])
 
 function subagentTools(): { names: Set<string>; declarations: unknown[] } {

@@ -192,11 +192,19 @@ export function digestDropped(items: { role?: string; content?: unknown }[], max
   for (const item of items) {
     if ((item.role !== 'user' && item.role !== 'assistant') || typeof item.content !== 'string') continue
     const text = item.content.replace(/\s+/g, ' ').trim()
-    if (!text || text.startsWith('[Früher im Gespräch]')) continue
+    if (!text) continue
+    if (text.startsWith('[Früher im Gespräch]')) {
+      lines.push(...item.content.slice('[Früher im Gespräch]'.length).trim().split('\n').filter(Boolean))
+      continue
+    }
     lines.push(`${item.role === 'user' ? 'Nutzer' : 'James'}: ${text.length > 140 ? `${text.slice(0, 140)}…` : text}`)
   }
   if (!lines.length) return undefined
-  let digest = lines.join('\n')
-  if (digest.length > max) digest = `…${digest.slice(-max)}`
+  // Keep the original request/constraints as well as recent corrections across repeated compaction.
+  let digest = [...new Set(lines)].join('\n')
+  if (digest.length > max) {
+    const head = Math.floor(max * 0.45)
+    digest = `${digest.slice(0, head)}\n[… ältere Details gekürzt; session_search für den Wortlaut …]\n${digest.slice(-(max - head - 80))}`
+  }
   return `[Früher im Gespräch]\n${digest}`
 }

@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BrowserContext, Page } from 'playwright-core'
+import { browserGate } from '@shared/browserGate'
 
 /**
  * Anbindung an einen Chrome, der James gehört.
@@ -81,7 +82,10 @@ export async function getContext(): Promise<BrowserContext> {
       const next = await chromium.launchPersistentContext(browserProfileDir(), {
         executablePath: chromeExecutable(),
         headless: false,
-        args: ['--no-first-run', '--no-default-browser-check'],
+        // Der Browser arbeitet außerhalb des sichtbaren Bildschirms; ohne diese
+        // Schalter drosselt Chrome verdeckte Fenster und Bildschirmfotos hängen.
+        args: ['--no-first-run', '--no-default-browser-check', '--window-position=-32000,-32000',
+          '--disable-backgrounding-occluded-windows', '--disable-renderer-backgrounding', '--disable-background-timer-throttling'],
         viewport: null,
         acceptDownloads: true
       })
@@ -107,8 +111,22 @@ export async function getContext(): Promise<BrowserContext> {
  * `domcontentloaded` statt `networkidle`: Shops laden dauernd Tracker nach,
  * `networkidle` läuft dort regelmäßig in den Timeout.
  */
+let preferredPage: Page | null = null
+export function selectActivePage(page: Page): void { preferredPage = page }
+export async function activePage(): Promise<Page | null> {
+  const pages = (await getContext()).pages()
+  for (const page of pages) {
+    if (await page.evaluate(() => document.hasFocus()).catch(() => false)) return page
+  }
+  if (preferredPage && pages.includes(preferredPage) && !preferredPage.isClosed()) return preferredPage
+  return pages.at(-1) ?? null
+}
+
 export async function openPage(url: string): Promise<Page> {
   const ctx = await getContext()
+  // Unsichtbar sammelt niemand Tabs von Hand ein: ab zehn den ältesten schließen.
+  const open = ctx.pages()
+  if (open.length >= 10) await open.find((p) => p !== preferredPage)?.close().catch(() => undefined)
   const page = await ctx.newPage()
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
@@ -154,6 +172,7 @@ export async function findOrOpen(urlPattern: string, url: string): Promise<Page>
 export async function openForLogin(url: string): Promise<{ titel: string; adresse: string }> {
   const page = await openPage(url)
   await page.bringToFront()
+  await setWindowVisible(page, true)
   return { titel: await page.title().catch(() => ''), adresse: page.url() }
 }
 
@@ -183,19 +202,51 @@ export async function amazonSignedIn(page: Page): Promise<boolean | null> {
  * Erkennt die typischen Abwehrseiten. Wir lösen sie nicht — James übergibt
  * an den Nutzer, statt sich an einer Bot-Erkennung zu versuchen.
  */
-export async function detectBlock(page: Page): Promise<string | null> {
-  const url = page.url()
-  if (url.includes('/errors/validateCaptcha') || url.includes('/ap/signin')) {
-    return url.includes('signin')
-      ? 'Amazon verlangt eine Anmeldung. Melde dich einmal im James-Browser an — unter ' +
-          'Einstellungen, Verbindungen gibt es dafür einen Knopf. Danach geht es dauerhaft.'
-      : 'Amazon zeigt eine Sicherheitsabfrage. Die musst du im Browser selbst lösen.'
-  }
+export async function detectBlock(page: Page, options: { allowLogin?: boolean } = {}): Promise<string | null> {
   const title = (await page.title().catch(() => '')) || ''
-  if (/robot|captcha|sicherheitsabfrage/i.test(title)) {
-    return 'Die Seite zeigt eine Sicherheitsabfrage. Die musst du im Browser selbst lösen.'
+  const text = await page.locator('body').innerText({ timeout: 1500 }).catch(() => '')
+  const selectors = ['iframe[src*="recaptcha"][src*="anchor"]', 'iframe[src*="recaptcha"][src*="bframe"]', 'iframe[src*="hcaptcha"]', 'iframe[src*="challenges.cloudflare.com"]']
+  // A solved checkbox may remain on the page. Read only whether the response exists, never the token itself.
+  const solved = await page.evaluate(() => Array.from(document.querySelectorAll<HTMLInputElement | HTMLTextAreaElement>('[name="g-recaptcha-response"], [name="h-captcha-response"], [name="cf-turnstile-response"]')).some(e => Boolean(e.value.trim()))).catch(() => false)
+  let visibleChallenge = false
+  if (!solved) for (const selector of selectors) {
+    const frames = page.locator(selector)
+    for (let i = 0, count = Math.min(await frames.count(), 10); i < count; i++) {
+      if (await frames.nth(i).isVisible().catch(() => false)) { visibleChallenge = true; break }
+    }
+    if (visibleChallenge) break
   }
+  const gate = browserGate({ url: page.url(), title, text: text.slice(0, 6000), visibleChallenge })
+  if (gate === 'captcha') return 'Die Seite verlangt eine menschliche Sicherheitsprüfung. Bitte löse sie selbst im Browserfenster, das James dafür kurz zeigt, und klicke anschließend auf „Ich bin fertig – prüfen“.'
+  const credentials = page.locator(options.allowLogin ? 'input[autocomplete="one-time-code"]' : 'input[type="password"], input[autocomplete="one-time-code"]')
+  let loginVisible = false
+  for (let i = 0, count = Math.min(await credentials.count(), 20); i < count; i++) {
+    if (await credentials.nth(i).isVisible().catch(() => false)) { loginVisible = true; break }
+  }
+  if ((!options.allowLogin && gate === 'login') || loginVisible) return 'Die Seite verlangt eine Anmeldung. Bitte melde dich im James-Browser an und klicke anschließend auf „Ich bin fertig – prüfen“.'
   return null
+}
+
+/**
+ * Schiebt das Browserfenster auf den Bildschirm oder wieder daneben.
+ *
+ * James arbeitet unsichtbar; der Nutzer sieht nur die Statuszeile. Sichtbar
+ * wird das Fenster nur, wenn er selbst etwas tun muss: Anmeldung über die
+ * Einstellungen, Einmalcode oder eine Sicherheitsprüfung.
+ */
+let windowShown = false
+export async function setWindowVisible(page: Page, visible: boolean): Promise<void> {
+  if (windowShown === visible && !visible) return
+  windowShown = visible
+  try {
+    const cdp = await page.context().newCDPSession(page)
+    const { windowId } = await cdp.send('Browser.getWindowForTarget') as { windowId: number }
+    await cdp.send('Browser.setWindowBounds', { windowId, bounds: { windowState: 'normal' } })
+    await cdp.send('Browser.setWindowBounds', { windowId, bounds: visible ? { left: 80, top: 60 } : { left: -32000, top: -32000 } })
+    await cdp.detach().catch(() => undefined)
+  } catch {
+    // Fensterlage ist Komfort, kein Grund, den Auftrag abzubrechen.
+  }
 }
 
 export async function disconnect(): Promise<void> {

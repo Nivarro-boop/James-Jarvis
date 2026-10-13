@@ -3,6 +3,7 @@ import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, 
 import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import type { SecretKey, SecretStatus } from '@shared/types'
+import { websiteLoginUrl, type WebsiteAccountInfo, type WebsiteAccountInput } from '@shared/websiteAccounts'
 
 /**
  * API-Keys landen nie im Klartext auf der Platte.
@@ -52,6 +53,7 @@ const MCP_FIELD = '__mcp'
 const MCP_OAUTH_FIELD = '__mcpOAuth'
 
 type Store = Partial<Record<SecretKey, string>> & {
+  __websiteAccounts?: Record<string, WebsiteAccountInput>
   [MCP_FIELD]?: Record<string, string>
   [MCP_OAUTH_FIELD]?: Record<string, unknown>
 }
@@ -150,6 +152,39 @@ export function secretStatus(): SecretStatus[] {
 
 export function hasSecret(key: SecretKey): boolean {
   return getSecret(key) !== null
+}
+
+/** Values are encrypted with the existing DPAPI store; only origins are exposed to the model. */
+export function websiteAccounts(): WebsiteAccountInfo[] {
+  const accounts = load().__websiteAccounts ?? {}
+  return Object.entries(accounts).flatMap(([origin, account]) => {
+    try { return websiteLoginUrl(account.loginUrl).origin === origin ? [{ origin, loginUrl: account.loginUrl }] : [] }
+    catch { return [] }
+  })
+}
+export function saveWebsiteAccount(input: WebsiteAccountInput): void {
+  const url = websiteLoginUrl(input.loginUrl)
+  if (typeof input.username !== 'string' || !input.username.trim() || input.username.length > 320 ||
+      typeof input.password !== 'string' || !input.password || input.password.length > 4096) throw new Error('Bitte Benutzername und Passwort vollständig eingeben.')
+  const store = load()
+  const accounts = { ...(store.__websiteAccounts ?? {}) }
+  if (!accounts[url.origin] && Object.keys(accounts).length >= 100) throw new Error('Höchstens 100 Website-Konten speichern.')
+  accounts[url.origin] = { loginUrl: url.toString(), username: input.username.trim(), password: input.password }
+  persist({ ...store, __websiteAccounts: accounts })
+}
+export function removeWebsiteAccount(raw: string): void {
+  const origin = websiteLoginUrl(raw).origin
+  const store = load()
+  const accounts = { ...(store.__websiteAccounts ?? {}) }
+  delete accounts[origin]
+  persist({ ...store, __websiteAccounts: accounts })
+}
+/** Main process only. Never expose this function over IPC or place its output in a tool result. */
+export function websiteAccount(raw: string): WebsiteAccountInput | null {
+  const origin = websiteLoginUrl(raw).origin
+  const account = load().__websiteAccounts?.[origin]
+  if (!account || typeof account.username !== 'string' || typeof account.password !== 'string') return null
+  return websiteLoginUrl(account.loginUrl).origin === origin ? { ...account } : null
 }
 
 // ── Schlüssel der MCP-Server ─────────────────────────────────

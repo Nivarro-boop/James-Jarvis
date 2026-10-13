@@ -116,6 +116,7 @@ export const DEFAULT_SETTINGS: Settings = {
   brainProvider: 'gemini',
   chatGptModel: '',
   openRouterModel: 'anthropic/claude-3.5-haiku',
+  lmStudio: { baseUrl: 'http://127.0.0.1:1234/v1', model: '' },
   // Jeweils das kleine, günstige Modell — Textaufgaben sind Übersetzen und
   // Verdichten, dafür braucht es kein Spitzenmodell.
   openAiModel: 'gpt-5-mini',

@@ -1,3 +1,112 @@
+# Update 1.3.7 – Unsichtbarer Browser, Bedienung, LM Studio – 13.10.2026
+
+- Der James-Chrome läuft außerhalb des sichtbaren Bildschirms (Drosselung
+  verdeckter Fenster abgeschaltet). Sichtbar wird er nur, wenn der Nutzer
+  selbst handeln muss (Einmalcode, Sicherheitsprüfung, Anmeldung über die
+  Einstellungen); danach wird er wieder versteckt.
+- Statuszeile oben im Hauptfenster zeigt den aktuellen Schritt bzw. „Wartet auf dich“.
+- Übergabekarte hat nur noch „Ich bin fertig – prüfen“; „Browser nach vorne“ entfällt,
+  weil das Fenster bei einer Übergabe selbst nach vorne kommt.
+- Neue Werkzeuge: chrome_elements (nummerierte Bedienelemente),
+  chrome_interact (klicken, eintragen, auswählen, Häkchen, Taste, Hover über
+  Nummer; keine Passwort-/Zahlungsfelder), chrome_navigate (Adresse, zurück,
+  vorwärts, neu laden, scrollen).
+- website_login: Seiten ohne <form>, bis zu drei Schritte (E-Mail, dann Passwort),
+  mehr Feld- und Knopfvarianten, Enter als Rückfall, Knöpfe fremder
+  Anmeldedienste werden nie gedrückt. Bei Anmeldeseiten mit gespeichertem Konto
+  meldet James sich selbst an statt zu übergeben.
+- CAPTCHAs werden weiterhin nicht gelöst oder umgangen.
+- LM Studio als Textanbieter (OpenAI-kompatibler lokaler Server, Standard
+  http://127.0.0.1:1234/v1), mit Modellauswahl und Live-Status in den Einstellungen.
+- Prüfung: Typecheck, 1.994 Tests bestanden, check-browser-login-ui und
+  check-maps-ui bestanden. Installer: dist/James-Jarvis Setup 1.3.7.exe.
+- Nachtrag: website_login meldet „rejected“, wenn die Website die Daten ablehnt;
+  neue Werkzeuge chrome_wait_for und chrome_close_tab; höchstens zehn Tabs im
+  unsichtbaren Browser. Alle drei Browser-Prüfskripte bestanden, 2.016 Tests.
+- Nicht geprüft: echter LM-Studio-Server, echte Anmeldung, unsichtbares Fenster
+  in der installierten App.
+
+# Anmeldung mit Browser-Übergabe – lokale Ergänzung 13.10.2026
+
+- Neues Werkzeug chrome_prepare_login öffnet eine HTTPS-Website im James-Browser
+  und verwendet dessen vorhandene Sitzungen. Zugangsdaten in URLs werden abgelehnt.
+- Erkannte Passwort-/Einmalcodefelder und menschliche Sicherheitsprüfungen werden
+  an den Nutzer übergeben. CAPTCHA-/Bot-Schutz wird nicht gelöst oder umgangen.
+- Eigene Karte mit „Browser nach vorne“ und „Ich bin fertig – prüfen“. Sie läuft
+  nicht nach fünf Minuten ab. Die zweite Aktion fordert eine neue Zustandsprüfung
+  an; sie bestätigt keine Anmeldung und löst keine automatische Prüfung aus.
+- Chrome-Klicks und Eingaben pausieren bei erkannten Prüfungen. Die Erkennung
+  berücksichtigt typische Titel, Hinweise und sichtbare Widgets. Sie ist
+  heuristisch und deckt nicht jede Website ab. Passwort- und Codefelder werden
+  auch anhand ihres tatsächlichen Feldtyps erkannt.
+- Nach einem Tabwechsel verwenden Lesen/Klicken/Ausfüllen den fokussierten oder
+  zuletzt ausgewählten Tab. Seitenlesen entfernt keine Navigation oder andere
+  Elemente mehr aus der echten Website.
+- Prüfung: TypeScript und Produktionsbuild bestanden, 1.948 Tests bestanden.
+  scripts/check-browser-login.cjs prüft mit vollständig simulierten Webseiten
+  im lokalen Chrome: Pause statt Klick/Eingabe, Anmeldung, HTTPS-Regeln,
+  Seitenprüfung danach, unveränderte Navigation und Übergabekarte.
+  scripts/check-browser-login-ui.cjs prüft die Karte und Aktionen in Electron,
+  schmale Darstellung und das Erhalten über die normale Karten-Ablaufzeit hinaus.
+  Screenshots: out/audit/browser-login-ui*.png.
+- Keine echte Anmeldung, keine echten Zugangsdaten, kein echter CAPTCHA-Test.
+  Kein neuer Installer gebaut; nichts installiert oder veröffentlicht.
+
+# Kontext und Hermes-Funktionen – lokale Ergänzung 13.10.2026
+
+- Arbeitsgedächtnis mit Ziel, Entscheidungen, Ergebnissen, nächsten Schritten,
+  Blockaden und Plan. `context_checkpoint` speichert, `context_status` liest.
+  `plan_update` aktualisiert automatisch den lokalen Arbeitsstand. Speicherung
+  atomar in working-context.json im Benutzerprofil; ein Neustart stellt offene
+  Aufgaben pausiert wieder her und setzt laufende Planschritte auf offen.
+- Kontextkarte mit Vorschau, „Aufgabe fortsetzen“ und Zurücksetzen. Das
+  Zurücksetzen löscht Arbeitsstand und Gesprächsverlauf, erhält Skills und
+  Langzeiterinnerungen und startet die Gesprächsverbindung neu.
+- Fertigkeiten-Bibliothek über den neuen Button oder `/skills`: suchen,
+  Anleitung lesen und gezielt anwenden. Passende Skills und Erinnerungen werden
+  beim Textauftrag vor unpassenden neuesten/häufigsten Einträgen priorisiert.
+- Lokale vollständige Gesprächsbeiträge werden nun in der bereits vorhandenen
+  Gesprächsdatenbank gespeichert (maximal 1.000 Einträge). Prompt-Rückblick:
+  sechs Beiträge aus höchstens zwölf Stunden; `session_search` durchsucht den
+  erhaltenen Wortlaut. Systemmeldungen wie Timer werden nicht aufgenommen.
+- Normale Gemini-/Ollama-Historien werden an vollständigen Gesprächszügen
+  gekürzt, ohne Werkzeugaufrufe von ihren Antworten zu trennen. Frühere
+  Kontextnotizen überleben weitere Kürzungen; ursprüngliche Vorgaben und jüngere
+  Beiträge bleiben in der begrenzten Notiz erhalten. Verdichtung ist verlustbehaftet.
+- Der lokale Hermes-Gateway erhält jetzt Persona, passende Erinnerungen und
+  Jarvis-Arbeitsstand. Er nutzt seine eigenen tatsächlich vorhandenen Werkzeuge;
+  Jarvis-Werkzeugnamen machen keine zusätzlichen Hermes-Werkzeuge verfügbar.
+- Desktop-Arbeitsstand wird nicht in Telefon-/Alexa-Systemprompts aufgenommen;
+  Unteragenten können ihn nicht über context_checkpoint überschreiben.
+- Quellen für das Konzept: offizielle Hermes-Dokumentation
+  https://hermes-agent.nousresearch.com/docs/developer-guide/context-compression-and-caching
+  Eigene TypeScript-Implementierung, kein kopierter Hermes-Code.
+
+Prüfung: TypeScript und Produktionsbuild bestanden; 1.937 Tests bestanden.
+Zusätzliche Electron-Prüfungen: scripts/check-context-ui.cjs und
+scripts/check-learning-ui.cjs (Wiederherstellung, realer Checkpoint-Aufruf,
+Speicherung/Rückblick/Löschen, Bibliothek, schmale Darstellung, Lernvorschläge).
+Screenshots unter out/audit/context-hermes-ui*.png. Hermes-Gateway im Test simuliert;
+echte Mikrofon-, Konto- und Hermes-Installationsläufe bleiben offen.
+Kein neuer Installer gebaut, nichts installiert oder veröffentlicht.
+
+# Lokale Ergänzung – 13.10.2026
+
+- Selbstverbessernde Fertigkeiten erscheinen als Vorschlagskarte mit aufklappbarer
+  Vorschau, bisheriger Anleitung, „Übernehmen“ und „Verwerfen“. Hintergrundlernen,
+  skill_save und skill_patch schreiben erst nach Übernahme. Bei inzwischen
+  geänderter Anleitung wird die Übernahme abgewiesen. Vorschläge liegen nur im
+  Speicher (höchstens zehn); ein Neustart verwirft sie.
+- Gesprächsansicht mit bis zu 80 Untertitelzeilen, kopierbarem Text und Vorschlägen
+  abhängig von Gespräch und Werkzeugfehlern. Laufende Aufgaben sperren die
+  Vorschlagsbuttons. Dies ist ein lokaler Sitzungsverlauf, keine dauerhafte Chathistorie.
+- Prüfung: TypeScript, Produktionsbuild, 1.926 bestehende Tests und zusätzlicher
+  Electron-Oberflächentest (scripts/check-learning-ui.cjs). Test prüft Vorschau,
+  Verwerfen, tatsächliches Speichern, Konflikt mit zwischenzeitlicher Änderung,
+  schmale Darstellung und Rendererfehler. Screenshots: out/audit/self-improvement-ui*.png.
+- Kein Installer gebaut, nichts installiert oder veröffentlicht. Echte Sprach-
+  und Modellläufe bleiben ungetestet. Fehlerwebsite unverändert.
+
 # James-Jarvis Update 1.3.6 – 12.10.2026
 
 ## Selbstverbessernde Fertigkeiten (nach Hermes)

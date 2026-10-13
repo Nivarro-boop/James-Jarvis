@@ -5,7 +5,6 @@ export function toolRoundLimit(saver: boolean): number { return saver ? 4 : 10 }
 
 /** Drop entire old exchanges, keeping tool calls and their responses together. */
 export function budgetCompletedHistory<T extends { role: string; content?: unknown; parts?: Record<string, unknown>[] }>(history: T[], saver: boolean): T[] {
-  if (!saver) return history.slice(-12)
   const groups: T[][] = []
   for (const item of history) {
     const question = item.role === 'user' && (!item.parts || item.parts.some(p => p.text || p.inlineData))
@@ -18,19 +17,29 @@ export function budgetCompletedHistory<T extends { role: string; content?: unkno
   for (let i = groups.length - 1; i >= 0; i--) {
     const group = groups[i]
     const size = JSON.stringify(group).length
-    if (chars + size > 6000 || count + group.length > 12) break
+    // Normal mode also cuts at whole question boundaries, never in the middle of a tool exchange.
+    if ((saver && chars + size > 6000) || count + group.length > 12) break
     kept.unshift(group)
     chars += size
     count += group.length
   }
-  return kept.flat()
+  const tail = kept.flat()
+  if (saver || tail.length === history.length) return tail
+  const dropped = history.slice(0, history.length - tail.length)
+  const digest = digestDropped(dropped.map(item => ({ role: item.role === 'model' ? 'assistant' : item.role,
+    content: item.content ?? item.parts?.filter(p => typeof p.text === 'string').map(p => p.text).join(' ') })))
+  if (!digest) return tail
+  const note = history.some(item => item.parts) ? { role: 'user', parts: [{ text: digest }] } : { role: 'user', content: digest }
+  return [note as T, ...tail]
 }
 
 /** ChatGPT session history contains completed text exchanges, never pending calls. */
 export function budgetConversation(history: ChatGptItem[], saver: boolean): ChatGptItem[] {
-  const kept = trimConversation(history, saver)
+  const summaries = history.filter(item => typeof item.content === 'string' && item.content.startsWith('[Früher im Gespräch]'))
+  const exchanges = history.filter(item => !summaries.includes(item))
+  const kept = trimConversation(exchanges, saver)
   // Hermes-Art: Weggefallenes als kurze Notiz voranstellen statt vergessen.
-  const dropped = history.slice(0, history.length - kept.length)
+  const dropped = [...summaries, ...exchanges.slice(0, exchanges.length - kept.length)]
   const digest = digestDropped(dropped, saver ? 400 : 900)
   return digest && dropped.length ? [{ role: 'user', content: digest }, ...kept] : kept
 }

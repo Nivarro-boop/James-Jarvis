@@ -1,3 +1,10 @@
+import { getSettingsWindow } from '../windows/settings'
+import { websiteAccounts, saveWebsiteAccount, removeWebsiteAccount } from '../secrets/keystore'
+import { listSkills } from '../agent/skills'
+import { clearPlan } from '../agent/activity'
+import { workingContext, clearWorkingContext } from '../agent/workingContext'
+import { appendTranscript, clearTranscript } from '../db'
+import { skillProposals, decideSkill } from '../agent/skillProposals'
 import { realtimeAccess } from '../providers/realtimeAccess'
 import { diagnosticReport } from '@shared/diagnosticReport'
 import { sendDiagnosticReport } from '../providers/diagnosticSender'
@@ -54,6 +61,7 @@ import { addMemory, reviseMemory } from '../agent/memory'
 import { buildSystemPrompt } from '../agent/prompt'
 import { checkConnections } from '../agent/connections'
 import { openForLogin } from '../automation/chromeCdp'
+import { listLmStudioModels } from '../providers/lmstudio'
 import { deliverCameraFrame } from '../automation/camera'
 import { smartHomeStatus } from '../smarthome/homeAssistant'
 import { connectSpotify, disconnectSpotify, forgetMusicCaches, musicStatus } from '../music'
@@ -409,7 +417,7 @@ export function registerIpcHandlers(version: string): void {
   handle('tools:cancel', ({ id }) => cancelToolCall(id))
 
   // ── Agent ──────────────────────────────────────────────────
-  handle('agent:systemPrompt', () => buildSystemPrompt())
+  handle('agent:systemPrompt', (payload) => buildSystemPrompt({ query: typeof payload?.query === 'string' ? payload.query.slice(0, 2000) : undefined, desktopContext: true }))
   handle('agent:toolDeclarations', () =>
     geminiToolDeclarations((name) => permissionFor(name) === 'ask')
   )
@@ -719,6 +727,36 @@ export function registerIpcHandlers(version: string): void {
     }
   })
   handle('mcp:status', () => mcpStatus())
+  handle('context:get', () => workingContext())
+  handle('context:clear', () => { clearPlan(); clearWorkingContext(); clearTranscript(); sendToCrystal('session:forceReconnect', undefined) })
+  ipcMain.handle('context:turn', (event, payload) => {
+    const crystal = getCrystalWindow()
+    if (!crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return
+    if (typeof payload?.request !== 'string' || typeof payload?.answer !== 'string') return
+    const request = payload.request.trim().slice(0, 4000)
+    const answer = payload.answer.trim().slice(0, 4000)
+    if (!request || !answer) return
+    appendTranscript('user', request)
+    appendTranscript('assistant', answer)
+  })
+  handle('accounts:list', () => websiteAccounts())
+  ipcMain.handle('accounts:save', (event, input) => {
+    const settingsWindow = getSettingsWindow()
+    if (!settingsWindow || !trustedSender(event) || event.sender.id !== settingsWindow.webContents.id) throw new Error('Website-Konten nur in den Einstellungen speichern.')
+    if (!input || typeof input.loginUrl !== 'string') throw new Error('Ungültige Kontodaten.')
+    saveWebsiteAccount(input)
+    return websiteAccounts()
+  })
+  ipcMain.handle('accounts:remove', (event, input) => {
+    const settingsWindow = getSettingsWindow()
+    if (!settingsWindow || !trustedSender(event) || event.sender.id !== settingsWindow.webContents.id) throw new Error('Website-Konten nur in den Einstellungen entfernen.')
+    if (!input || typeof input.origin !== 'string') throw new Error('Ungültiges Konto.')
+    removeWebsiteAccount(input.origin)
+    return websiteAccounts()
+  })
+  handle('skills:list', () => listSkills().map(({ name, description, uses, steps }) => ({ name, description, uses, steps })))
+  handle('skills:proposals', () => skillProposals())
+  handle('skills:decide', ({ id, accept }) => decideSkill(id, accept))
   handle('activity:get', () => activitySnapshot())
   handle('mcp:login', async ({ id }) => {
     try {
@@ -781,6 +819,11 @@ export function registerIpcHandlers(version: string): void {
   })
   handle('chatgpt:cancel', ({ requestId }) => {
     chatGptRequests.get(requestId)?.abort()
+  })
+
+  handle('lmstudio:models', async ({ baseUrl }) => {
+    const models = await listLmStudioModels(baseUrl)
+    return { reachable: models !== null, models: models ?? [] }
   })
 
   handle('openrouter:models', async () => {
