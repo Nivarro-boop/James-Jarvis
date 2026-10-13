@@ -425,14 +425,14 @@ function SpeechEngine({ settings, patch }: Props): JSX.Element {
           <input
             type="text"
             value={speech.pythonPath}
-            placeholder="leer lassen für ~/.void-jarvis/vibevoice/venv"
+            placeholder="leer lassen für ~/JamesAI/vibevoice/venv"
             onChange={(e) => update({ pythonPath: e.target.value })}
           />
           <label style={{ marginTop: 8 }}>Sprecherprofile</label>
           <input
             type="text"
             value={speech.voicesPath}
-            placeholder="leer lassen für ~/.void-jarvis/vibevoice/voices"
+            placeholder="leer lassen für ~/JamesAI/vibevoice/voices"
             onChange={(e) => update({ voicesPath: e.target.value })}
           />
         </>

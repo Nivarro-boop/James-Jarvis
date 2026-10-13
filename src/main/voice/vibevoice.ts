@@ -27,7 +27,11 @@ import { report } from '../selfheal'
 
 /** Wo die Umgebung erwartet wird, wenn in den Einstellungen nichts steht. */
 function defaultRoot(): string {
-  return join(app.getPath('home'), '.void-jarvis', 'vibevoice')
+  // Alles Lokale liegt gemeinsam unter ~/JamesAI. Ältere Installationen
+  // haben die Stimme noch unter ~/.void-jarvis — die gilt, bis sie umzieht.
+  const current = join(app.getPath('home'), 'JamesAI', 'vibevoice')
+  const legacy = join(app.getPath('home'), '.void-jarvis', 'vibevoice')
+  return !existsSync(current) && existsSync(legacy) ? legacy : current
 }
 
 function pythonPath(): string {

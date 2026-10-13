@@ -306,7 +306,7 @@ export interface SpeechSettings {
   speaker: string
   /** Lokaler Port des Sprachdienstes. */
   port: number
-  /** Python mit PyTorch. Leer heißt: unter ~/.void-jarvis/vibevoice/venv suchen. */
+  /** Python mit PyTorch. Leer heißt: unter ~/JamesAI/vibevoice/venv suchen. */
   pythonPath: string
   /** Verzeichnis der .pt-Sprecherprofile. Leer heißt: neben der Umgebung. */
   voicesPath: string
