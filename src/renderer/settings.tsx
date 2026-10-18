@@ -1,14 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import { createRoot } from 'react-dom/client'
-import type { McpServerConfig, McpServerStatus, Settings } from '@shared/types'
-import {
-  ENV_NAME,
-  MCP_PRESETS,
-  parseMcpConfig,
-  uniqueServerId,
-  type McpPreset,
-  type ParsedMcpServer
-} from '@shared/mcp'
+import type { Settings } from '@shared/types'
+import { McpSection } from './settings/Connectors'
 import { Setup } from './settings/Setup'
 import { BackupPanel } from './settings/BackupPanel'
 import { SettingsWriteQueue } from '@shared/settingsQueue'
@@ -31,6 +24,7 @@ import {
   VoiceSection
 } from './settings/sections'
 import './styles.css'
+import './settings/settings.css'
 
 /**
  * Einstellungsfenster.
@@ -72,7 +66,7 @@ const SECTIONS = [
   { id: 'ears', label: 'Ohren', group: 'Feintuning', advanced: true },
   { id: 'saver', label: 'Sparmodus', group: 'Feintuning', advanced: true },
   { id: 'permissions', label: 'Rechte', group: 'Feintuning', advanced: true },
-  { id: 'mcp', label: 'MCP-Server', group: 'Feintuning', advanced: true },
+  { id: 'mcp', label: 'Konnektoren', group: 'Feintuning', advanced: true },
   { id: 'research', label: 'Recherchen', group: 'Feintuning', advanced: true },
   { id: 'memory', label: 'Gedächtnis', group: 'Feintuning', advanced: true },
   { id: 'audit', label: 'Aktionslog', group: 'Feintuning', advanced: true },
@@ -80,6 +74,33 @@ const SECTIONS = [
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
+
+const SECTION_KEYWORDS: Record<SectionId, string> = {
+  overview: 'start hilfe einrichtung einrichten überblick',
+  features: 'funktionen fähigkeiten aufgaben helfer',
+  keys: 'zugang schlüssel api key standort ort wetter fehler diagnose',
+  voice: 'stimme sprechen anbieter modell gemini openai chatgpt elevenlabs hermes',
+  audio: 'mikrofon lautsprecher gerät test hören ton ausgabe eingabe',
+  listening: 'zuhören stille weckwort hotkey taste sprache sprachsteuerung',
+  connections: 'kalender email e-mail mail konto dienste verbinden',
+  contacts: 'kontakte person adresse telefonnummer adressbuch',
+  music: 'musik spotify youtube wiedergabe',
+  companion: 'telefon mobilgerät handy anrufen companion twilio',
+  smarthome: 'smart home zuhause lampen geräte home assistant',
+  alexa: 'alexa amazon echo',
+  ears: 'ohren klatschen weckwort erkennung empfindlichkeit',
+  saver: 'sparen sparmodus verbrauch kosten tokens budget limit',
+  permissions: 'rechte erlaubnis freigabe sicherheit werkzeuge bestätigung',
+  mcp: 'mcp server werkzeuge erweiterungen plugins integration konnektoren connectors github notion linear kalender smart home',
+  research: 'recherche suchen ergebnisse berichte',
+  memory: 'gedächtnis erinnerung wissen sicherung backup wiederherstellen daten',
+  audit: 'aktionslog verlauf protokoll aktivität aufgaben',
+  about: 'über version autostart windows starten kosten limit einrichtung hilfe lernen erweitert'
+}
+
+function normalizeSearch(value: string): string {
+  return value.toLocaleLowerCase('de').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/ß/g, 'ss').replace(/ae|oe|ue/g, pair => pair[0])
+}
 
 function isSectionId(value: string): value is SectionId {
   return SECTIONS.some((s) => s.id === value)
@@ -97,7 +118,13 @@ function initialSection(): SectionId {
 
 function App(): JSX.Element {
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [loadError, setLoadError] = useState('')
   const [saveError, setSaveError] = useState('')
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
+  const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
+  const mainRef = useRef<HTMLElement>(null)
+  const loadRevision = useRef(0)
   const savedSettings = useRef<Settings | null>(null)
   const revision = useRef(0)
   const pendingWrites = useRef(0)
@@ -117,28 +144,74 @@ function App(): JSX.Element {
    */
   const [forceSetup, setForceSetup] = useState(false)
 
-  useEffect(() => {
-    void window.jarvis.invoke('settings:get').then(next => {
+  const navigate = useCallback((target: SectionId): void => {
+    setSection(target)
+    setQuery('')
+    requestAnimationFrame(() => {
+      mainRef.current?.scrollTo({ top: 0 })
+      mainRef.current?.focus({ preventScroll: true })
+    })
+  }, [])
+
+  const load = useCallback(async (): Promise<void> => {
+    const request = ++loadRevision.current
+    setLoadError('')
+    try {
+      const [next, secrets] = await Promise.all([
+        window.jarvis.invoke('settings:get'),
+        window.jarvis.invoke('secrets:status')
+      ])
+      if (request !== loadRevision.current) return
       savedSettings.current = next
       if (!pendingWrites.current) setSettings(next)
-    })
-    void window.jarvis
-      .invoke('secrets:status')
-      .then((s) => setHasKey(s.some((x) => x.key === 'gemini' && x.present)))
+      setHasKey(secrets.some(x => x.key === 'gemini' && x.present))
+    } catch (error) {
+      if (request === loadRevision.current) {
+        setLoadError(error instanceof Error ? error.message : String(error))
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    void load()
     const offNavigate = window.jarvis.onNavigate((target) => {
-      if (isSectionId(target)) setSection(target)
+      if (isSectionId(target)) navigate(target)
     })
     const offSettings = window.jarvis.on('settings:changed', next => {
       savedSettings.current = next
       if (!pendingWrites.current) setSettings(next)
     })
-    return () => { offNavigate(); offSettings() }
+    return () => { loadRevision.current++; offNavigate(); offSettings() }
+  }, [load, navigate])
+
+  useEffect(() => {
+    window.history.replaceState(null, '', `#${section}`)
+    document.title = `${SECTIONS.find(s => s.id === section)?.label ?? 'Einstellungen'} · Void James`
+  }, [section])
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'k' && searchRef.current) {
+        event.preventDefault()
+        searchRef.current.focus()
+        searchRef.current.select()
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
   }, [])
+
+  useEffect(() => {
+    if (saveState !== 'saved') return
+    const timeout = window.setTimeout(() => setSaveState('idle'), 3500)
+    return () => window.clearTimeout(timeout)
+  }, [saveState])
 
   const patch = useCallback(async (p: Partial<Settings>): Promise<Settings> => {
     const edit = ++revision.current
     pendingWrites.current++
     setSaveError('')
+    setSaveState('saving')
     setSettings((current) => (current ? { ...current, ...p } : current))
     try {
       const next = await writeQueue.current.enqueue(p)
@@ -148,18 +221,42 @@ function App(): JSX.Element {
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : String(error))
       if (edit === revision.current) setSettings(savedSettings.current)
-      throw error
-    } finally { pendingWrites.current-- }
+      // Ohne den Wurf: Die vielen onChange-Aufrufe zeigen den Fehler schon
+      // hier oben — eine Ablehnung je Eintrag wäre nur Rauschen in der
+      // Konsole. Der Rückgabewert ist der Stand, der sicher auf der Platte
+      // liegt; der optimistische Blick bleibt zurückgerollt.
+      const saved = savedSettings.current
+      if (!saved) throw error
+      return saved
+    } finally {
+      pendingWrites.current--
+      if (!pendingWrites.current) setSaveState('saved')
+    }
   }, [])
 
-  const primaryIds = ['overview', 'voice', 'audio', 'listening', 'features', 'keys']
+  const primaryIds = ['overview', 'voice', 'audio', 'listening', 'features', 'mcp', 'keys']
   const primary = SECTIONS.filter(s => primaryIds.includes(s.id))
   const extra = SECTIONS.filter(s => !primaryIds.includes(s.id))
+  const searchResults = useMemo(() => {
+    const terms = normalizeSearch(query).trim().split(/\s+/).filter(Boolean)
+    return SECTIONS.filter(s => {
+      const text = normalizeSearch(`${s.label} ${s.group} ${SECTION_KEYWORDS[s.id]}`)
+      return terms.every(term => text.includes(term))
+    })
+  }, [query])
+  const searching = query.trim().length > 0
 
   // Auf den Schlüsselstand wird mitgewartet: Sonst blitzt bei jedem Öffnen der
   // Assistent kurz auf, bevor die Antwort da ist und ihn wieder wegnimmt.
   if (!settings || hasKey === null) {
-    return <div style={{ padding: 40, color: '#9b8fae' }}>Lädt…</div>
+    return <main className="settings-loading">
+      <span className="settings-eyebrow">VOID JAMES</span>
+      <h1>{loadError ? 'Einstellungen gerade nicht erreichbar.' : 'Einstellungen werden geladen…'}</h1>
+      {loadError ? <>
+        <p role="alert">{loadError}</p>
+        <button className="primary" onClick={() => void load()}>Erneut versuchen</button>
+      </> : <p role="status">Einen Moment. Dein persönlicher Bereich wird vorbereitet.</p>}
+    </main>
   }
 
   /*
@@ -182,25 +279,56 @@ function App(): JSX.Element {
     )
   }
 
-  // Ein Abschnitt, der gerade offen ist und beim Umschalten auf „einfach"
-  // verschwindet, würde sonst eine leere Fläche hinterlassen.
   const active = section
+  const activeSection = SECTIONS.find(s => s.id === active)!
 
   return (
     <div className="settings-shell">
-      <nav className="settings-nav">
+      <a className="settings-skip" href="#settings-content" onClick={event => {
+        event.preventDefault()
+        mainRef.current?.focus()
+      }}>Zum Inhalt springen</a>
+      <nav className="settings-nav" aria-label="Einstellungen">
         <h1>
           Void <span>James</span>
         </h1>
         <p className="settings-nav-note">Alles an einem Ort.</p>
-        {primary.map(s => <button key={s.id} className="nav-item" aria-current={active === s.id} onClick={() => setSection(s.id)}>{s.label}</button>)}
-        <details className="settings-nav-more" open={!primaryIds.includes(active) || settings.showAdvanced}>
-          <summary>Weitere Einstellungen</summary>
-          {extra.map(s => <button key={s.id} className="nav-item" aria-current={active === s.id} onClick={() => setSection(s.id)}>{s.label}</button>)}
-        </details>
+        <div className="settings-search">
+          <label htmlFor="settings-search">Einstellung finden <kbd>Strg K</kbd></label>
+          <div className="settings-search-field">
+            <input ref={searchRef} id="settings-search" type="search" placeholder="z. B. Mikrofon" value={query} autoComplete="off"
+              onChange={event => setQuery(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Escape') { setQuery(''); event.preventDefault() }
+                if (event.key === 'Enter' && searching && searchResults[0]) { navigate(searchResults[0].id); event.preventDefault() }
+                if (event.key === 'ArrowDown' && searching) {
+                  event.preventDefault()
+                  document.querySelector<HTMLButtonElement>('.settings-search-results button')?.focus()
+                }
+              }} />
+            {query && <button className="settings-search-clear" onClick={() => { setQuery(''); searchRef.current?.focus() }} aria-label="Suche leeren">×</button>}
+          </div>
+        </div>
+        {searching ? <div className="settings-search-results">
+          <p className="settings-search-count" role="status">{searchResults.length === 1 ? '1 Bereich gefunden' : `${searchResults.length} Bereiche gefunden`}</p>
+          {searchResults.map(s => <button key={s.id} className="nav-item" aria-current={active === s.id} onClick={() => navigate(s.id)}><span>{s.label}</span><small>{s.group || 'Hilfe & App'}</small></button>)}
+          {!searchResults.length && <p className="settings-search-empty">Versuch einen anderen Begriff, etwa „Stimme“, „Kosten“ oder „Backup“.</p>}
+        </div> : <>
+          <p className="nav-group">Dein Alltag</p>
+          {primary.map(s => <button key={s.id} className="nav-item" aria-current={active === s.id} onClick={() => navigate(s.id)}>{s.label}</button>)}
+          <details className="settings-nav-more" open={!primaryIds.includes(active) || settings.showAdvanced}>
+            <summary>Weitere Einstellungen</summary>
+            {extra.map(s => <button key={s.id} className="nav-item" aria-current={active === s.id} onClick={() => navigate(s.id)}>{s.label}</button>)}
+          </details>
+        </>}
       </nav>
 
-      <main className="settings-main">
+      <main className="settings-main" id="settings-content" ref={mainRef} tabIndex={-1} aria-label={activeSection.label}>
+        <div className="settings-page-meta">
+          <span>{activeSection.group || 'Hilfe & App'} <i aria-hidden="true">/</i> {activeSection.label}</span>
+          <span className={`settings-save-state ${saveError ? 'is-error' : ''}`} role="status" aria-live="polite">{saveError ? 'Nicht gespeichert' : saveState === 'saving' ? 'Wird gespeichert…' : saveState === 'saved' ? 'Änderungen gespeichert' : 'Automatisch speichern'}</span>
+        </div>
+        {saveError && <p role="alert" className="settings-save-error">Speichern fehlgeschlagen: {saveError}. Bitte ändere die Einstellung erneut.</p>}
         {active === 'overview' && <>
           <span className="settings-eyebrow">DEIN PERSÖNLICHER HELFER</span>
           <h2>Mach es dir einfach.</h2>
@@ -211,7 +339,7 @@ function App(): JSX.Element {
               ['audio', '02', 'Mikrofon und Lautsprecher', 'Prüfen, ob James dich hört und du ihn hören kannst.'],
               ['features', '03', 'Was James für dich tun kann', 'Recherchen, Telefon, Kontakte und weitere Helfer.'],
               ['keys', '04', 'Standort und Fehlerberichte', 'Deinen Standardort und den optionalen Fehlerversand einstellen.']
-            ] as const).map(([id, number, title, description]) => <button className="settings-tile" key={id} onClick={() => setSection(id)}><span>{number} <i>↗</i></span><strong>{title}</strong><p>{description}</p></button>)}
+            ] as const).map(([id, number, title, description]) => <button className="settings-tile" key={id} onClick={() => navigate(id)}><span>{number} <i>↗</i></span><strong>{title}</strong><p>{description}</p></button>)}
           </div>
           <div className="settings-help"><strong>Neu hier?</strong><p>Die geführte Einrichtung hilft dir Schritt für Schritt beim Start.</p><button className="primary" onClick={() => setForceSetup(true)}>Einrichtung öffnen</button></div>
         </>}
@@ -227,10 +355,9 @@ function App(): JSX.Element {
               ['memory', 'Gedächtnis', 'Gespeicherte Informationen und Sicherungen verwalten.'],
               ['audit', 'Aktionslog', 'Nachsehen, was James bereits erledigt hat.'],
               ['saver', 'Weniger Verbrauch', 'Kosten, Tokens und Sparoptionen einstellen.']
-            ] as const).map(([id, title, description]) => <button className="settings-tile" key={id} onClick={() => setSection(id)}><strong>{title}</strong><p>{description}</p><span>Öffnen ↗</span></button>)}
+            ] as const).map(([id, title, description]) => <button className="settings-tile" key={id} onClick={() => navigate(id)}><strong>{title}</strong><p>{description}</p><span>Öffnen ↗</span></button>)}
           </div>
         </>}
-        {saveError && <p role="alert" className="hint err">Speichern fehlgeschlagen: {saveError}</p>}
         {active === 'connections' && <ConnectionsSection />}
         {active === 'smarthome' && <SmartHomeSection settings={settings} patch={patch} />}
         {active === 'music' && <MusicSection settings={settings} patch={patch} />}
@@ -244,7 +371,7 @@ function App(): JSX.Element {
         {active === 'listening' && <ListeningSection settings={settings} patch={patch} />}
         {active === 'saver' && <SaverSection settings={settings} patch={patch} />}
         {active === 'permissions' && <PermissionsSection settings={settings} patch={patch} />}
-        {active === 'mcp' && <McpSection settings={settings} patch={patch} />}
+        {active === 'mcp' && <McpSection settings={settings} patch={patch} onNavigate={navigate} />}
         {active === 'audit' && <AuditSection />}
         {active === 'research' && <ResearchSection />}
         {active === 'memory' && <><BackupPanel settings={settings} patch={patch} /><MemorySection /></>}
@@ -258,485 +385,7 @@ function App(): JSX.Element {
 
 // ─────────────────────────────────────────────────────────────
 
-/**
- * Argumente wie in einer Kommandozeile trennen.
- *
- * An Leerzeichen allein zu trennen zerriss jeden Pfad mit Leerzeichen —
- * `"C:\Users\Max Muster\Dokumente"` kam als zwei Argumente beim Server an.
- * Anführungszeichen halten jetzt zusammen, was zusammengehört.
- */
-function splitArgs(raw: string): string[] {
-  // Ein Argument ist eine Folge aus Anführungsteilen und gewöhnlichen
-  // Zeichen — so bleibt auch `--root="C:\Mein Ordner"` ein einziges.
-  const tokens = raw.match(/(?:"[^"]*"|'[^']*'|[^\s"'])+/g) ?? []
-  return tokens.map((token) => token.replace(/"([^"]*)"|'([^']*)'/g, '$1$2'))
-}
-
 type Patch = (p: Partial<Settings>) => Promise<Settings> | void
-
-/**
- * MCP-Server.
- *
- * Drei Wege hinein, vom einfachsten zum freiesten: eine Vorlage anklicken,
- * den JSON-Block aus einer Anleitung einfügen, oder Befehl und Argumente von
- * Hand. Danach wird sofort neu geladen — der frühere Extra-Klick auf „neu
- * laden" wurde regelmäßig vergessen, und James kannte die Werkzeuge nicht.
- *
- * Schlüssel stehen direkt am Server als Passwortfelder. Wer einen Server
- * anlegt, der einen braucht, sieht das Feld sofort und muss nicht wissen, was
- * eine Umgebungsvariable ist.
- */
-function McpSection({ settings, patch }: { settings: Settings; patch: Patch }): JSX.Element {
-  const [draft, setDraft] = useState({ name: '', command: '', args: '' })
-  const [json, setJson] = useState('')
-  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
-  const [reloading, setReloading] = useState(false)
-  const [status, setStatus] = useState<Record<string, McpServerStatus> | null>(null)
-
-  useEffect(() => {
-    void window.jarvis.invoke('mcp:status').then(setStatus)
-  }, [])
-
-  const reload = async (): Promise<void> => {
-    setReloading(true)
-    try {
-      await window.jarvis.invoke('mcp:reload')
-      setStatus(await window.jarvis.invoke('mcp:status'))
-    } finally {
-      setReloading(false)
-    }
-  }
-
-  /** Anmeldung im Systembrowser; die Karte zeigt danach den neuen Zustand. */
-  const login = async (id: string): Promise<string | null> => {
-    setReloading(true)
-    try {
-      const result = await window.jarvis.invoke('mcp:login', { id })
-      setStatus(await window.jarvis.invoke('mcp:status'))
-      return result.ok ? null : (result.error ?? 'Die Anmeldung hat nicht geklappt.')
-    } finally {
-      setReloading(false)
-    }
-  }
-
-  const logout = async (id: string): Promise<void> => {
-    setReloading(true)
-    try {
-      await window.jarvis.invoke('mcp:logout', { id })
-      setStatus(await window.jarvis.invoke('mcp:status'))
-    } finally {
-      setReloading(false)
-    }
-  }
-
-  /** Server anlegen, Schlüssel ablegen, neu laden — in dieser Reihenfolge. */
-  const addServers = async (
-    entries: {
-      name: string
-      command: string
-      args: string[]
-      env?: Record<string, string>
-      secrets?: Record<string, string>
-      url?: string
-    }[]
-  ): Promise<void> => {
-    const list = [...settings.mcpServers]
-    const created: { id: string; secrets: Record<string, string> }[] = []
-    for (const entry of entries) {
-      const id = uniqueServerId(entry.name, list)
-      const secretEnv = Object.keys(entry.secrets ?? {})
-      list.push({
-        id,
-        name: entry.name,
-        enabled: true,
-        command: entry.command,
-        args: entry.args,
-        ...(entry.env && Object.keys(entry.env).length > 0 ? { env: entry.env } : {}),
-        ...(secretEnv.length > 0 ? { secretEnv } : {}),
-        ...(entry.url ? { url: entry.url } : {})
-      })
-      created.push({ id, secrets: entry.secrets ?? {} })
-    }
-    // Erst speichern: Der Hauptprozess nimmt Schlüssel nur für Server an,
-    // die in den Einstellungen stehen.
-    await patch({ mcpServers: list })
-    for (const { id, secrets } of created) {
-      for (const [name, value] of Object.entries(secrets)) {
-        if (value) await window.jarvis.invoke('mcp:setSecret', { id, name, value })
-      }
-    }
-    await reload()
-  }
-
-  const addPreset = async (preset: McpPreset): Promise<void> => {
-    setNote(null)
-    await addServers([
-      {
-        name: preset.name,
-        command: preset.command,
-        args: preset.args,
-        url: preset.url,
-        secrets: Object.fromEntries((preset.secretEnv ?? []).map((n) => [n, '']))
-      }
-    ])
-    setNote({
-      ok: true,
-      text: preset.url
-        ? `${preset.name} ist eingetragen. Jetzt unten am Server auf „Anmelden" klicken.`
-        : preset.secretEnv?.length
-          ? `${preset.name} ist eingetragen. Fehlt nur noch der Schlüssel unten am Server.`
-          : `${preset.name} ist eingetragen und gestartet.`
-    })
-  }
-
-  const importJson = async (): Promise<void> => {
-    let parsed: ParsedMcpServer[]
-    try {
-      parsed = parseMcpConfig(json)
-    } catch (err) {
-      setNote({ ok: false, text: err instanceof Error ? err.message : String(err) })
-      return
-    }
-    await addServers(parsed)
-    setJson('')
-    const open = parsed.flatMap((p) =>
-      Object.entries(p.secrets)
-        .filter(([, v]) => !v)
-        .map(([k]) => k)
-    )
-    setNote({
-      ok: true,
-      text:
-        `Übernommen: ${parsed.map((p) => p.name).join(', ')}.` +
-        (open.length > 0 ? ` Noch einzutragen: ${open.join(', ')}.` : '')
-    })
-  }
-
-  const addManual = async (): Promise<void> => {
-    const name = draft.name.trim()
-    const command = draft.command.trim()
-    if (!name || !command) return
-    await addServers([{ name, command, args: splitArgs(draft.args) }])
-    setDraft({ name: '', command: '', args: '' })
-  }
-
-  const update = async (id: string, change: Partial<McpServerConfig>): Promise<void> => {
-    await patch({ mcpServers: settings.mcpServers.map((x) => (x.id === id ? { ...x, ...change } : x)) })
-  }
-
-  const remove = async (id: string): Promise<void> => {
-    await patch({ mcpServers: settings.mcpServers.filter((x) => x.id !== id) })
-    await window.jarvis.invoke('mcp:clearSecrets', { id })
-    await reload()
-  }
-
-  // Am Paket erkannt, nicht an der ganzen Zeile — ein eingefügter Block
-  // schreibt Playwright mal mit, mal ohne `-y`.
-  const isInstalled = (preset: McpPreset): boolean => {
-    if (preset.url) return settings.mcpServers.some((s) => s.url === preset.url)
-    const pkg = preset.args.find((a) => !a.startsWith('-')) ?? ''
-    return settings.mcpServers.some((s) => s.args.includes(pkg))
-  }
-
-  return (
-    <>
-      <h2>MCP-Server</h2>
-      <p className="lede">
-        James spricht das Model Context Protocol. Jeder Server bringt seine eigenen Werkzeuge mit —
-        Browser, Dateisystem, GitHub, Smart Home. Code schreiben muss dafür niemand.
-      </p>
-
-      <div className="field">
-        <label>Mit einem Klick</label>
-        <div className="mcp-presets">
-          {MCP_PRESETS.map((preset) => {
-            const present = isInstalled(preset)
-            return (
-              <button
-                key={preset.id}
-                className="mcp-preset"
-                disabled={present || reloading}
-                onClick={() => void addPreset(preset)}
-              >
-                <strong>
-                  {preset.name}{' '}
-                  {present ? (
-                    <span className="badge ok">eingetragen</span>
-                  ) : preset.url ? (
-                    <span className="badge missing">Anmeldung</span>
-                  ) : preset.secretEnv?.length ? (
-                    <span className="badge missing">braucht Key</span>
-                  ) : null}
-                </strong>
-                <small>{preset.description}</small>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      <div className="field">
-        <label>Konfiguration einfügen</label>
-        <textarea
-          rows={6}
-          spellCheck={false}
-          placeholder={
-            '{\n  "mcpServers": {\n    "playwright": {\n      "command": "npx",\n      "args": ["@playwright/mcp@latest"]\n    }\n  }\n}'
-          }
-          value={json}
-          onChange={(e) => {
-            setJson(e.target.value)
-            setNote(null)
-          }}
-          style={{ fontFamily: 'Consolas, monospace', fontSize: 12 }}
-        />
-        <div className="row" style={{ marginTop: 8 }}>
-          <button className="primary" disabled={!json.trim() || reloading} onClick={() => void importJson()}>
-            {reloading ? 'Startet…' : 'Übernehmen'}
-          </button>
-        </div>
-        <div className="hint">
-          Der Block, den fast jede MCP-Anleitung zum Kopieren anbietet — für Claude Desktop, Cursor
-          oder VS Code. Steht darin ein API-Key, landet er verschlüsselt im Keystore und nicht in den
-          Einstellungen.
-        </div>
-        {note && <div className={note.ok ? 'hint ok' : 'hint err'}>{note.text}</div>}
-      </div>
-
-      {settings.mcpServers.length > 0 && (
-        <div className="field">
-          <label>Eingetragen</label>
-          {settings.mcpServers.map((s) => (
-            <McpServerCard
-              key={s.id}
-              server={s}
-              status={status?.[s.id] ?? null}
-              reloading={reloading}
-              onLogin={() => login(s.id)}
-              onLogout={() => void logout(s.id)}
-              onToggle={async (enabled) => {
-                await update(s.id, { enabled })
-                await reload()
-              }}
-              onSecretEnv={(secretEnv) => update(s.id, { secretEnv })}
-              onRemove={() => void remove(s.id)}
-              onKeysChanged={() => void reload()}
-            />
-          ))}
-          <div className="row" style={{ marginTop: 8 }}>
-            <button onClick={() => void reload()} disabled={reloading}>
-              {reloading ? 'Lädt neu…' : 'Alle neu laden'}
-            </button>
-          </div>
-          <div className="hint">
-            Was nur liest, läuft ohne Rückfrage. Alles, was etwas tut, fragt nach — einzelne
-            Werkzeuge lassen sich unter „Rechte" freigeben. Code ausführen und Dateien hochladen fragt
-            immer. Beim ersten Start holt npx das Paket aus dem Netz, das kann eine Minute dauern.
-          </div>
-        </div>
-      )}
-
-      <details className="advanced-choice">
-        <summary>Von Hand eintragen</summary>
-        <div className="field" style={{ marginTop: 10 }}>
-          <input
-            type="text"
-            placeholder="Name, z. B. Spotify"
-            value={draft.name}
-            onChange={(e) => setDraft({ ...draft, name: e.target.value })}
-            style={{ marginBottom: 8 }}
-          />
-          <input
-            type="text"
-            placeholder="Befehl, z. B. npx"
-            value={draft.command}
-            onChange={(e) => setDraft({ ...draft, command: e.target.value })}
-            style={{ marginBottom: 8 }}
-          />
-          <input
-            type="text"
-            placeholder="Argumente, z. B. -y @modelcontextprotocol/server-filesystem C:\\Users"
-            value={draft.args}
-            onChange={(e) => setDraft({ ...draft, args: e.target.value })}
-            style={{ marginBottom: 8 }}
-          />
-          <button className="primary" onClick={() => void addManual()} disabled={reloading}>
-            Hinzufügen
-          </button>
-        </div>
-      </details>
-    </>
-  )
-}
-
-/** Ein eingetragener Server: Zustand, Schalter und seine API-Keys. */
-function McpServerCard({
-  server,
-  status: serverStatus,
-  reloading,
-  onLogin,
-  onLogout,
-  onToggle,
-  onSecretEnv,
-  onRemove,
-  onKeysChanged
-}: {
-  server: McpServerConfig
-  status: McpServerStatus | null
-  reloading: boolean
-  onLogin: () => Promise<string | null>
-  onLogout: () => void
-  onToggle: (enabled: boolean) => Promise<void>
-  onSecretEnv: (names: string[]) => Promise<void>
-  onRemove: () => void
-  onKeysChanged: () => void
-}): JSX.Element {
-  const names = server.secretEnv ?? []
-  const [status, setStatus] = useState<Record<string, boolean>>({})
-  const [values, setValues] = useState<Record<string, string>>({})
-  const [newName, setNewName] = useState('')
-  const [error, setError] = useState('')
-
-  const namesKey = names.join(',')
-  useEffect(() => {
-    if (!namesKey) return
-    void window.jarvis.invoke('mcp:secretStatus', { id: server.id }).then(setStatus)
-  }, [server.id, namesKey])
-
-  const save = async (name: string): Promise<void> => {
-    const value = values[name]
-    if (!value) return
-    setError('')
-    try {
-      setStatus(await window.jarvis.invoke('mcp:setSecret', { id: server.id, name, value }))
-      setValues((v) => ({ ...v, [name]: '' }))
-      onKeysChanged()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
-    }
-  }
-
-  const clear = async (name: string): Promise<void> => {
-    setStatus(await window.jarvis.invoke('mcp:setSecret', { id: server.id, name, value: '' }))
-    onKeysChanged()
-  }
-
-  const addName = async (): Promise<void> => {
-    const name = newName.trim().toUpperCase()
-    if (!ENV_NAME.test(name)) {
-      setError('Der Name darf nur Buchstaben, Ziffern und _ enthalten, z. B. BRAVE_API_KEY.')
-      return
-    }
-    setError('')
-    if (!names.includes(name)) await onSecretEnv([...names, name])
-    setNewName('')
-  }
-
-  const missing = names.filter((n) => !status[n])
-  const state = !server.enabled
-    ? { cls: 'missing', text: 'aus' }
-    : reloading
-      ? { cls: 'missing', text: 'lädt…' }
-      : missing.length > 0 || serverStatus?.state === 'key'
-        ? { cls: 'err', text: 'Key fehlt' }
-        : serverStatus?.state === 'login'
-          ? { cls: 'err', text: 'Anmeldung nötig' }
-          : serverStatus?.state === 'ok'
-            ? { cls: 'ok', text: `${serverStatus.tools} Werkzeuge` }
-            : serverStatus?.state === 'error'
-              ? { cls: 'err', text: 'nicht erreichbar' }
-              : null
-
-  const signIn = async (): Promise<void> => {
-    setError('')
-    const problem = await onLogin()
-    if (problem) setError(problem)
-  }
-
-  return (
-    <div className="mcp-card">
-      <div className="mcp-card-head">
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <strong>{server.name}</strong>{' '}
-          {state && <span className={`badge ${state.cls}`}>{state.text}</span>}
-          <div className="hint">
-            <code>{server.url ?? `${server.command} ${server.args.join(' ')}`}</code>
-          </div>
-          {serverStatus?.state === 'error' && serverStatus.error && (
-            <div className="hint err">{serverStatus.error}</div>
-          )}
-        </div>
-        {server.url && server.enabled && serverStatus?.state !== 'ok' && (
-          <button className="primary" disabled={reloading} onClick={() => void signIn()}>
-            Anmelden
-          </button>
-        )}
-        {server.url && serverStatus?.state === 'ok' && (
-          <button disabled={reloading} onClick={onLogout}>
-            Abmelden
-          </button>
-        )}
-        <label style={{ fontWeight: 400, whiteSpace: 'nowrap', margin: 0 }}>
-          <input
-            type="checkbox"
-            checked={server.enabled}
-            style={{ width: 'auto', marginRight: 6 }}
-            onChange={(e) => void onToggle(e.target.checked)}
-          />
-          aktiv
-        </label>
-        <button onClick={onRemove}>Löschen</button>
-      </div>
-
-      {names.map((name) => (
-        <div className="row" key={name} style={{ marginTop: 10 }}>
-          <code style={{ minWidth: 170 }}>{name}</code>
-          <input
-            type="password"
-            style={{ flex: 1, minWidth: 160, width: 'auto' }}
-            placeholder={status[name] ? '••••••••••••  (neu eingeben zum Ersetzen)' : 'API-Key einfügen…'}
-            value={values[name] ?? ''}
-            onChange={(e) => setValues((v) => ({ ...v, [name]: e.target.value }))}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void save(name)
-            }}
-          />
-          <button className="primary" disabled={!values[name]} onClick={() => void save(name)}>
-            Speichern
-          </button>
-          {status[name] ? (
-            <button onClick={() => void clear(name)}>Löschen</button>
-          ) : (
-            <button onClick={() => void onSecretEnv(names.filter((n) => n !== name))}>Entfernen</button>
-          )}
-        </div>
-      ))}
-
-      {/* Ferne Server melden sich im Browser an — Umgebungsvariablen gibt es dort nicht. */}
-      {!server.url && (
-      <details style={{ marginTop: 8 }}>
-        <summary className="hint" style={{ cursor: 'pointer' }}>
-          API-Key hinzufügen
-        </summary>
-        <div className="row" style={{ marginTop: 6 }}>
-          <input
-            type="text"
-            style={{ flex: 1, width: 'auto' }}
-            placeholder="Name der Variable, z. B. BRAVE_API_KEY"
-            value={newName}
-            onChange={(e) => setNewName(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') void addName()
-            }}
-          />
-          <button onClick={() => void addName()}>Feld anlegen</button>
-        </div>
-      </details>
-      )}
-      {error && <div className="hint err">{error}</div>}
-    </div>
-  )
-}
 
 function AboutSection({
   settings,
@@ -751,8 +400,8 @@ function AboutSection({
   const [cost, setCost] = useState({ todayUsd: 0, monthUsd: 0 })
 
   useEffect(() => {
-    void window.jarvis.invoke('diag:ping').then((r) => setVersion(r.version))
-    void window.jarvis.invoke('cost:get').then(setCost)
+    void window.jarvis.invoke('diag:ping').then((r) => setVersion(r.version)).catch(() => undefined)
+    void window.jarvis.invoke('cost:get').then(setCost).catch(() => undefined)
   }, [])
 
   return (
@@ -790,7 +439,7 @@ function AboutSection({
           Tageslimit:{' '}
           {settings.dailyCostLimitUsd > 0 ? `${settings.dailyCostLimitUsd} $` : 'aus'}
         </label>
-        <input
+        <input aria-label="Tageslimit:"
           type="range"
           min={0}
           max={50}
@@ -869,10 +518,10 @@ function AboutSection({
       <div className="field">
         <label>Wenn etwas nicht geht</label>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-          <button onClick={() => void window.jarvis.invoke('app:openGuide')}>
+          <button onClick={() => void window.jarvis.invoke('app:openGuide').catch(() => undefined)}>
             Kurzanleitung öffnen
           </button>
-          <button onClick={() => void window.jarvis.invoke('app:showLog')}>
+          <button onClick={() => void window.jarvis.invoke('app:showLog').catch(() => undefined)}>
             Protokoll zeigen
           </button>
         </div>

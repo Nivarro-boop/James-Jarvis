@@ -1,4 +1,4 @@
-import { saveContextPlan, workingContext } from './workingContext'
+import { onWorkingContextChanged, saveContextPlan, workingContext } from './workingContext'
 import type { ActivityItem, ActivityPlan, ActivitySnapshot, PlanStep } from '@shared/types'
 import { broadcast } from '../ipc/emit'
 
@@ -19,8 +19,6 @@ import { broadcast } from '../ipc/emit'
 const MAX_ITEMS = 40
 
 const items: ActivityItem[] = []
-let plan: ActivityPlan | null = workingContext().plan
-
 let pending: NodeJS.Timeout | null = null
 
 /** Zusammenfassen statt bei jedem Schritt senden — zehn Updates in 50 ms sind eines. */
@@ -33,8 +31,11 @@ function publish(): void {
 }
 
 export function activitySnapshot(): ActivitySnapshot {
-  return { items: [...items], plan }
+  return { items: structuredClone(items), plan: workingContext().plan }
 }
+
+// Checkpoints and explicit context resets must update the visible plan too.
+onWorkingContextChanged(publish)
 
 /**
  * Lesbare Zeile zu einem Werkzeugaufruf.
@@ -168,28 +169,22 @@ export function activityEnd(id: string, ok: boolean, detail?: string): ActivityI
   item.durationMs = Date.now() - item.startedAt
   if (detail) item.detail = detail.length > 200 ? `${detail.slice(0, 199)}…` : detail
   publish()
-  return item
+  return structuredClone(item)
 }
 
 export function setPlan(title: string, steps: PlanStep[]): ActivityPlan {
-  const next = { title, steps, updatedAt: Date.now() }
-  saveContextPlan(next)
-  plan = next
-  publish()
-  return plan
+  return saveContextPlan({ title, steps, updatedAt: Date.now() })!
 }
 
 export function clearPlan(): void {
   saveContextPlan(null)
-  plan = null
-  publish()
 }
 
 export function currentPlan(): ActivityPlan | null {
-  return plan
+  return workingContext().plan
 }
 
 /** Die letzten erledigten Schritte, für die Lernschleife. */
 export function recentActivity(sinceMs: number): ActivityItem[] {
-  return items.filter((i) => i.startedAt >= sinceMs).reverse()
+  return structuredClone(items.filter((i) => i.startedAt >= sinceMs).reverse())
 }

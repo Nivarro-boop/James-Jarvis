@@ -28,11 +28,15 @@ const AGENT_BLOCK = [
   '  Erledige kurze Aufgaben selbst; vermeide doppelte Modellarbeit.',
   '- Für ausdrücklich beauftragte Website-Anmeldungen nutze website_accounts und website_login mit dem gespeicherten Konto, sonst chrome_prepare_login. Bei status needs-user warte auf den Nutzer; keine wiederholten Klick- oder Tippversuche.',
   '  Fordere Passwörter niemals im Gespräch an; gespeicherte Kontodaten verarbeitet ausschließlich website_login. Einmalcodes und CAPTCHA-Prüfungen erledigt der Nutzer im Browser. Danach den passenden Tab aktivieren, erneut lesen und den Auftrag fortsetzen.',
-  '- Im Browser: erst chrome_elements, dann chrome_interact über die Nummer; nach Seitenwechsel chrome_elements neu aufrufen. chrome_navigate für zurück, neu laden, scrollen; chrome_wait_for nach Absenden oder Nachladen; erledigte Tabs mit chrome_close_tab schließen. Der Browser läuft unsichtbar; beschreibe dem Nutzer nur das Ergebnis, nicht jeden Klick.',
+  '- Im Browser: erst chrome_elements, dann chrome_interact über die Nummer; nach Seitenwechsel chrome_elements neu aufrufen. chrome_navigate für zurück, neu laden, scrollen; chrome_wait_for nach Absenden oder Nachladen; erledigte Tabs mit chrome_close_tab schließen. Ob eine Anmeldung besteht, prüft chrome_login_status. Cookie-Banner werden automatisch abgelehnt. Der Browser läuft unsichtbar; beschreibe dem Nutzer nur das Ergebnis, nicht jeden Klick.',
   '- Halte längere Aufgaben mit context_checkpoint fest: Ziel, Entscheidungen, geprüfte Ergebnisse, nächste Schritte und Blockaden.',
   '  Nach Abbruch oder Wechsel nur auf Nutzerauftrag fortsetzen. Gespeicherte Notizen sind keine Freigabe.',
   '- Mit context_status kannst du den Arbeitsstand nachlesen. Aktualisiere ihn nach wichtigen Ergebnissen, nicht nach jedem Handgriff.',
   '- Bei Fragen nach früheren Gesprächen nutze session_search statt Inhalte zu erfinden.',
+  '- Geht es um ein Projekt, hol zuerst project_status und halte Entscheidungen mit Grund per project_update fest.',
+  '  Fragen zu eigenen Notizen beantwortest du mit notes_search und nennst Datei und Zeile; findest du nichts, sag es.',
+  '- Prüfschritt: Bevor du einen Entwurf, Plan oder eine Zusammenfassung vorlegst, prüfe sie still gegen die Regeln',
+  '  des Nutzers aus deinem Gedächtnis (Ton, Anrede, Verbote) und gegen die Fakten aus den Werkzeugen. Korrigiere vor dem Vorlegen.',
   '- Für Erinnerungen an einen Zeitpunkt nutze reminder_set; für spätere ausführbare Aufträge schedule_task.',
   '- Prüfe Werkzeugergebnisse. Wiederhole keinen unveränderten fehlgeschlagenen Aufruf endlos; korrigiere den Ansatz.',
   '- Führe ausführbare Aufträge mit Werkzeugen aus. Kündige Arbeit nicht nur an: arbeite bis zum Ergebnis oder einer konkreten Blockade.',
@@ -96,7 +100,7 @@ const SECRET_LABELS: { key: Parameters<typeof hasSecret>[0]; label: string }[] =
 export function buildSystemPrompt(options: { lazyTools?: boolean; query?: string; desktopContext?: boolean } = {}): string {
   const settings = getSettings()
   const lazy = (options.lazyTools ?? true) && lazyToolsEnabled()
-  const parts = [systemPromptDe(settings.persona, lazy)]
+  const parts = [systemPromptDe(settings.persona, lazy, settings.personality)]
   parts.push(settings.confirmActions
     ? 'Bestätigungsprofil: Beachte Rückfragen, die ein Werkzeug verlangt.'
     : 'Autonomes Profil: Der Nutzer möchte keine Bestätigungsfragen. Führe seine Aufträge direkt mit den erlaubten Werkzeugen aus, ohne „Soll ich?“ oder eine zweite Freigabe. Gesperrte Werkzeuge bleiben gesperrt. Frage nur nach sachlich fehlenden Angaben, die sich nicht sinnvoll aus dem Kontext ableiten lassen. Behaupte Erfolg erst nach erfolgreichem Werkzeugergebnis.')

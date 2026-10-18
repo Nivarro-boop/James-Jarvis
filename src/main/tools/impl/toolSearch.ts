@@ -14,14 +14,20 @@ import { allTools, defineTool, toJsonSchema, type ToolDefinition } from '../regi
  */
 
 const SEARCH_LIMIT = 5
+const searchDocuments = new WeakMap<ToolDefinition, { name: string; group: string; description: string; lowerName: string; text: string }>()
 
 function score(tool: ToolDefinition, words: string[]): number {
-  const name = tool.name.toLowerCase()
-  const text = `${name} ${tool.group} ${tool.description}`.toLowerCase()
+  let document = searchDocuments.get(tool)
+  if (!document || document.name !== tool.name || document.group !== tool.group || document.description !== tool.description) {
+    const lowerName = tool.name.toLowerCase()
+    document = { name: tool.name, group: tool.group, description: tool.description, lowerName,
+      text: `${lowerName} ${tool.group} ${tool.description}`.toLowerCase() }
+    searchDocuments.set(tool, document)
+  }
   let total = 0
   for (const w of words) {
-    if (name.includes(w)) total += 3
-    else if (text.includes(w)) total += 1
+    if (document.lowerName.includes(w)) total += 3
+    else if (document.text.includes(w)) total += 1
   }
   return total
 }

@@ -36,7 +36,7 @@ interface Stored {
 /** Wird geworfen, wenn ein Server eine Anmeldung braucht, aber niemand gefragt hat. */
 export class LoginRequiredError extends Error {
   constructor(name: string) {
-    super(`${name} braucht eine Anmeldung. In den Einstellungen unter MCP-Server auf „Anmelden" klicken.`)
+    super(`${name} braucht eine Anmeldung. In den Einstellungen unter Konnektoren auf „Anmelden" klicken.`)
     this.name = 'LoginRequiredError'
   }
 }

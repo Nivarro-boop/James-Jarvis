@@ -3,6 +3,7 @@ import { basename } from 'node:path'
 import { z } from 'zod'
 import type { DisplayCard, ToolCallRequest, ToolCallResult } from '@shared/types'
 import type { GapToolFailureKind } from '@shared/capabilityGap'
+import { abortable } from '@shared/async'
 import { getTool, type ToolContext } from './registry'
 import {
   isHardDenied,
@@ -261,17 +262,18 @@ export async function runTool(req: ToolCallRequest, parentSignal?: AbortSignal):
   const shown: DisplayCard[] = []
 
   const ctx: ToolContext = {
-    confirm: async () => true, // Rückfragen laufen über den Gesprächsfluss, nicht hier.
-    say: (text) => speak(text),
-    setState: (state) => sendToCrystal('state:set', { state, reason: req.name }),
+    confirm: async () => !signal.aborted, // Rückfragen laufen über den Gesprächsfluss, nicht hier.
+    say: (text) => { if (!signal.aborted) speak(text) },
+    setState: (state) => { if (!signal.aborted) sendToCrystal('state:set', { state, reason: req.name }) },
     show: (card) => {
+      if (signal.aborted) return false
       const stamped: DisplayCard = { ...card, at: Date.now(), source: req.name }
       const same = shown.findIndex((c) => c.id === stamped.id)
       if (same >= 0) shown[same] = stamped
       else shown.push(stamped)
       return sendToCrystal('display:card', stamped) && crystalVisible()
     },
-    annotate: (update) => activityAnnotate(req.id, update),
+    annotate: (update) => { if (!signal.aborted) activityAnnotate(req.id, update) },
     signal
   }
 
@@ -294,9 +296,13 @@ export async function runTool(req: ToolCallRequest, parentSignal?: AbortSignal):
   })
 
   try {
+    signal.throwIfAborted()
     const userText = req.userTurn?.lastUserText || gapUserText()
-    const raw = await withModelBudget(req.budgetId ?? req.id, getSettings().tokenSaver.enabled, () =>
-      withGapUserText(userText, () => tool.execute(args, ctx)))
+    // Stop must also release callers whose provider does not honor the signal.
+    // The provider may settle later; its output must not revive this tool call.
+    const raw = await abortable(withModelBudget(req.budgetId ?? req.id, getSettings().tokenSaver.enabled, () =>
+      withGapUserText(userText, () => tool.execute(args, ctx))), signal)
+    signal.throwIfAborted()
     if (req.name === TOOL_SEARCH && emptySearch(raw)) noteGap(req, 'no-match', String(args.query ?? ''))
     // Beide Fassungen gehen weiter: ins Aktionslog das, was das Werkzeug
     // tatsächlich geliefert hat, ans Modell die knappe.

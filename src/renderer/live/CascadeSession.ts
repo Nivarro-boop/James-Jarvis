@@ -1017,7 +1017,7 @@ export class CascadeSession implements VoiceEngine {
     void window.jarvis.invoke('eleven:spent', {
       chars: delta,
       creditMultiplier: this.voiceCreditMultiplier
-    })
+    }).catch(() => undefined)
   }
 
   // ─────────────────────────────────────────────────────────

@@ -14,7 +14,7 @@ export function validateSettingsPatch(patch: unknown): void {
       if (path === 'mcpServers') {
         const ids = new Set<string>()
         for (const server of value) {
-          visit(server, { id: '', name: '', enabled: false, command: '', args: [''], env: {}, secretEnv: [''], url: '' }, path)
+            visit(server, { id: '', name: '', enabled: false, command: '', args: [''], env: {}, secretEnv: [''], url: '', headers: {} }, path)
           if (typeof server.id !== 'string' || !server.id.trim() || ids.has(server.id) ||
             typeof server.name !== 'string' || typeof server.enabled !== 'boolean' ||
             typeof server.command !== 'string' || !Array.isArray(server.args)) bad()
@@ -24,6 +24,14 @@ export function validateSettingsPatch(patch: unknown): void {
             catch { bad() }
           }
           if (server.secretEnv?.some((name: string) => !/^[A-Za-z_][A-Za-z0-9_]*$/.test(name))) bad()
+            if (server.headers !== undefined) {
+              if (!server.url || !server.headers || typeof server.headers !== 'object' || Array.isArray(server.headers)) bad()
+              for (const [name, value] of Object.entries(server.headers)) {
+                if (!/^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/.test(name) || typeof value !== 'string' || !/^(Bearer |Basic )?\$\{[A-Za-z_][A-Za-z0-9_]{0,127}\}$/i.test(value)) bad()
+                const variable = (value as string).match(/\$\{([^}]+)\}/)?.[1]
+                if (!server.secretEnv?.includes(variable)) bad()
+              }
+            }
         }
         return
       }
@@ -56,7 +64,9 @@ export function validateSettingsPatch(patch: unknown): void {
     'speech.provider': ['gemini', 'elevenlabs', 'piper', 'vibevoice', 'openai'],
     'speech.thinkProvider': ['gemini', 'ollama', 'chatgpt', 'hermes'],
     'speech.hearProvider': ['gemini', 'whisper'],
-    'piper.backend': ['auto', 'exe', 'python']
+    'piper.backend': ['auto', 'exe', 'python'],
+    persona: ['jarvis', 'sachlich', 'herzlich'],
+    'personality.address': ['auto', 'du', 'sie']
   }
   const get = (path: string): unknown => path.split('.').reduce<unknown>((v, key) =>
     v && typeof v === 'object' ? (v as Record<string, unknown>)[key] : undefined, p)
@@ -76,6 +86,14 @@ export function validateSettingsPatch(patch: unknown): void {
     const value = get(path)
     if (value !== undefined && (typeof value !== 'number' || value < min || value > max ||
         ((path.endsWith('.port') || path.endsWith('Port')) && !Number.isInteger(value)))) throw new Error(`Wert außerhalb des gültigen Bereichs: ${path}.`)
+  }
+  const humor = get('personality.humor')
+  if (humor !== undefined && (!Number.isInteger(humor) || (humor as number) < 0 || (humor as number) > 3)) {
+    throw new Error('Humor muss 0, 1, 2 oder 3 sein.')
+  }
+  const name = get('personality.name')
+  if (name !== undefined && (typeof name !== 'string' || !/^[\p{L}][\p{L}\p{M} .'-]{0,31}$/u.test(name.trim()))) {
+    throw new Error('Name: 1 bis 32 Buchstaben, ohne Sonderzeichen.')
   }
   const wakeModel = get('wake.modelName')
   if (wakeModel !== undefined && (typeof wakeModel !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*\.onnx$/.test(wakeModel))) {

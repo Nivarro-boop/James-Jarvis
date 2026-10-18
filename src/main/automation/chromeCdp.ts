@@ -130,6 +130,7 @@ export async function openPage(url: string): Promise<Page> {
   const page = await ctx.newPage()
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 })
+    if (!(await declineCookies(page))) { await page.waitForTimeout(800); await declineCookies(page) }
     return page
   } catch (err) {
     // Der Aufrufer bekommt bei einem Navigationsfehler nie einen Verweis auf
@@ -138,6 +139,31 @@ export async function openPage(url: string): Promise<Page> {
     await page.close().catch(() => undefined)
     throw err
   }
+}
+
+const COOKIE_REJECT_SELECTORS = [
+  '#onetrust-reject-all-handler', '#CybotCookiebotDialogBodyButtonDecline', '[data-testid="uc-deny-all-button"]',
+  '.cmpboxbtnno', '.sp_choice_type_REJECT_ALL', 'button[mode="secondary"][title*="Ablehnen" i]'
+]
+const COOKIE_REJECT_NAME = /^(alle )?(ablehnen|zurückweisen)$|^nur (notwendige|erforderliche|essenzielle)( cookies)?( (akzeptieren|zulassen|erlauben))?$|^(reject|decline)( all)?( cookies)?$|^(only|use) (necessary|essential)( cookies)?( only)?$|^nicht zustimmen$/i
+
+/**
+ * Lehnt Cookie-Banner ab — nie zustimmen.
+ *
+ * Im unsichtbaren Browser klickt niemand das Banner weg, und es verdeckt
+ * Knöpfe und Text. Gedrückt wird nur, was eindeutig „ablehnen" oder „nur
+ * notwendige" heißt; findet sich das nicht, bleibt das Banner stehen.
+ */
+export async function declineCookies(page: Page): Promise<boolean> {
+  for (const frame of page.frames().slice(0, 8)) {
+    for (const selector of COOKIE_REJECT_SELECTORS) {
+      const el = frame.locator(selector).first()
+      if (await el.isVisible().catch(() => false)) { await el.click({ timeout: 2000 }).catch(() => undefined); return true }
+    }
+    const byName = frame.getByRole('button', { name: COOKIE_REJECT_NAME }).first()
+    if (await byName.isVisible().catch(() => false)) { await byName.click({ timeout: 2000 }).catch(() => undefined); return true }
+  }
+  return false
 }
 
 /** Für kurze Abfragen: Seite öffnen, auslesen, wieder schließen. */

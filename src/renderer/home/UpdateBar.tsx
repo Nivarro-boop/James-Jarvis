@@ -1,5 +1,5 @@
 import { useEffect, useState, type JSX } from 'react'
-import type { CrystalState, SipStatus, UpdateStatus } from '@shared/types'
+import type { CrystalState, UpdateStatus } from '@shared/types'
 
 /**
  * Update-Leiste und Telefonanzeige auf der Startseite.
@@ -41,7 +41,7 @@ export function UpdateBar({ status, state }: { status: UpdateStatus | null; stat
   }, [counting, idle])
 
   useEffect(() => {
-    if (counting && left === 0) void window.jarvis.invoke('update:installNow')
+    if (counting && left === 0) void window.jarvis.invoke('update:installNow').catch(() => undefined)
   }, [counting, left])
 
   if (!status) return null
@@ -78,11 +78,11 @@ export function UpdateBar({ status, state }: { status: UpdateStatus | null; stat
               : `Version ${status.version} ist geladen — eingespielt wird, sobald James fertig ist.`}
         </span>
         <span className="update-actions">
-          <button className="home-btn-pop" onClick={() => void window.jarvis.invoke('update:installNow')}>
+          <button className="home-btn-pop" onClick={() => void window.jarvis.invoke('update:installNow').catch(() => undefined)}>
             Jetzt
           </button>
           {!status.postponed && (
-            <button className="update-later" onClick={() => void window.jarvis.invoke('update:postpone')}>
+            <button className="update-later" onClick={() => void window.jarvis.invoke('update:postpone').catch(() => undefined)}>
               Später
             </button>
           )}
@@ -91,49 +91,4 @@ export function UpdateBar({ status, state }: { status: UpdateStatus | null; stat
     )
   }
   return null
-}
-
-/**
- * Linphone auf einen Blick: angemeldet, und ob gerade telefoniert wird.
- *
- * Ein Telefonat läuft im Hauptprozess, die Kugel merkt davon nichts — ohne
- * diese Anzeige sah es am Rechner so aus, als täte James gar nichts.
- */
-export function useSipStatus(): SipStatus | null {
-  const [status, setStatus] = useState<SipStatus | null>(null)
-  useEffect(() => {
-    let disposed = false
-    const load = (): void => {
-      void window.jarvis
-        .invoke('sip:status')
-        .then((s) => !disposed && setStatus(s))
-        .catch(() => undefined)
-    }
-    load()
-    const timer = window.setInterval(load, 3000)
-    return () => {
-      disposed = true
-      window.clearInterval(timer)
-    }
-  }, [])
-  return status
-}
-
-export function SipChip({ status }: { status: SipStatus | null }): JSX.Element | null {
-  if (!status?.enabled) return null
-  if (status.inCall) {
-    return (
-      <span className="home-chip home-chip-live" title="James telefoniert gerade über Linphone">
-        Telefonat läuft
-      </span>
-    )
-  }
-  return (
-    <span
-      className={`home-chip${status.registered ? '' : ' home-chip-off'}`}
-      title={status.lastCall ? `${status.detail} Letzter Anruf: ${status.lastCall}` : status.detail}
-    >
-      {status.registered ? 'Linphone' : 'Linphone getrennt'}
-    </span>
-  )
 }

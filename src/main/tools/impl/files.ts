@@ -314,16 +314,21 @@ const writeTextFile = defineTool({
     const target = join(dir, extension ? clean : `${clean}.txt`)
     const how = mode ?? 'neu'
 
-    if (how === 'neu' && existsSync(target)) {
-      throw new Error(
-        `${basename(target)} gibt es schon. Frag den Nutzer, ob überschrieben oder angehängt werden soll.`
-      )
-    }
-
     if (how === 'anhängen') {
       await appendFile(target, `\n${content}`, 'utf-8')
     } else {
-      await writeFile(target, content, 'utf-8')
+      try {
+        // Exclusive creation protects existing files even if another request
+        // creates the same name while this call is waiting for filesystem I/O.
+        await writeFile(target, content, { encoding: 'utf-8', flag: how === 'neu' ? 'wx' : 'w' })
+      } catch (error) {
+        if (how === 'neu' && (error as NodeJS.ErrnoException).code === 'EEXIST') {
+          throw new Error(
+            `${basename(target)} gibt es schon. Frag den Nutzer, ob überschrieben oder angehängt werden soll.`
+          )
+        }
+        throw error
+      }
     }
 
     return {

@@ -1,0 +1,300 @@
+/* Settings-only navigation and feedback, kept separate from the main window. */
+.settings-shell {
+  --deep-950: #17201f;
+  --deep-900: #1d2925;
+  --deep-800: #30443b;
+  --deep-600: #526e60;
+  --panel: var(--deep-950);
+  --panel-alt: var(--deep-900);
+  --line-soft: var(--deep-900);
+  color-scheme: dark;
+  min-height: 0;
+  background: var(--bg);
+}
+
+.settings-shell,
+.settings-shell * {
+  scrollbar-color: #4b6557 transparent;
+}
+
+.settings-shell ::-webkit-scrollbar-thumb {
+  background: #4b6557;
+  background-clip: content-box;
+}
+
+.settings-shell ::-webkit-scrollbar-thumb:hover {
+  background: #6c8a78;
+  background-clip: content-box;
+}
+
+.settings-shell button:hover:not(:disabled) {
+  background: var(--deep-800);
+  border-color: var(--deep-600);
+  color: var(--text);
+}
+
+.settings-shell button.primary:hover:not(:disabled) {
+  background: #c7e5d4;
+  border-color: #c7e5d4;
+  color: #17261f;
+}
+
+.settings-shell .nav-item[aria-current='true'] {
+  background: #b8dac71a;
+  color: #d4eadc;
+  font-weight: 600;
+  box-shadow: inset 2px 0 #b8dac7;
+}
+
+.settings-shell .nav-item[aria-current='false'] {
+  background: transparent;
+  font-weight: 400;
+  box-shadow: none;
+}
+
+.settings-shell .nav-item:hover:not(:disabled) {
+  background: #b8dac710;
+  color: var(--text);
+}
+
+.settings-shell .settings-nav-note {
+  margin-bottom: 24px;
+}
+
+.settings-search {
+  margin-bottom: 24px;
+}
+
+.settings-search > label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0 2px 9px;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.settings-search kbd {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 4px;
+  font: inherit;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.settings-search-field {
+  position: relative;
+}
+
+.settings-shell .settings-search input {
+  width: 100%;
+  min-width: 0;
+  padding: 10px 34px 10px 12px;
+  border: 1px solid #354045;
+  appearance: none;
+  font: inherit;
+  font-size: 12px;
+  outline: none;
+}
+
+.settings-shell .settings-search input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px #b8dac718;
+}
+
+.settings-search input::-webkit-search-cancel-button {
+  display: none;
+}
+
+.settings-search input::placeholder {
+  color: var(--muted);
+  opacity: .75;
+}
+
+.settings-shell .settings-search-clear {
+  position: absolute;
+  top: 6px;
+  right: 5px;
+  width: 30px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 21px;
+  line-height: 1;
+}
+
+.settings-shell .settings-search-clear:hover {
+  background: #ffffff0b;
+  color: var(--text);
+}
+
+.settings-search-count,
+.settings-search-empty {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 10px 10px 14px;
+  line-height: 1.65;
+}
+
+.settings-search-results .nav-item small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 3px;
+  font-weight: 400;
+}
+
+.settings-shell .nav-group {
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  margin-bottom: 10px;
+}
+
+.settings-main {
+  min-height: 0;
+  scroll-padding-top: 24px;
+  outline: none;
+}
+
+.settings-page-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 30px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.settings-page-meta i {
+  margin: 0 8px;
+  color: #63716b;
+  font-style: normal;
+}
+
+.settings-save-state {
+  text-align: right;
+  color: #9bbba8;
+}
+
+.settings-shell .settings-save-state.is-error,
+.settings-shell .hint.err {
+  color: #efbfa9;
+}
+
+.settings-shell .hint.ok {
+  color: #b8dac7;
+}
+
+.settings-save-error {
+  color: #f3c7b3;
+  background: #3a2824;
+  border: 1px solid #745146;
+  border-radius: 12px;
+  padding: 14px 18px;
+  margin: 0 0 24px;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.settings-shell :is(button, summary, a):focus-visible,
+.settings-loading button:focus-visible {
+  outline: 2px solid #b8dac7;
+  outline-offset: 3px;
+}
+
+.settings-skip {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  z-index: 100;
+  transform: translateY(-200%);
+  border: 1px solid #b8dac7;
+  border-radius: 8px;
+  background: #1c2925;
+  padding: 10px 16px;
+  color: #f0f2ef;
+  font-size: 13px;
+  text-decoration: none;
+}
+
+.settings-skip:focus {
+  transform: none;
+}
+
+.settings-loading {
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 80px 36px;
+  color: #f0f2ef;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}
+
+.settings-loading h1 {
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -.6px;
+}
+
+.settings-loading p {
+  color: #a0aaa8;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+
+.settings-loading .primary {
+  margin-top: 14px;
+  background: #b8dac7;
+  border-color: #b8dac7;
+  color: #17261f;
+}
+
+@media (max-width: 720px) {
+  .settings-shell {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .settings-shell .settings-nav {
+    max-height: 260px;
+    padding: 18px;
+  }
+
+  .settings-shell .settings-nav h1 {
+    margin-left: 0;
+  }
+
+  .settings-shell .settings-nav-note {
+    margin: 0 0 16px;
+  }
+
+  .settings-search {
+    max-width: 360px;
+    margin-bottom: 12px;
+  }
+
+  .settings-search-results .nav-item {
+    display: block;
+    width: 100%;
+  }
+
+  .settings-shell .nav-group {
+    margin-left: 4px;
+  }
+
+  .settings-shell .settings-nav-more {
+    margin-top: 10px;
+    padding-top: 8px;
+  }
+
+  .settings-page-meta {
+    flex-wrap: wrap;
+    gap: 6px 16px;
+    margin-bottom: 24px;
+  }
+}

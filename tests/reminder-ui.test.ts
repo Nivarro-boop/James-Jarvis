@@ -14,7 +14,8 @@ it('verbindet automatische Erinnerungen mit Sprache und entfernt den Listener be
     './live/controller': 'export class JarvisController {async init(){} async dispose(){} async speakPrompt(text){spoken.push(text)}}',
     './live/companionBridge': 'export const startCompanionBridge=()=>({stop(){}})',
     './store/crystalStore': 'export const useCrystal={getState:()=>({setSettings(){}})}',
-    './styles.css': ''
+    './styles.css': '',
+    './home/home.css': ''
   }
   const bundle = await build({
     entryPoints: [resolve('src/renderer/crystal.tsx')], bundle: true, write: false,

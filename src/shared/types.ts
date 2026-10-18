@@ -555,7 +555,20 @@ export interface LocalInstallProgress {
  * ohne jede Beflissenheit. `sachlich` lässt das Trockene weg — für alle, die
  * eine Auskunft wollen und keinen Butler.
  */
-export type Persona = 'jarvis' | 'sachlich'
+export type Persona = 'jarvis' | 'sachlich' | 'herzlich'
+
+/**
+ * Feinregler über der Haltung.
+ *
+ * `humor` 0 heißt kein Witz, 3 heißt öfter ein trockener Halbsatz — nie statt
+ * der Antwort. `address` überstimmt die Anrede der Haltung; `auto` lässt sie,
+ * wie die Haltung sie vorsieht. `name` ist, wie er sich nennt.
+ */
+export interface Personality {
+  humor: number
+  address: 'auto' | 'du' | 'sie'
+  name: string
+}
 
 export interface Settings {
   language: 'de-DE' | 'en-US'
@@ -564,6 +577,7 @@ export interface Settings {
   liveModel: LiveModelId
   voice: VoiceName
   persona: Persona
+  personality: Personality
   /** Wer den Text vorliest — siehe `SpeechSettings`. */
   speech: SpeechSettings
   /** Gemini-Modell für alles außerhalb der Sprachschleife. */
@@ -1222,6 +1236,8 @@ export interface McpServerConfig {
    * `command` und `args` leer — gestartet wird dann nichts, nur verbunden.
    */
   url?: string
+  /** HTTP headers contain only ${SECRET_ENV} references, never credentials. */
+  headers?: Record<string, string>
 }
 
 export interface BackupInfo { file: string; createdAt: number; bytes: number; automatic: boolean }
@@ -1312,6 +1328,13 @@ export type SecretKey =
    * Kennung unterscheidet sie.
    */
   | 'alexaSkillId'
+  /**
+   * Privater iCal-Link eines Kalenders (Google, Outlook, iCloud).
+   *
+   * Wer ihn hat, kann den Kalender lesen. Deshalb verschlüsselt hier und
+   * nicht im Klartext in den Einstellungen.
+   */
+  | 'calendarIcsUrl'
 
 export interface SecretStatus {
   key: SecretKey

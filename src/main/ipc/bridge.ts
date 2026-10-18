@@ -8,7 +8,7 @@ import { skillProposals, decideSkill } from '../agent/skillProposals'
 import { realtimeAccess } from '../providers/realtimeAccess'
 import { diagnosticReport } from '@shared/diagnosticReport'
 import { sendDiagnosticReport } from '../providers/diagnosticSender'
-import { app, BrowserWindow, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import type { IpcInvokeMap } from '@shared/ipc'
 import { revealLog } from '../logging'
 import { resourceFile } from '../resources'
@@ -57,6 +57,7 @@ import {
   upsertSchedule
 } from '../db'
 import { runAutomaticRepair, selfHealDashboard } from '../selfheal/monitor'
+import { buildSupportReport, MAILTO_MAX, supportIssueUrl, supportMailto, type SupportDiagnostics } from '@shared/supportReport'
 import { addMemory, reviseMemory } from '../agent/memory'
 import { buildSystemPrompt } from '../agent/prompt'
 import { checkConnections } from '../agent/connections'
@@ -113,7 +114,11 @@ import {
 import { installLocalAsset, localAssets } from '../local/assets'
 import { createSettingsWindow } from '../windows/settings'
 import { getCrystalWindow, setAlwaysOnTop } from '../windows/crystal'
-import { broadcast, sendToCrystal } from './emit'
+import { broadcast, sendToCrystal, speak } from './emit'
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve as resolvePath, sep as pathSep } from 'node:path'
+import { brainDir, brainGraph, listWidgets, removeWidget } from '../brain/store'
+import { personaPreviewText } from '@shared/prompts/system.de'
 import { capabilityGaps } from '../agent/capabilityGaps'
 
 /** Laufende ChatGPT-Runden, damit Dazwischenreden sie abbrechen kann. */
@@ -696,6 +701,7 @@ export function registerIpcHandlers(version: string): void {
   // ── MCP ────────────────────────────────────────────────────
   handle('mcp:reload', async () => {
     await reloadMcpServers()
+    sendToCrystal('session:forceReconnect', undefined)
     return toolMetas()
   })
   // Nur Server, die in den Einstellungen stehen, und nur Namen, die dort als
@@ -738,6 +744,25 @@ export function registerIpcHandlers(version: string): void {
     if (!request || !answer) return
     appendTranscript('user', request)
     appendTranscript('assistant', answer)
+  })
+  handle('brain:graph', () => brainGraph())
+  handle('brain:note', ({ file }) => {
+    // Nur Markdown innerhalb des Gehirn-Ordners; `..` und absolute Pfade fallen durch.
+    const root = resolvePath(brainDir())
+    const path = resolvePath(root, String(file ?? ''))
+    if (!path.startsWith(root + pathSep) || !path.toLowerCase().endsWith('.md') || !existsSync(path)) return null
+    return readFileSync(path, 'utf8').slice(0, 200_000)
+  })
+  handle('brain:widgets', () => listWidgets())
+  handle('brain:removeWidget', ({ id }) => {
+    const widgets = removeWidget(String(id ?? ''))
+    broadcast('brain:widgets', widgets)
+    return widgets
+  })
+  handle('persona:preview', () => {
+    const text = personaPreviewText(getSettings())
+    speak(text, true)
+    return text
   })
   handle('accounts:list', () => websiteAccounts())
   ipcMain.handle('accounts:save', (event, input) => {
@@ -876,6 +901,29 @@ export function registerIpcHandlers(version: string): void {
   // Start die Einzelinstanz-Sperre hält.
   handle('app:quit', () => {
     app.quit()
+  })
+  handle('support:act', async ({ action, beschreibung, diagnose }) => {
+    let diag: SupportDiagnostics | null = null
+    if (diagnose) {
+      let health: ReturnType<typeof selfHealDashboard> | null = null
+      try { health = selfHealDashboard(24) } catch { health = null }
+      diag = {
+        version: app.getVersion(),
+        platform: `${process.platform} ${process.getSystemVersion?.() ?? ''}`.trim(),
+        arch: process.arch,
+        problems: (health?.report.problems ?? []).map((p) => ({ area: p.area, code: p.code, count: p.count })),
+        healed: health?.report.healed ?? 0
+      }
+    }
+    const report = buildSupportReport(String(beschreibung ?? ''), diag)
+    if (action === 'copy') clipboard.writeText(`${report.subject}\n\n${report.body}`)
+    if (action === 'issue') await shell.openExternal(supportIssueUrl(report))
+    if (action === 'mail') {
+      const url = supportMailto(report)
+      if (url.length > MAILTO_MAX) return { ...report, tooLong: true }
+      await shell.openExternal(url)
+    }
+    return report
   })
   handle('app:showLog', () => {
     revealLog()

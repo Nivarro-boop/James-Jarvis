@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import type { PriceOffer } from '@shared/types'
 import { defineTool, type ToolDefinition } from '../registry'
-import { amazonSignedIn, detectBlock, findOrOpen, withPage } from '../../automation/chromeCdp'
+import { amazonSignedIn, detectBlock, findOrOpen, withPage, setWindowVisible } from '../../automation/chromeCdp'
 import { extractPrice, parsePriceString } from '../../automation/priceParser'
 import { domainOf, extractSources, friendlyGeminiError, generateWithFallback } from '../../providers/gemini'
 import { getSettings } from '../../store/settings'
@@ -384,6 +384,7 @@ const openCheckout = defineTool({
     const page = await findOrOpen('amazon.de/gp/cart', `${AMAZON}/gp/cart/view.html`)
     await page.goto(`${AMAZON}/gp/cart/view.html`, { waitUntil: 'domcontentloaded' })
     await page.bringToFront()
+    await setWindowVisible(page, true)
 
     return {
       geöffnet: 'Warenkorb',

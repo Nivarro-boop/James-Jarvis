@@ -1,6 +1,6 @@
 import { app, shell } from 'electron'
 import { writeFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { randomUUID } from 'node:crypto'
 import { basename, join } from 'node:path'
 import { safeFileName } from './ooxml'
 
@@ -43,18 +43,23 @@ export interface SavedFile {
  * Antwort darf die erste nicht stillschweigend auffressen. Bei „Bericht.docx"
  * entsteht dann „Bericht (2).docx".
  */
-function freePath(dir: string, stem: string, extension: string): string {
-  const first = join(dir, `${stem}${extension}`)
-  if (!existsSync(first)) return first
-
-  for (let n = 2; n < 100; n++) {
-    const next = join(dir, `${stem} (${n})${extension}`)
-    if (!existsSync(next)) return next
+async function saveUnusedFile(dir: string, stem: string, extension: string, data: Buffer): Promise<string> {
+  for (let n = 1; n < 100; n++) {
+    const target = join(dir, `${stem}${n === 1 ? '' : ` (${n})`}${extension}`)
+    try {
+      // Checking for existence before writing races with parallel tool calls.
+      await writeFile(target, data, { flag: 'wx' })
+      return target
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
+    }
   }
 
   // Nach hundert gleichnamigen Dateien ist das kein Namenskonflikt mehr,
-  // sondern eine Schleife. Der Zeitstempel bricht sie auf.
-  return join(dir, `${stem} ${Date.now()}${extension}`)
+  // sondern eine Schleife. Ein eindeutiger Zusatz bricht sie auf.
+  const target = join(dir, `${stem} ${Date.now()}-${randomUUID()}${extension}`)
+  await writeFile(target, data, { flag: 'wx' })
+  return target
 }
 
 /**
@@ -74,9 +79,7 @@ export async function saveOfficeFile(
   const where = folder ?? 'dokumente'
   const dir = app.getPath(FOLDERS[where])
   const stem = safeFileName(title, 'Dokument')
-  const target = freePath(dir, stem, extension)
-
-  await writeFile(target, data)
+  const target = await saveUnusedFile(dir, stem, extension, data)
 
   if (open) {
     // Ein Fehlschlag hier ist kein Fehlschlag des Auftrags — die Datei liegt

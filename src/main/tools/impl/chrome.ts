@@ -3,7 +3,7 @@ import { performWebsiteLogin } from '../../automation/websiteLogin'
 import type { Page } from 'playwright-core'
 import { z } from 'zod'
 import { defineTool, type ToolDefinition, type ToolContext } from '../registry'
-import { detectBlock, getContext, openPage, activePage, selectActivePage, setWindowVisible } from '../../automation/chromeCdp'
+import { detectBlock, getContext, openPage, activePage, selectActivePage, setWindowVisible, declineCookies } from '../../automation/chromeCdp'
 
 /**
  * Browsersteuerung über den James-Chrome.
@@ -374,6 +374,7 @@ const navigate = defineTool({
     if (action === 'goto') {
       if (!url) throw new Error('Für goto fehlt die Adresse.')
       await page.goto(/^https?:\/\//i.test(url) ? url : `https://${url}`, opts)
+      await declineCookies(page)
     } else if (action === 'back') await page.goBack(opts)
     else if (action === 'forward') await page.goForward(opts)
     else if (action === 'reload') await page.reload(opts)
@@ -425,7 +426,41 @@ const closeTab = defineTool({
   }
 }) as ToolDefinition
 
+/**
+ * Ob James auf einer Website angemeldet ist — ohne etwas einzutragen.
+ *
+ * Erkennungszeichen: ein sichtbares Passwortfeld oder ein „Anmelden"-Link
+ * sprechen dagegen, ein „Abmelden"/„Mein Konto"-Element dafür. Bleibt beides
+ * aus, sagt das Werkzeug ehrlich „unklar".
+ */
+const loginStatus = defineTool({
+  name: 'chrome_login_status',
+  group: 'chrome',
+  description: 'Prüft, ob der James-Browser auf einer Website angemeldet ist (angemeldet, abgemeldet oder unklar), ohne etwas einzutragen. Meldet auch, ob ein Konto gespeichert ist, mit dem website_login anmelden kann.',
+  schema: z.object({ url: z.string().describe('Adresse der Website, z. B. https://www.amazon.de') }),
+  async execute({ url }) {
+    const target = /^https?:\/\//i.test(url) ? url : `https://${url}`
+    const page = await openPage(target)
+    try {
+      const signals = await page.evaluate(() => {
+        const visible = (el: Element): boolean => { const r = el.getBoundingClientRect(); return r.width > 1 && r.height > 1 && getComputedStyle(el).visibility !== 'hidden' }
+        const texts = Array.from(document.querySelectorAll('a, button, [role=button], [role=link]')).filter(visible).map(e => (e.getAttribute('aria-label') || (e as HTMLElement).innerText || '').trim().toLowerCase()).filter(t => t && t.length < 40)
+        return {
+          password: Array.from(document.querySelectorAll('input[type=password]')).some(visible),
+          signIn: texts.some(t => /^(anmelden|einloggen|log ?in|sign ?in|registrieren|konto erstellen|hallo, anmelden)$/.test(t)),
+          signOut: texts.some(t => /abmelden|ausloggen|log ?out|sign ?out|mein konto|my account|profil|your account|dein konto/.test(t))
+        }
+      })
+      const status = signals.password || (signals.signIn && !signals.signOut) ? 'abgemeldet' : signals.signOut ? 'angemeldet' : 'unklar'
+      return { website: new URL(page.url()).hostname, status, gespeichertesKonto: savedAccountFor(page) }
+    } finally {
+      await page.close().catch(() => undefined)
+    }
+  }
+}) as ToolDefinition
+
 export const chromeTools: ToolDefinition[] = [
+  loginStatus,
   waitFor,
   closeTab,
   listElements,

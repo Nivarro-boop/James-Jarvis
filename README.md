@@ -1,5 +1,14 @@
 # James-Jarvis
 
+Lokale Verbesserungen **16.10.2026**: aufgeräumte Startseite, mehrzeilige
+Texteingabe mit sicherem Entwurf, besserer Gesprächsverlauf und durchsuchbare
+Einstellungen. Abbruch und paralleles Dateispeichern sind zusätzlich abgesichert.
+Details und Prüfungen: [Verbesserungsbericht](docs/Verbesserungen-2026-10-16.md).
+
+Zusätzlich geprüft: schnellerer Skill-/Werkzeugindex, robuster Arbeitskontext,
+Konnektor-Bibliothek und ein eigener lokaler Notiz-Konnektor. Messwerte,
+Einrichtung und Grenzen stehen im [Innenleben- und Konnektorbericht](docs/Innenleben-und-Konnektoren-2026-10-16.md).
+
 Lokales Update **1.3.2 (09.10.2026)**: Antwort-Hänger bei Sprache und Text,
 Wiederverbindung, Abbruch und lokale Sprachausgabe gezielt abgesichert.
 Fehlgeschlagene Texteingaben bleiben als Entwurf erhalten. Prüfung und

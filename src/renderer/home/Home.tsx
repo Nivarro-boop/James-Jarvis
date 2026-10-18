@@ -2,7 +2,7 @@ import { SkillsPanel } from './SkillsPanel'
 import { ContextPanel } from './ContextPanel'
 import { SkillProposalPanel } from './SkillProposalPanel'
 import { Conversation } from './Conversation'
-import { useEffect, useState, type CSSProperties, type FormEvent, type JSX } from 'react'
+import { useEffect, useState, type CSSProperties, type JSX } from 'react'
 import { ORB_LOOKS, PixelOrb } from '../crystal/PixelOrb'
 import { useCrystal } from '../store/crystalStore'
 import { ActivityPanel, ActivityToggle, useActivityPanel } from './ActivityPanel'
@@ -12,17 +12,13 @@ import { LiveStage } from './LiveStage'
 import { WeatherCard } from './WeatherCard'
 import { HealthPanel } from './HealthPanel'
 import { UpdateBar, useUpdateStatus } from './UpdateBar'
+import { TextBar } from './TextBar'
+import { BrainMap, WidgetTiles } from './BrainMap'
 import type { ResearchRun, TimerEntry } from '@shared/types'
 
 /**
- * Die Startseite im Design „James GUI".
- *
- * VHS und Röhrenfernseher: tiefes Lila, Magenta, Cyan, Gelb; die Kugel aus
- * groben Pixeln, darunter der Zustand in Pixelschrift und in seiner Farbe.
- * Was gerade im Hintergrund läuft — Timer, Recherchen —, steht als Karte
- * unter der Kugel, statt nur auf Nachfrage gesagt zu werden.
- *
- * Getippt wird weiterhin unten in der Zeile. Die Antwort kommt gesprochen.
+ * The orb makes voice state visible; the compact workspace leaves room for
+ * conversations and results. The composer stays reachable at every window size.
  */
 
 function clockTime(ms: number): string {
@@ -64,14 +60,6 @@ function CloseIcon(): JSX.Element {
   )
 }
 
-function SendIcon(): JSX.Element {
-  return (
-    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" aria-hidden="true">
-      <path d="M4 12h14M12 6l6 6-6 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="square" />
-    </svg>
-  )
-}
-
 function openSettings(section?: string): void {
   void window.jarvis.invoke('app:openSettings', section ? { section } : undefined)
 }
@@ -81,50 +69,9 @@ function sendText(text: string, onResult?: (sent: boolean) => void): void {
   window.dispatchEvent(new CustomEvent('jarvis:text', { detail: onResult ? { text, onResult } : text }))
 }
 
-function TextBar({ disabled }: { disabled: boolean }): JSX.Element {
-  const [text, setText] = useState('')
-  const [sending, setSending] = useState(false)
-
-  const submit = (event: FormEvent): void => {
-    event.preventDefault()
-    const message = text.trim()
-    if (!message || disabled || sending) return
-    if (message.toLowerCase() === '/skills') { window.dispatchEvent(new Event('jarvis:skills')); setText(''); return }
-    setSending(true)
-    // Sofort leeren: Der Aufbau der Sitzung dauert, und ein stehen
-    // gebliebener Satz sieht aus, als wäre nichts passiert.
-    setText('')
-    sendText(message, (sent) => {
-      setSending(false)
-      if (!sent) setText(draft => draft || message)
-    })
-  }
-
-  return (
-    <form className="home-ask" onSubmit={submit} aria-busy={sending}>
-      <input
-        type="text"
-        className="home-ask-field"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder={disabled ? 'Erst einrichten — oben rechts' : 'Frag James oder beschreibe eine Aufgabe…'}
-        aria-label="Nachricht an James"
-        disabled={disabled}
-        autoComplete="off"
-        spellCheck={false}
-        maxLength={2000}
-      />
-      <button type="submit" className="home-ask-send" aria-label="Abschicken" title={sending ? 'Nachricht wird gesendet…' : 'Abschicken'} disabled={disabled || sending || !text.trim()}>
-        <SendIcon />
-      </button>
-    </form>
-  )
-}
-
 /** Laufende Timer. Neu geladen alle fünf Sekunden und wenn einer abläuft. */
 function useTimers(): TimerEntry[] {
   const [timers, setTimers] = useState<TimerEntry[]>([])
-  const [, tick] = useState(0)
 
   useEffect(() => {
     let disposed = false
@@ -136,12 +83,10 @@ function useTimers(): TimerEntry[] {
     }
     load()
     const poll = window.setInterval(load, 5000)
-    const clock = window.setInterval(() => tick((n) => n + 1), 1000)
     const off = window.jarvis.on('timer:due', load)
     return () => {
       disposed = true
       window.clearInterval(poll)
-      window.clearInterval(clock)
       off()
     }
   }, [])
@@ -231,18 +176,37 @@ function ResearchCard({ run, thought, onDismiss }: { run: ResearchRun; thought?:
 }
 
 function TimerCard({ timer }: { timer: TimerEntry }): JSX.Element {
+  const [, tick] = useState(0)
+  const [cancelled, setCancelled] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
+  const [error, setError] = useState(false)
+  useEffect(() => {
+    if (cancelled) return
+    const clock = window.setInterval(() => tick(n => n + 1), 1000)
+    return () => window.clearInterval(clock)
+  }, [cancelled])
+  if (cancelled || timer.dueAt <= Date.now()) return <></>
   return (
     <section className="home-card home-card-timer">
       <div className="home-card-body">
         <span className="home-card-tag">Timer</span>
         <div className="home-card-title">{timer.label}</div>
+        {error && <small role="alert">Stoppen fehlgeschlagen. Bitte erneut versuchen.</small>}
       </div>
       <span className="home-timer-time">{mmss(timer.dueAt - Date.now())}</span>
       <button
         className="home-card-x"
         title="Stoppen"
         aria-label={`Timer ${timer.label} stoppen`}
-        onClick={() => void window.jarvis.invoke('timers:cancel', { id: timer.id })}
+        disabled={cancelling}
+        onClick={() => {
+          setCancelling(true)
+          setError(false)
+          void window.jarvis.invoke('timers:cancel', { id: timer.id })
+            .then(() => setCancelled(true))
+            .catch(() => setError(true))
+            .finally(() => setCancelling(false))
+        }}
       >
         <CloseIcon />
       </button>
@@ -288,12 +252,14 @@ export function Home(): JSX.Element {
   const confirmation = useCrystal((s) => s.confirmation)
   const settings = useCrystal((s) => s.settings)
   const wakeAvailable = useCrystal((s) => s.wakeAvailable)
+  const hasConversation = useCrystal((s) => s.captions.length > 0)
   const [hasVoiceAccess, setHasVoiceAccess] = useState(true)
   const [wakePhrase, setWakePhrase] = useState('Hey James')
   const activity = useActivityPanel()
   const timers = useTimers()
   const research = useResearch()
   const display = useDisplayCards()
+  const [brainOpen, setBrainOpen] = useState(false)
   const update = useUpdateStatus()
 
   // Der Schlüssel wird im Einstellungsfenster gesetzt — beim Zurückkommen
@@ -353,22 +319,31 @@ export function Home(): JSX.Element {
 
   const look = ORB_LOOKS[state] ?? ORB_LOOKS.idle
   const tone = { '--state': look.c } as CSSProperties
-  const activeResearch = research.runs.filter(run => run.status === 'in_progress')
-  const hasCards = timers.length > 0 || activeResearch.length > 0 || display.cards.length > 0
+  const hasCards = timers.length > 0 || research.runs.length > 0 || display.cards.length > 0
+  const statusLabel = paused ? 'Pausiert' : !hasVoiceAccess && state === 'idle' ? 'Sprachzugang fehlt' : ({ idle: 'Bereit für dich', connecting: 'Verbindet sich', listening: 'Hört zu', thinking: 'Denkt nach', tool: 'Arbeitet für dich', speaking: 'Spricht', research: 'Recherchiert', confirm: 'Braucht deine Freigabe', error: 'Prüfung erforderlich', offline: 'Offline', paused: 'Pausiert' })[state]
+  const heading = paused ? 'Ich bin gleich wieder da.'
+    : state === 'listening' ? 'Ich höre dir zu.'
+    : state === 'connecting' ? 'Einen Moment, ich verbinde mich.'
+    : ['thinking', 'tool', 'research'].includes(state) ? 'Ich kümmere mich darum.'
+    : state === 'speaking' ? 'Hier ist meine Antwort.'
+    : state === 'confirm' ? 'Wie möchtest du fortfahren?'
+    : state === 'error' ? 'Etwas ist schiefgelaufen.'
+    : 'Was machen wir heute?'
 
   return (
-    <div className="home" data-state={state} style={tone}>
+    <div className="home" data-state={state} data-compact={hasConversation || hasCards} style={tone}>
       <header className="home-bar">
         <div className="home-top-left">
           <ActivityToggle open={activity.open} busy={activity.busy} onToggle={activity.toggle} />
-          <span className="home-brand"><span className="home-mark">James<span className="brand-dot">.</span></span></span>
+          <span className="home-brand"><span className="home-mark">James<span className="brand-dot">.</span></span><small>DEIN ASSISTENT</small></span>
           {(() => {
             // Statt live zuzusehen: nur der aktuelle Schritt als eine Zeile oben.
-            const now = [...activity.snapshot.items].reverse().find((i) => i.status === 'running' || i.status === 'waiting')
+            const now = activity.snapshot.items.find((i) => i.status === 'running' || i.status === 'waiting')
             return now && <span className="home-status" role="status" title={now.label}>{now.status === 'waiting' ? 'Wartet auf dich · ' : ''}{now.label}</span>
           })()}
         </div>
         <div className="home-actions">
+          <button className="home-gear" onClick={() => setBrainOpen(true)}>Gehirn</button>
           <button className="home-gear" onClick={() => window.dispatchEvent(new Event('jarvis:skills'))}>Fertigkeiten</button>
           <HealthPanel />
           <button className="home-gear" title="Einstellungen" aria-label="Einstellungen" onClick={() => openSettings()}>
@@ -382,22 +357,25 @@ export function Home(): JSX.Element {
       <div className="home-main">
         <div className="home-center">
           <main className="home-stage">
-            <PixelOrb />
-            <h1>{paused ? 'Ich bin gleich wieder da.' : ['thinking', 'tool', 'research'].includes(state) ? 'Ich kümmere mich darum.' : state === 'speaking' ? 'Hier ist meine Antwort.' : 'Wie kann ich dir helfen?'}</h1>
-            <p className="home-hint" role={state === 'error' ? 'alert' : undefined}>{hint}</p>
+            <div className="home-orb-wrap"><PixelOrb /></div>
+            <div className="home-stage-copy">
+              <span className="home-presence"><i aria-hidden="true" />{statusLabel}</span>
+              <h1>{heading}</h1>
+              <p className="home-hint" role={state === 'error' ? 'alert' : undefined}>{hint}</p>
+            </div>
           </main>
           <SkillsPanel />
-          <ContextPanel />
           <SkillProposalPanel />
           <Conversation snapshot={activity.snapshot} />
           <WeatherCard />
+          <WidgetTiles />
           <div className="home-context">
             {hasCards && (
               <div className="home-cards">
                 {display.cards.map((card) => (
                   <AnswerCard key={card.id} card={card} onDismiss={() => display.dismiss(card.id)} />
                 ))}
-                {activeResearch.map((run) => (
+                {research.runs.map((run) => (
                   <ResearchCard key={run.id} run={run} thought={research.thoughts[run.id]} onDismiss={() => research.dismiss(run.id)} />
                 ))}
                 {timers.map((timer) => (
@@ -407,6 +385,7 @@ export function Home(): JSX.Element {
             )}
 
           </div>
+          <ContextPanel />
         </div>
 
         {activity.open && <ActivityPanel snapshot={activity.snapshot} />}
@@ -416,6 +395,8 @@ export function Home(): JSX.Element {
         <LiveStage snapshot={activity.snapshot} />
         <TextBar disabled={!settings} />
       </footer>
+
+      {brainOpen && <BrainMap onClose={() => setBrainOpen(false)} />}
 
       {state === 'confirm' && confirmation && (
         <ConfirmDialog toolName={confirmation.toolName} question={confirmation.spokenQuestion} />

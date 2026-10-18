@@ -1,0 +1,14 @@
+.connector-summary { display: flex; flex-wrap: wrap; gap: 10px 22px; padding: 16px; margin: 0 0 22px; border: 1px solid #3a5145; border-radius: 12px; background: #1a2821; font-size: 12px; color: #b8cfc1; }
+.connector-summary strong { color: #e3eee7; }
+.connector-search { display: grid; gap: 9px; margin: 0 0 26px; font-size: 12px; color: #b5c9bd; }
+.settings-shell .connector-search input { width: 100%; padding: 12px; font: inherit; border: 1px solid #4a6053; border-radius: 11px; background: #151e1a; color: #e3eee7; appearance: none; outline: none; }
+.settings-shell .connector-search input:focus { border-color: #b8dac7; box-shadow: 0 0 0 3px #b8dac718; }
+.connector-builtins { margin-bottom: 30px; }
+.connector-builtins h3, .settings-main h3 { font-weight: 550; font-size: 15px; }
+.connector-preview { padding: 16px; margin: 14px 0; border: 1px solid #637e6e; border-radius: 12px; background: #1b2c23; font-size: 12px; line-height: 1.7; }
+.connector-preview p { color: #b4c6bb; }
+.connector-export { display: grid; gap: 10px; margin: 16px 0; font-size: 12px; }
+.connector-export textarea { width: 100%; padding: 12px; font-family: Consolas, monospace; font-size: 11px; }
+.settings-shell .mcp-preset { min-width: 0; }
+.settings-shell .mcp-card-head { flex-wrap: wrap; }
+.settings-shell .mcp-card-head code { overflow-wrap: anywhere; }

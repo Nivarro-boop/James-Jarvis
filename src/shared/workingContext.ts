@@ -21,7 +21,8 @@ export function normalizeWorkingContext(raw: unknown): WorkingContext {
   const r = raw as Record<string, unknown>
   const text = (v: unknown, n = 600): string => typeof v === 'string' ? v.trim().slice(0, n) : ''
   const list = (v: unknown): string[] => Array.isArray(v) ? [...new Set(v.map(x => text(x)).filter(Boolean))].slice(0, 12) : []
-  const p = r.plan as Record<string, unknown> | null
+  const p = r.plan && typeof r.plan === 'object' ? r.plan as Record<string, unknown> : null
+  const timestamp = (v: unknown): number => typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0
   const statuses = ['offen', 'läuft', 'erledigt', 'fehlgeschlagen']
   const steps = p && Array.isArray(p.steps) ? p.steps.slice(0, 20).flatMap(s => {
     if (!s || typeof s !== 'object' || !text(s.text) || !statuses.includes(s.status)) return []
@@ -30,15 +31,15 @@ export function normalizeWorkingContext(raw: unknown): WorkingContext {
   return {
     goal: text(r.goal), decisions: list(r.decisions), completed: list(r.completed), next: list(r.next), blockers: list(r.blockers),
     status: r.status === 'active' || r.status === 'done' ? r.status : 'paused',
-    updatedAt: typeof r.updatedAt === 'number' && Number.isFinite(r.updatedAt) ? r.updatedAt : 0,
-    plan: p && text(p.title) && steps.length ? { title: text(p.title), steps, updatedAt: typeof p.updatedAt === 'number' ? p.updatedAt : 0 } : null
+    updatedAt: timestamp(r.updatedAt),
+    plan: p && text(p.title) === text(r.goal) && text(p.title) && steps.length ? { title: text(p.title), steps, updatedAt: timestamp(p.updatedAt) } : null
   }
 }
 
 /** Restoring a task never restarts tools or grants permission. */
 export function restoreWorkingContext(raw: unknown): WorkingContext {
   const c = normalizeWorkingContext(raw)
-  if (c.goal && c.status !== 'done') c.status = 'paused'
+  if (c.goal && (c.status !== 'done' || c.plan?.steps.some(s => s.status !== 'erledigt'))) c.status = 'paused'
   if (c.plan) c.plan.steps = c.plan.steps.map(s => ({ ...s, status: s.status === 'läuft' ? 'offen' : s.status }))
   return c
 }

@@ -1,6 +1,7 @@
 import type { WebsiteAccountInfo, WebsiteAccountInput } from './websiteAccounts'
 import type { WorkingContext } from './workingContext'
 import type { SkillProposal } from './skillProposal'
+import type { BrainGraph, Widget } from './brain'
 /**
  * Typisierter IPC-Vertrag.
  *
@@ -68,6 +69,11 @@ import type {
 /** Renderer → Main, mit Antwort. */
 export interface IpcInvokeMap {
   'settings:get': { req: void; res: Settings }
+  'brain:graph': { req: void; res: BrainGraph }
+  'brain:note': { req: { file: string }; res: string | null }
+  'brain:widgets': { req: void; res: Widget[] }
+  'brain:removeWidget': { req: { id: string }; res: Widget[] }
+  'persona:preview': { req: void; res: string }
   'wake:status': { req: void; res: { installed: boolean; missing: string[]; model: string } }
   /**
    * Die Bytes einer Weckwort-Datei: ein `.onnx`-Modell oder `runtime` für die
@@ -262,6 +268,14 @@ export interface IpcInvokeMap {
    * einen Fehlerbericht zu liefern, der mehr enthält als "geht nicht".
    */
   'app:showLog': { req: void; res: void }
+  /**
+   * Support-Meldung bauen und auf Wunsch öffnen oder kopieren. Geschickt wird
+   * nie von hier — der Nutzer sendet im eigenen Mailprogramm oder auf GitHub.
+   */
+  'support:act': {
+    req: { action: 'preview' | 'mail' | 'issue' | 'copy'; beschreibung: string; diagnose: boolean }
+    res: { subject: string; body: string; tooLong?: boolean }
+  }
   /** Öffnet die druckbare Kurzanleitung im Standardbrowser. */
   'app:openGuide': { req: void; res: void }
   /**
@@ -480,6 +494,8 @@ export interface IpcInvokeMap {
 /** Main → Renderer, ohne Antwort. */
 export interface IpcEventMap {
   'state:set': { state: CrystalState; reason?: string }
+  /** Die Kacheln auf der Startseite haben sich geändert. */
+  'brain:widgets': Widget[]
   'confirm:request': ConfirmationRequest
   'confirm:resolved': { id: string; approved: boolean }
   /** James soll etwas von sich aus sagen (Zeitplan, Preisalarm, Research fertig). */
@@ -548,6 +564,11 @@ export type IpcEventChannel = keyof IpcEventMap
 
 export const IPC_INVOKE_CHANNELS = [
   'settings:get',
+  'brain:graph',
+  'brain:note',
+  'brain:widgets',
+  'brain:removeWidget',
+  'persona:preview',
   'wake:status',
   'wake:asset',
   'maps:tile',
@@ -628,6 +649,7 @@ export const IPC_INVOKE_CHANNELS = [
   'app:openSettings',
   'app:quit',
   'app:showLog',
+  'support:act',
   'app:openGuide',
   'app:pauseState',
   'app:pauseGet',
@@ -691,6 +713,7 @@ export const IPC_INVOKE_CHANNELS = [
 
 export const IPC_EVENT_CHANNELS = [
   'state:set',
+  'brain:widgets',
   'confirm:request',
   'confirm:resolved',
   'speak:request',

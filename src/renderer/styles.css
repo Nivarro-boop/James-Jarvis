@@ -1773,95 +1773,9 @@ code {
   border-top: 1px solid color-mix(in srgb, var(--line) 45%, transparent);
 }
 
-/* ── Denkblase an der Kugel ─────────────────────────────────── */
+/* ── Kurskarte ──────────────────────────────────────────────── */
 
-.thought {
-  position: absolute;
-  top: 4%;
-  right: -6%;
-  max-width: min(320px, 60vw);
-  pointer-events: none;
-  animation: thought-in var(--dur-slow) var(--ease-pop) both;
-  z-index: 2;
-}
-
-.thought-cloud {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  background: var(--bone-50);
-  color: var(--deep-1000);
-  border-radius: 22px;
-  box-shadow: var(--shadow-pop-cyan);
-  font-size: 14px;
-  font-weight: 700;
-  line-height: 1.3;
-}
-
-.thought[data-status='error'] .thought-cloud {
-  box-shadow: var(--shadow-pop);
-}
-
-.thought[data-status='ok'] .thought-cloud {
-  opacity: 0.85;
-}
-
-.thought-icon {
-  width: 32px;
-  height: 32px;
-  flex: none;
-  image-rendering: auto;
-  border-radius: 6px;
-}
-
-.thought-text {
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-
-.thought-dots {
-  display: inline-flex;
-  gap: 4px;
-  flex: none;
-}
-
-.thought-dots i {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--magenta-500);
-  animation: thought-dot 1.1s var(--ease-in-out) infinite;
-}
-
-.thought-dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.thought-dots i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-.thought-tail {
-  position: absolute;
-  border-radius: 50%;
-  background: var(--bone-50);
-}
-
-.thought-tail-1 {
-  width: 14px;
-  height: 14px;
-  left: 18px;
-  bottom: -16px;
-}
-
-.thought-tail-2 {
-  width: 8px;
-  height: 8px;
-  left: 6px;
-  bottom: -28px;
-}
-
+/* Die Einblendung der Karten; der Name ist vom Fenster geblieben. */
 @keyframes thought-in {
   from {
     opacity: 0;
@@ -1872,27 +1786,6 @@ code {
     transform: none;
   }
 }
-
-@keyframes thought-dot {
-  0%,
-  100% {
-    transform: translateY(0);
-    opacity: 0.4;
-  }
-  50% {
-    transform: translateY(-4px);
-    opacity: 1;
-  }
-}
-
-@media (max-width: 700px) {
-  .thought {
-    right: 0;
-    top: 0;
-  }
-}
-
-/* ── Kurskarte ──────────────────────────────────────────────── */
 
 .stock-card {
   --stock-up: #81c995;
@@ -2188,6 +2081,10 @@ code {
 .health-popover p { overflow-wrap: anywhere; margin: 10px 0; }
 .health-problems article { padding: 12px; margin: 10px 0; background: #ffffff08; border-radius: 10px; border-left: 3px solid #ff8566; }
 .health-buttons { display: flex; gap: 12px; align-items: center; margin: 16px 0; }
+.health-buttons { flex-wrap: wrap; }
+.support-report { display: grid; gap: 8px; margin-top: 12px; }
+.support-report textarea { width: 100%; box-sizing: border-box; font: inherit; resize: vertical; }
+.support-report pre { white-space: pre-wrap; max-height: 180px; overflow: auto; font-size: 12px; }
 .health-popover small { color: #baaccd; }
 .home-telemetry { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin: 8px 0 18px; }
 .home-telemetry > div { min-width: 135px; padding: 10px 16px; background: #ffffff05; border: 1px solid #b89cff22; border-radius: 12px; }

@@ -571,6 +571,30 @@ const cancel = defineTool({
   }
 }) as ToolDefinition
 
+/**
+ * Termine aller sichtbaren Kalender in einem Fenster, als Zahlen statt als
+ * Vorlesesatz. Für Briefing und Tagesplaner, die damit rechnen müssen.
+ */
+export async function eventsBetween(from: Date, to: Date): Promise<{ title: string; start: number; end: number; allDay: boolean; calendar: string }[]> {
+  return withCalendar(async (calendar) => {
+    const out: { title: string; start: number; end: number; allDay: boolean; calendar: string }[] = []
+    await Promise.all((await listCalendarIds(calendar)).map(async ({ id, name }) => {
+      try {
+        const res = await calendar.events.list({ calendarId: id, timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: true, orderBy: 'startTime', maxResults: 50 })
+        for (const e of res.data.items ?? []) {
+          if (e.status === 'cancelled') continue
+          const start = startMillis(e)
+          const endRaw = e.end?.dateTime ?? (e.end?.date ? `${e.end.date}T00:00:00` : undefined)
+          out.push({ title: e.summary || 'Termin', start, end: endRaw ? new Date(endRaw).getTime() : start, allDay: Boolean(e.start?.date && !e.start?.dateTime), calendar: name })
+        }
+      } catch {
+        // Einzelne Kalender ohne Leserecht überspringen, wie in calendar_agenda.
+      }
+    }))
+    return out.filter((e) => Number.isFinite(e.start) && e.start !== Number.MAX_SAFE_INTEGER).sort((a, b) => a.start - b.start)
+  })
+}
+
 export const calendarTools: ToolDefinition[] = [listCalendars, agenda, search, create, reschedule, cancel]
 
 export const __internals = { resolveRange, parseWhen, speakable }

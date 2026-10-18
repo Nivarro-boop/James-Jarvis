@@ -1,3 +1,23 @@
+# Update 1.3.9 – Kalender-Link, Rechner-Check, Support-Meldung – 18.10.2026
+
+Ideen aus Packstart (Emin Simsek) selbst nachgebaut; kein fremder Code und
+keine fremden Dateien übernommen.
+
+- Kalender per iCal-Link: neuer Zugang „Kalender-Link (iCal)“ (verschlüsselt).
+  Werkzeug calendar_link_agenda liest Google-, Outlook- und iCloud-Kalender
+  ohne OAuth, nur lesen. Eigener ICS-Leser (TZID, Windows-Zonen, ganztägig,
+  RRULE mit INTERVAL/COUNT/UNTIL/BYDAY, EXDATE, RECURRENCE-ID).
+- Termin zum Selbst-Speichern: calendar_save_draft baut Google-Link,
+  Outlook-Link (privat und Arbeit) und .ics-Datei; James trägt nichts ein.
+- Rechner-Check: Werkzeug system_check prüft RAM, Prozessor, freien
+  Speicher, Internet, Mikrofon und Lautsprecher, mit Sätzen zum Vorlesen.
+- Hilfe und Support im Diagnose-Fenster: Beschreibung, optionale technische
+  Angaben (Version, System, Störungskennungen; keine Logs, keine Schlüssel),
+  Vorschau, öffnen im Mailprogramm, als GitHub-Issue oder kopieren.
+- Prüfung: Typecheck, 2.089 Tests bestanden.
+- Nicht geprüft: echter Kalender-Link, echte Audiogeräte in der installierten
+  App, Support-Fenster in der laufenden App.
+
 # Update 1.3.7 – Unsichtbarer Browser, Bedienung, LM Studio – 13.10.2026
 
 - Der James-Chrome läuft außerhalb des sichtbaren Bildschirms (Drosselung
@@ -23,6 +43,9 @@
 - Nachtrag: website_login meldet „rejected“, wenn die Website die Daten ablehnt;
   neue Werkzeuge chrome_wait_for und chrome_close_tab; höchstens zehn Tabs im
   unsichtbaren Browser. Alle drei Browser-Prüfskripte bestanden, 2.016 Tests.
+- Nachtrag 2: Cookie-Banner werden im unsichtbaren Browser automatisch
+  abgelehnt (nur „ablehnen"/„nur notwendige", nie zustimmen). Neues Werkzeug
+  chrome_login_status prüft angemeldet/abgemeldet/unklar ohne Eingabe.
 - Nicht geprüft: echter LM-Studio-Server, echte Anmeldung, unsichtbares Fenster
   in der installierten App.
 

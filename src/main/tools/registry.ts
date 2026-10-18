@@ -79,6 +79,11 @@ export function unregisterGroup(group: ToolGroup): void {
   }
 }
 
+/** Remove only the definition owned by a connector, even if its old session closes late. */
+export function unregisterTool(name: string, expected: ToolDefinition): void {
+  if (registry.get(name) === expected) registry.delete(name)
+}
+
 /**
  * Alles außer den MCP-Werkzeugen entfernen.
  *
@@ -296,6 +301,8 @@ export const CORE_TOOLS: ReadonlySet<string> = new Set([
   'music_play',
   'music_control',
   'plan_update',
+  'skill_save',
+  'skill_view',
   'self_repair',
   'call_me',
   // Muss ohne Suchrunde erreichbar sein: Gebraucht wird es genau dann, wenn

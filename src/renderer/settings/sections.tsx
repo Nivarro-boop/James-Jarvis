@@ -1,5 +1,5 @@
 import { WebsiteAccounts } from './WebsiteAccounts'
-import { useEffect, useMemo, useState, type JSX } from 'react'
+import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type {
   SipStatus,
   AlexaStatus,
@@ -95,6 +95,11 @@ const SECRET_FIELDS: { key: SecretKey; label: string; hint: string; required?: b
     hint: 'Für Gmail. Aus der Google Cloud Console, Anwendungstyp Desktop.'
   },
   { key: 'googleOAuthClientSecret', label: 'Google OAuth Geheimnis', hint: '' },
+  {
+    key: 'calendarIcsUrl',
+    label: 'Kalender-Link (iCal)',
+    hint: 'Optional, nur lesen. Google: Kalender-Einstellungen, Privatadresse im iCal-Format. Outlook: Einstellungen, Kalender freigeben, ICS-Link. iCloud: Kalender teilen, öffentlicher Kalender. Beginnt mit https:// oder webcal://.'
+  },
 ]
 
 export function KeysSection({ settings, patch }: Props): JSX.Element {
@@ -105,9 +110,11 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
   const [saving, setSaving] = useState<SecretKey | null>(null)
   /** Ergebnis der Gemini-Prüfung, bis der nächste Tastendruck es verwirft. */
   const [keyNote, setKeyNote] = useState<{ key: SecretKey; ok: boolean; text: string } | null>(null)
+  /** Der Empfänger, wie er beim Betreten des Feldes galt — er entscheidet, ob die Zusage noch gilt. */
+  const reportUrlAtFocus = useRef(settings.diagnosticReporting.url)
 
   useEffect(() => {
-    void window.jarvis.invoke('secrets:status').then(setStatus)
+    void window.jarvis.invoke('secrets:status').then(setStatus).catch(() => undefined)
   }, [])
 
   const present = (key: SecretKey): boolean => status.find((s) => s.key === key)?.present ?? false
@@ -183,7 +190,7 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
               <ChatGptLogin model={settings.chatGptModel} onModelChange={(id) => patch({ chatGptModel: id })} />
             </>
           )}
-          <label>
+          <label id={`secret-label-${field.key}`}>
             {field.label}{' '}
             {present(field.key) ? (
               <span className="badge ok">hinterlegt</span>
@@ -195,6 +202,7 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
           </label>
           <div className="row">
             <input
+              aria-labelledby={`secret-label-${field.key}`}
               type="password"
               placeholder={present(field.key) ? '••••••••••••  (neu eingeben zum Ersetzen)' : 'einfügen…'}
               value={values[field.key] ?? ''}
@@ -220,7 +228,7 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
             {present(field.key) && <button onClick={() => void clear(field.key)}>Löschen</button>}
           </div>
           {keyNote?.key === field.key && (
-            <div className={keyNote.ok ? 'hint ok' : 'hint err'}>{keyNote.text}</div>
+            <div className={keyNote.ok ? 'hint ok' : 'hint err'} role="status">{keyNote.text}</div>
           )}
           {field.hint && <div className="hint">{field.hint}</div>}
         </div>
@@ -242,7 +250,12 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
         <p className="hint">Ohne Ortsangabe verwenden Wetter, Ortssuche und Routen diesen Ort. Keine heimliche GPS-Ortung. Ein ausdrücklich genannter Ort hat Vorrang.</p>
       </div>
       <div className="field"><label>Optionale Fehlerberichte</label>
-        <input aria-label="Empfänger für Fehlerberichte" placeholder="HTTPS-Adresse deines Servers" value={settings.diagnosticReporting.url} onChange={e => void patch({ diagnosticReporting: { ...settings.diagnosticReporting, url: e.target.value, enabled: false } })} />
+        {/* Eine veränderte Adresse ist eine andere Zusage: Gesendet würde nun
+            an jemand anderes. Deshalb poussiert das Ändern den Versand aus —
+            aber erst beim Verlassen des Feldes, nicht bei jedem Buchstaben.
+            Sonst ließe sich der Empfänger nicht einmal korrigieren, ohne die
+            Häkchen darunter bei jedem Tastenanschlag neu zu setzen. */}
+        <input aria-label="Empfänger für Fehlerberichte" placeholder="HTTPS-Adresse deines Servers" value={settings.diagnosticReporting.url} onFocus={e => { reportUrlAtFocus.current = e.target.value }} onChange={e => void patch({ diagnosticReporting: { ...settings.diagnosticReporting, url: e.target.value } })} onBlur={e => { const url = e.target.value.trim(); if (url !== reportUrlAtFocus.current) void patch({ diagnosticReporting: { ...settings.diagnosticReporting, url, enabled: false } }) }} />
         <label><input type="checkbox" checked={settings.diagnosticReporting.enabled} onChange={e => void patch({ diagnosticReporting: { ...settings.diagnosticReporting, enabled: e.target.checked } })} /> Versand technischer Statistik erlauben</label>
         <label><input type="checkbox" checked={settings.diagnosticReporting.enabled && settings.diagnosticReporting.automatic} onChange={e => void patch({ diagnosticReporting: { ...settings.diagnosticReporting, automatic: e.target.checked, enabled: e.target.checked || settings.diagnosticReporting.enabled } })} /> Neue Fehler automatisch anonymisiert senden</label>
         <p className="hint">Standardmäßig aus. Automatisch: neue technische Fehler nach 30 Sekunden gebündelt, höchstens ein Bericht je 5 Minuten; gleiche Fehler höchstens alle 15 Minuten. Versandfehler werden später erneut versucht. Statistik und automatische Berichte enthalten nur App-Version, Betriebssystem und Fehleranzahl, keine Gesprächstexte, Logtexte, Schlüssel, Namen oder Standorte. Gesprächsausschnitte sendet nur die eigene Option „Fähigkeitslücken“ darunter. Der Empfänger sieht technisch deine IP-Adresse. Ausschalten verwirft wartende Berichte.</p>
@@ -308,17 +321,21 @@ function SpeechEngine({ settings, patch }: Props): JSX.Element {
   }
   const [status, setStatus] = useState<VoiceServiceStatus | null>(null)
   const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
-    void window.jarvis.invoke('speech:status').then(setStatus)
+    void window.jarvis.invoke('speech:status').then(setStatus).catch(() => undefined)
   }, [])
 
   const update = (p: Partial<typeof speech>): void => void patch({ speech: { ...speech, ...p } })
 
   const start = async (): Promise<void> => {
     setBusy(true)
+    setNote(null)
     try {
       setStatus(await window.jarvis.invoke('speech:status', { start: true }))
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
@@ -326,8 +343,11 @@ function SpeechEngine({ settings, patch }: Props): JSX.Element {
 
   const stop = async (): Promise<void> => {
     setBusy(true)
+    setNote(null)
     try {
       setStatus(await window.jarvis.invoke('speech:stop'))
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
@@ -341,6 +361,11 @@ function SpeechEngine({ settings, patch }: Props): JSX.Element {
   return (
     <div className="field">
       <label>VibeVoice</label>
+      {note && (
+        <div className="hint err" role="alert">
+          {note}
+        </div>
+      )}
       {speech.provider !== 'vibevoice' && (
         <div className="hint">
           Der lokale Sprachdienst ist gerade nicht der gewählte Weg. Unter Stimme steht das
@@ -360,7 +385,7 @@ function SpeechEngine({ settings, patch }: Props): JSX.Element {
               <span className="badge err">aus</span>
             )}
           </label>
-          <select value={speech.speaker} onChange={(e) => update({ speaker: e.target.value })}>
+          <select aria-label="Sprecher" value={speech.speaker} onChange={(e) => update({ speaker: e.target.value })}>
             {available.map((v) => (
               <option key={v} value={v}>
                 {v}
@@ -422,14 +447,14 @@ function SpeechEngine({ settings, patch }: Props): JSX.Element {
           )}
 
           <label style={{ marginTop: 8 }}>Python mit PyTorch</label>
-          <input
+          <input aria-label="Python mit PyTorch"
             type="text"
             value={speech.pythonPath}
             placeholder="leer lassen für ~/JamesAI/vibevoice/venv"
             onChange={(e) => update({ pythonPath: e.target.value })}
           />
           <label style={{ marginTop: 8 }}>Sprecherprofile</label>
-          <input
+          <input aria-label="Sprecherprofile"
             type="text"
             value={speech.voicesPath}
             placeholder="leer lassen für ~/JamesAI/vibevoice/voices"
@@ -466,9 +491,12 @@ function LocalFallback({ settings, patch }: Props): JSX.Element {
   const local = settings.localFallback ?? { enabled: false, baseUrl: 'http://127.0.0.1:11434', model: '' }
   const [status, setStatus] = useState<LocalModelStatus | null>(null)
   const [checking, setChecking] = useState(false)
+  /** Gescheiterte Prüfung: sonst bliebe das Abzeichen für immer auf „wird geprüft…". */
+  const [checkError, setCheckError] = useState<string | null>(null)
 
   const check = async (baseUrl?: string): Promise<void> => {
     setChecking(true)
+    setCheckError(null)
     try {
       const next = await window.jarvis.invoke('local:status', { baseUrl: baseUrl ?? local.baseUrl })
       setStatus(next)
@@ -495,6 +523,8 @@ function LocalFallback({ settings, patch }: Props): JSX.Element {
         const best = usable.find((m) => m.tools) ?? usable[0]
         patch({ localFallback: { ...local, model: best.name } })
       }
+    } catch (err) {
+      setCheckError(err instanceof Error ? err.message : String(err))
     } finally {
       setChecking(false)
     }
@@ -513,7 +543,9 @@ function LocalFallback({ settings, patch }: Props): JSX.Element {
     <div className="field">
       <label>
         Lokales Modell als Reserve{' '}
-        {status === null ? (
+        {checkError ? (
+          <span className="badge err">Prüfung fehlgeschlagen</span>
+        ) : status === null ? (
           <span className="badge missing">wird geprüft…</span>
         ) : status.reachable ? (
           <span className="badge ok">Ollama läuft</span>
@@ -523,6 +555,11 @@ function LocalFallback({ settings, patch }: Props): JSX.Element {
           <span className="badge missing">nicht installiert</span>
         )}
       </label>
+      {checkError && (
+        <div className="hint err" role="alert">
+          {checkError} Bitte erneut versuchen.
+        </div>
+      )}
 
       <label style={{ fontWeight: 400 }}>
         <input
@@ -571,6 +608,7 @@ function LocalFallback({ settings, patch }: Props): JSX.Element {
 
           <div className="row" style={{ marginTop: 8 }}>
             <input
+              aria-label="Adresse des Ollama-Diensts"
               type="text"
               placeholder="http://127.0.0.1:11434"
               value={local.baseUrl}
@@ -582,7 +620,7 @@ function LocalFallback({ settings, patch }: Props): JSX.Element {
             </button>
           </div>
 
-          <select value={local.model} onChange={(e) => update({ model: e.target.value })} style={{ marginTop: 8 }}>
+          <select aria-label="Ollama-Modell" value={local.model} onChange={(e) => update({ model: e.target.value })} style={{ marginTop: 8 }}>
             {/* Das eingestellte Modell steht auch dann in der Liste, wenn Ollama
                 gerade nicht läuft — sonst verlöre die Auswahl beim Öffnen ihren
                 eigenen Wert und stellte still auf etwas anderes um. */}
@@ -668,6 +706,7 @@ function LinphoneSetup({ settings, patch }: Props): JSX.Element {
   const [hasPassword, setHasPassword] = useState(false)
   const [testing, setTesting] = useState(false)
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const update = (p: Partial<typeof sip>): Promise<Settings> => patch({ sip: { ...sip, ...p } })
 
   const testCall = async (): Promise<void> => {
@@ -675,6 +714,8 @@ function LinphoneSetup({ settings, patch }: Props): JSX.Element {
     setTestResult(null)
     try {
       setTestResult(await window.jarvis.invoke('sip:testCall'))
+    } catch (err) {
+      setTestResult({ ok: false, message: err instanceof Error ? err.message : String(err) })
     } finally {
       setTesting(false)
     }
@@ -682,10 +723,11 @@ function LinphoneSetup({ settings, patch }: Props): JSX.Element {
 
   useEffect(() => {
     const load = (): void => {
-      void window.jarvis.invoke('sip:status').then(setStatus)
+      void window.jarvis.invoke('sip:status').then(setStatus).catch(() => undefined)
       void window.jarvis
         .invoke('secrets:status')
         .then((all) => setHasPassword(all.some((s) => s.key === 'sipPassword' && s.present)))
+        .catch(() => undefined)
     }
     load()
     const timer = window.setInterval(load, 4000)
@@ -694,9 +736,13 @@ function LinphoneSetup({ settings, patch }: Props): JSX.Element {
 
   const savePassword = async (): Promise<void> => {
     if (!password.trim()) return
-    const all = await window.jarvis.invoke('secrets:set', { key: 'sipPassword', value: password.trim() })
-    setHasPassword(all.some((s) => s.key === 'sipPassword' && s.present))
-    setPassword('')
+    try {
+      const all = await window.jarvis.invoke('secrets:set', { key: 'sipPassword', value: password.trim() })
+      setHasPassword(all.some((s) => s.key === 'sipPassword' && s.present))
+      setPassword('')
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Das Passwort konnte nicht gespeichert werden.')
+    }
   }
 
   return (
@@ -723,28 +769,33 @@ function LinphoneSetup({ settings, patch }: Props): JSX.Element {
       </div>
       <div className="field">
         <label>James’ Benutzername</label>
-        <input value={sip.username} placeholder="z. B. james-void" onChange={(e) => void update({ username: e.target.value.trim() })} />
+        {/* Leerraum wird erst beim Verlassen geschnitten — ein Feld, das den
+            Leertaste-Anschlag verschluckt, liest sich kaputt. */}
+        <input aria-label="James’ Benutzername" value={sip.username} placeholder="z. B. james-void" onChange={(e) => void update({ username: e.target.value })} onBlur={(e) => { const v = e.target.value.trim(); if (v !== e.target.value) void update({ username: v }) }} />
       </div>
       <div className="field">
         <label>James’ Passwort {hasPassword && <span className="badge ok">gespeichert</span>}</label>
         <div className="row">
           <input
+            aria-label="James’ Passwort"
             type="password"
             value={password}
             placeholder={hasPassword ? '•••••••• (neu eingeben zum Ändern)' : 'Passwort von James’ Konto'}
-            onChange={(e) => setPassword(e.target.value)}
+            onChange={(e) => { setPassword(e.target.value); setSaveError(null) }}
           />
           <button disabled={!password.trim()} onClick={() => void savePassword()}>
             Speichern
           </button>
         </div>
+        {saveError && <div className="hint err" role="alert">{saveError}</div>}
       </div>
       <div className="field">
         <label>Deine Linphone-Adresse</label>
-        <input
+        <input aria-label="Deine Linphone-Adresse"
           value={sip.userAddress}
           placeholder="name@sip.linphone.org"
-          onChange={(e) => void update({ userAddress: e.target.value.trim() })}
+          onChange={(e) => void update({ userAddress: e.target.value })}
+          onBlur={(e) => { const v = e.target.value.trim(); if (v !== e.target.value) void update({ userAddress: v }) }}
         />
         <div className="hint">Nur von dieser Adresse nimmt James Anrufe an, und nur sie ruft er an.</div>
       </div>
@@ -763,7 +814,7 @@ function LinphoneSetup({ settings, patch }: Props): JSX.Element {
           </button>
         </div>
         {testResult ? (
-          <div className={testResult.ok ? 'hint ok' : 'hint err'}>{testResult.message}</div>
+          <div className={testResult.ok ? 'hint ok' : 'hint err'} role="status">{testResult.message}</div>
         ) : (
           status?.lastCall && <div className="hint">Letzter Anruf: {status.lastCall}</div>
         )}
@@ -772,7 +823,7 @@ function LinphoneSetup({ settings, patch }: Props): JSX.Element {
         <summary>Mehr</summary>
         <div className="field">
           <label>Domain</label>
-          <input value={sip.domain} onChange={(e) => void update({ domain: e.target.value.trim() })} />
+          <input aria-label="Domain" value={sip.domain} onChange={(e) => void update({ domain: e.target.value })} onBlur={(e) => { const v = e.target.value.trim(); if (v !== e.target.value) void update({ domain: v }) }} />
         </div>
         <label style={{ fontWeight: 400 }}>
           <input type="checkbox" checked={sip.fullAccess} onChange={(e) => void update({ fullAccess: e.target.checked })} />
@@ -808,7 +859,11 @@ function LmStudioSetup({ settings, patch }: Props): JSX.Element {
   useEffect(() => {
     let current = true
     const timer = window.setTimeout(() => {
-      void window.jarvis.invoke('lmstudio:models', { baseUrl: lm.baseUrl }).then((s) => { if (current) setStatus(s) })
+      void window.jarvis
+        .invoke('lmstudio:models', { baseUrl: lm.baseUrl })
+        // Gescheiterter look: „antwortet nicht" ist die ehrliche Darstellung.
+        .then((s) => { if (current) setStatus(s) })
+        .catch(() => { if (current) setStatus({ reachable: false, models: [] }) })
     }, 300)
     return () => { current = false; window.clearTimeout(timer) }
   }, [lm.baseUrl])
@@ -843,7 +898,7 @@ function TextProviderChoice({
   // Erst laden, wenn ein Schlüssel da ist — ohne ihn ist die Liste nur Ballast.
   useEffect(() => {
     if (!openRouterPresent) return
-    void window.jarvis.invoke('openrouter:models').then(setModels)
+    void window.jarvis.invoke('openrouter:models').then(setModels).catch(() => undefined)
   }, [openRouterPresent])
 
   /*
@@ -862,6 +917,10 @@ function TextProviderChoice({
       .then((s) => {
         if (current) setLocalReachable(s.reachable)
       })
+      // „Antwortet gerade nicht" ist hier die ehrliche Darstellung.
+      .catch(() => {
+        if (current) setLocalReachable(false)
+      })
     return () => {
       current = false
     }
@@ -872,7 +931,7 @@ function TextProviderChoice({
   return (
     <div className="field">
       <label>Textaufgaben über</label>
-      <select
+      <select aria-label="Textaufgaben über"
         value={chosen}
         onChange={(e) => patch({ brainProvider: e.target.value as never })}
       >
@@ -897,6 +956,7 @@ function TextProviderChoice({
             </div>
           )}
           <input
+            aria-label={chosen === 'openai' ? 'OpenAI-Modellname' : 'Anthropic-Modellname'}
             type="text"
             value={chosen === 'openai' ? settings.openAiModel : settings.anthropicModel}
             placeholder={chosen === 'openai' ? 'gpt-5-mini' : 'claude-haiku-4-5'}
@@ -932,6 +992,7 @@ function TextProviderChoice({
       {settings.brainProvider === 'openrouter' && (
         <>
           <input
+            aria-label="OpenRouter-Modellname"
             type="text"
             list="openrouter-models"
             value={settings.openRouterModel}
@@ -981,10 +1042,13 @@ function GoogleConnect(): JSX.Element {
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    void window.jarvis.invoke('google:status').then((s) => {
-      setConnected(s.connected)
-      setCalendar(s.calendar)
-    })
+    void window.jarvis
+      .invoke('google:status')
+      .then((s) => {
+        setConnected(s.connected)
+        setCalendar(s.calendar)
+      })
+      .catch(() => undefined)
   }, [])
 
   const connect = async (): Promise<void> => {
@@ -1001,6 +1065,9 @@ function GoogleConnect(): JSX.Element {
       // ist die Anmeldung erfolgreich und der Kalender trotzdem nicht dabei.
       const status = await window.jarvis.invoke('google:status')
       setCalendar(status.calendar)
+    } catch (err) {
+      setFailed(true)
+      setMessage(err instanceof Error ? err.message : 'Die Anmeldung ging nicht.')
     } finally {
       setBusy(false)
     }
@@ -1053,11 +1120,17 @@ function GoogleConnect(): JSX.Element {
         {connected && (
           <button
             onClick={() => {
-              void window.jarvis.invoke('google:disconnect').then(() => {
-                setConnected(false)
-                setFailed(false)
-                setMessage(null)
-              })
+              void window.jarvis
+                .invoke('google:disconnect')
+                .then(() => {
+                  setConnected(false)
+                  setFailed(false)
+                  setMessage(null)
+                })
+                .catch((err: unknown) => {
+                  setFailed(true)
+                  setMessage(err instanceof Error ? err.message : 'Das Trennen ging nicht.')
+                })
             }}
           >
             Trennen
@@ -1091,6 +1164,8 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
   const [busy, setBusy] = useState(false)
   const [playing, setPlaying] = useState(false)
   const [previewError, setPreviewError] = useState<string | null>(null)
+  /** Laden von Kontingent und Stiemen schlug fehl — sonst bliebe „Noch nicht nachgefragt". */
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   /**
    * Die Hörprobe.
@@ -1146,6 +1221,7 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
 
   const refresh = async (fresh: boolean): Promise<void> => {
     setBusy(true)
+    setLoadError(null)
     try {
       const [nextQuota, nextVoices] = await Promise.all([
         window.jarvis.invoke('eleven:quota', { fresh }),
@@ -1153,6 +1229,8 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
       ])
       setQuota(nextQuota)
       setVoices(nextVoices)
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
@@ -1203,6 +1281,7 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
         <details className="advanced-choice" open={speech.provider === 'piper' || speech.provider === 'vibevoice'}>
           <summary>Lokale Stimmen</summary>
           <select
+            aria-label="Lokale Stimmen"
             value={speech.provider === 'piper' || speech.provider === 'vibevoice' ? speech.provider : ''}
             onChange={(e) => {
               if (e.target.value) patch({ speech: { ...speech, provider: e.target.value as never } })
@@ -1226,7 +1305,7 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
       {speech.provider === 'openai' && (
         <div className="field">
           <label>OpenAI Realtime</label>
-          <select
+          <select aria-label="OpenAI Realtime"
             value={speech.realtimeVoice}
             onChange={(e) => patch({ speech: { ...speech, realtimeVoice: e.target.value } })}
           >
@@ -1237,6 +1316,7 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
             ))}
           </select>
           <input
+            aria-label="OpenAI Realtime – Modellname"
             value={speech.realtimeModel}
             placeholder="gpt-realtime"
             onChange={(e) => patch({ speech: { ...speech, realtimeModel: e.target.value } })}
@@ -1279,7 +1359,7 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
 
           <div className="field">
             <label>ElevenLabs-Stimme</label>
-            <select
+            <select aria-label="ElevenLabs-Stimme"
               value={speech.elevenVoiceId}
               onChange={(e) => patch({ speech: { ...speech, elevenVoiceId: e.target.value } })}
             >
@@ -1308,18 +1388,20 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
               </button>
             </div>
             <div className="hint">
-              {previewError ??
-                (quota === null
-                  ? 'Noch nicht nachgefragt.'
-                  : quota.reason
-                    ? quota.reason
-                    : quota.limit === 0
-                      ? 'Kontingent: unbegrenzt.'
-                      : `Kontingent: ${quota.remaining.toLocaleString('de-DE')} von ` +
-                        `${quota.limit.toLocaleString('de-DE')} Credits übrig.` +
-                        (quota.resetsAt
-                          ? ` Füllt sich am ${new Date(quota.resetsAt * 1000).toLocaleDateString('de-DE')} wieder auf.`
-                          : ''))}
+              {loadError
+                ? 'Nachfragen ging nicht: ' + loadError + ' — Bitte Schlüssel prüfen und noch einmal laden.'
+                : previewError ??
+                  (quota === null
+                    ? 'Noch nicht nachgefragt.'
+                    : quota.reason
+                      ? quota.reason
+                      : quota.limit === 0
+                        ? 'Kontingent: unbegrenzt.'
+                        : `Kontingent: ${quota.remaining.toLocaleString('de-DE')} von ` +
+                          `${quota.limit.toLocaleString('de-DE')} Credits übrig.` +
+                          (quota.resetsAt
+                            ? ` Füllt sich am ${new Date(quota.resetsAt * 1000).toLocaleDateString('de-DE')} wieder auf.`
+                            : ''))}
             </div>
             <div className="hint">
               Ohne Auswahl nimmt James die erste Stimme, die zu ihm passt — tief, ruhig, britisch.
@@ -1336,7 +1418,7 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
 
           <div className="field">
             <label>Gleichmäßigkeit — {Math.round(speech.stability * 100)} %</label>
-            <input
+            <input aria-label="Gleichmäßigkeit —"
               type="range"
               min={0}
               max={1}
@@ -1354,7 +1436,7 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
 
           <div className="field">
             <label>Tempo — {speech.speed.toFixed(2)}×</label>
-            <input
+            <input aria-label="Tempo —"
               type="range"
               min={0.8}
               max={1.15}
@@ -1371,7 +1453,7 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
 
           <div className="field">
             <label>Ausdruck — {Math.round(speech.style * 100)} %</label>
-            <input
+            <input aria-label="Ausdruck —"
               type="range"
               min={0}
               max={1}
@@ -1425,11 +1507,15 @@ function BrainPicker({ settings, patch }: Props): JSX.Element {
   const speech = settings.speech
   const [health, setHealth] = useState<OllamaHealth | null>(null)
   const [busy, setBusy] = useState(false)
+  const [checkError, setCheckError] = useState<string | null>(null)
 
   const check = async (): Promise<void> => {
     setBusy(true)
+    setCheckError(null)
     try {
       setHealth(await window.jarvis.invoke('ollama:health'))
+    } catch (err) {
+      setCheckError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
@@ -1458,7 +1544,13 @@ function BrainPicker({ settings, patch }: Props): JSX.Element {
 
   /** Modelle erst fragen, wenn eine Anmeldung da ist — sonst gibt es nichts zu zeigen. */
   const loadChatGpt = async (): Promise<void> => {
-    const status = await window.jarvis.invoke('chatgpt:status')
+    let status
+    try {
+      status = await window.jarvis.invoke('chatgpt:status')
+    } catch (err) {
+      setChatGpt({ connected: false, models: [], error: err instanceof Error ? err.message : String(err) })
+      return
+    }
     if (!status.connected) {
       setChatGpt({ connected: false, models: [] })
       return
@@ -1468,6 +1560,7 @@ function BrainPicker({ settings, patch }: Props): JSX.Element {
       setChatGpt({ connected: true, models })
       if (!settings.chatGptModel && models[0]) patch({ chatGptModel: models[0].id })
     } catch (err) {
+      // Angemeldet ja, aber die Modellliste blieb aus — das gehört zur Fehlermeldung.
       setChatGpt({ connected: true, models: [], error: err instanceof Error ? err.message : String(err) })
     }
   }
@@ -1520,6 +1613,11 @@ function BrainPicker({ settings, patch }: Props): JSX.Element {
             <span className="badge err">geht nicht</span>
           )}
         </label>
+        {checkError && (
+          <div className="hint err" role="alert">
+            Prüfung fehlgeschlagen: {checkError} Bitte versuche es noch einmal.
+          </div>
+        )}
         <div className="choice-switch three" role="group" aria-label="Denkmotor auswählen">
           <button
             className={!isLocal && !isChatGpt ? 'active' : ''}
@@ -1551,6 +1649,7 @@ function BrainPicker({ settings, patch }: Props): JSX.Element {
         {isChatGpt ? (
           <>
             <select
+              aria-label="ChatGPT-Modell"
               value={settings.chatGptModel}
               onChange={(e) => patch({ chatGptModel: e.target.value })}
             >
@@ -1572,6 +1671,7 @@ function BrainPicker({ settings, patch }: Props): JSX.Element {
           </>
         ) : isLocal ? (
           <select
+            aria-label="Ollama-Modell für das Denken"
             value={settings.ollama.model}
             onChange={(e) => patch({ ollama: { ...settings.ollama, model: e.target.value } })}
           >
@@ -1585,6 +1685,7 @@ function BrainPicker({ settings, patch }: Props): JSX.Element {
           </select>
         ) : (
           <select
+            aria-label="Gemini-Gehirnmodell"
             value={speech.brainModel}
             onChange={(e) => patch({ speech: { ...speech, brainModel: e.target.value } })}
           >
@@ -1635,7 +1736,7 @@ function BrainPicker({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Wartezeit bis zur Antwort — {settings.speech.endpointMs} ms</label>
-        <input
+        <input aria-label="Wartezeit bis zur Antwort —"
           type="range"
           min={250}
           max={1000}
@@ -1665,6 +1766,11 @@ function PiperPicker({ settings, patch }: Props): JSX.Element {
   const piper = settings.piper
   const [health, setHealth] = useState<PiperHealth | null>(null)
   const [busy, setBusy] = useState(false)
+  /** Gescheiterte Prüfung — sonst bliebe die Anzeige auf „Noch nicht nachgesehen". */
+  const [checkError, setCheckError] = useState<string | null>(null)
+  /** Eine Stimme wird gerade beschafft; ohne Sperrung ließe sich mehrfach wählen. */
+  const [fetching, setFetching] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
 
   /**
    * Auch hier nur auf Knopfdruck: Die Frage startet den Prozess und lädt die
@@ -1673,8 +1779,11 @@ function PiperPicker({ settings, patch }: Props): JSX.Element {
    */
   const check = async (): Promise<void> => {
     setBusy(true)
+    setCheckError(null)
     try {
       setHealth(await window.jarvis.invoke('piper:health'))
+    } catch (err) {
+      setCheckError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
@@ -1682,6 +1791,26 @@ function PiperPicker({ settings, patch }: Props): JSX.Element {
 
   /** Ein eingestellter Pfad, den die Liste nicht kennt — wie beim Denkmodell. */
   const chosen = PIPER.voices.find((v) => piper.voicePath.includes(v.id))?.id ?? ''
+
+  // Während die Beschaffung läuft, weiß der Vorhang (`local:install`) nichts von
+  // dieser Tabelle — hier reicht eine kurze Zeile, dass sie gehört wird.
+  const choose = async (id: string): Promise<void> => {
+    const voice = PIPER.voices.find((v) => v.id === id)
+    if (!voice) return
+    setFetching(true)
+    setFetchError(null)
+    try {
+      // Nur die Wahl merken. Wo die Datei liegt, entscheidet die
+      // Beschaffung — sie schreibt den Pfad selbst zurück, sobald die
+      // Stimme wirklich da ist. Hier einen Pfad einzutragen, unter dem
+      // nichts liegt, sähe eingerichtet aus und wäre es nicht.
+      await window.jarvis.invoke('local:install', { id: 'piper-voice', choice: voice.id })
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : 'Beschaffung fehlgeschlagen.')
+    } finally {
+      setFetching(false)
+    }
+  }
 
   return (
     <>
@@ -1694,17 +1823,10 @@ function PiperPicker({ settings, patch }: Props): JSX.Element {
             <span className="badge err">geht nicht</span>
           )}
         </label>
-        <select
+        <select aria-label="Stimme"
           value={chosen}
-          onChange={(e) => {
-            const voice = PIPER.voices.find((v) => v.id === e.target.value)
-            if (!voice) return
-            // Nur die Wahl merken. Wo die Datei liegt, entscheidet die
-            // Beschaffung — sie schreibt den Pfad selbst zurück, sobald die
-            // Stimme wirklich da ist. Hier einen Pfad einzutragen, unter dem
-            // nichts liegt, sähe eingerichtet aus und wäre es nicht.
-            void window.jarvis.invoke('local:install', { id: 'piper-voice', choice: voice.id })
-          }}
+          disabled={fetching}
+          onChange={(e) => void choose(e.target.value)}
         >
           {chosen === '' && <option value="">— noch keine Stimme geholt —</option>}
           {PIPER.voices.map((v) => (
@@ -1713,15 +1835,23 @@ function PiperPicker({ settings, patch }: Props): JSX.Element {
             </option>
           ))}
         </select>
+        {fetching && <div className="hint">Die Stimme wird geholt — das dauert je nach Größe einen Moment.</div>}
+        {fetchError && (
+          <div className="hint err" role="alert">
+            {fetchError}
+          </div>
+        )}
         <div className="row">
           <button className="ghost" disabled={busy} onClick={() => void check()}>
             {busy ? 'starte und wärme auf…' : 'Nachsehen, ob piper spricht'}
           </button>
         </div>
         <div className="hint">
-          {health?.detail ??
-            'Noch nicht nachgesehen. Eine andere Stimme zu wählen holt sie — das dauert je ' +
-              'nach Größe einen Moment und stellt danach von selbst um.'}
+          {checkError
+            ? 'Nachsehen ging nicht: ' + checkError + ' — Bitte noch einmal versuchen.'
+            : health?.detail ??
+              'Noch nicht nachgesehen. Eine andere Stimme zu wählen holt sie — das dauert je ' +
+                'nach Größe einen Moment und stellt danach von selbst um.'}
         </div>
       </div>
 
@@ -1730,7 +1860,7 @@ function PiperPicker({ settings, patch }: Props): JSX.Element {
           Sprechtempo — {piper.lengthScale.toFixed(2)}×{' '}
           {piper.lengthScale > 1 ? '(langsamer)' : piper.lengthScale < 1 ? '(schneller)' : ''}
         </label>
-        <input
+        <input aria-label="Sprechtempo —"
           type="range"
           min={0.7}
           max={1.4}
@@ -1747,7 +1877,7 @@ function PiperPicker({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Welche Fassung</label>
-        <select
+        <select aria-label="Welche Fassung"
           value={piper.backend}
           onChange={(e) => patch({ piper: { ...piper, backend: e.target.value as never } })}
         >
@@ -1813,15 +1943,20 @@ function LocalAssets({
   const [assets, setAssets] = useState<LocalAsset[] | null>(null)
   const [progress, setProgress] = useState<Partial<Record<LocalAssetId, LocalInstallProgress>>>({})
   const [picked, setPicked] = useState<Partial<Record<LocalAssetId, string>>>({})
+  /** Die Bestandsfrage schlug fehl — sonst bliebe die Tabelle für immer auf „Sehe nach…". */
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
-    void window.jarvis.invoke('local:assets').then(setAssets)
+    void window.jarvis
+      .invoke('local:assets')
+      .then(setAssets)
+      .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : String(err)))
     // Der Fortschritt kommt als Ereignis und nicht als Antwort auf den Aufruf:
     // Ein Balken, der erst am Ende auf hundert springt, ist keiner.
     return window.jarvis.on('local:progress', (p) => {
       setProgress((current) => ({ ...current, [p.id]: p }))
       // Fertig oder gescheitert — beides ändert, was auf der Platte liegt.
-      if (p.done || p.error) void window.jarvis.invoke('local:assets').then(setAssets)
+      if (p.done || p.error) void window.jarvis.invoke('local:assets').then(setAssets).catch(() => undefined)
     })
   }, [])
 
@@ -1855,6 +1990,8 @@ function LocalAssets({
       })
   }
 
+  if (loadError !== null)
+    return <p className="hint err" role="alert">Der Bestand ließ sich nicht aufnehmen: {loadError} Bitte schließe die Einstellungen und öffne sie wieder.</p>
   if (assets === null) return <p className="hint">Sehe nach, was schon da ist…</p>
 
   const shown = assets.filter((a) => only.includes(a.id))
@@ -1900,6 +2037,7 @@ function LocalAssets({
                 <div className="row" style={{ gap: 8 }}>
                   {options && (
                     <select
+                      aria-label={`Fassung für ${asset.id}`}
                       value={choiceFor(asset.id) ?? ''}
                       disabled={busy}
                       onChange={(e) => setPicked({ ...picked, [asset.id]: e.target.value })}
@@ -1945,6 +2083,8 @@ export function EarsSection({ settings, patch }: Props): JSX.Element {
   const speech = settings.speech
   const [health, setHealth] = useState<WhisperHealth | null>(null)
   const [busy, setBusy] = useState(false)
+  /** Gescheiterte Prüfung — Whisper fängt der fortlaufende Zustand auf, dies nicht. */
+  const [checkError, setCheckError] = useState<string | null>(null)
 
   /**
    * Nur auf Knopfdruck, nie beim Öffnen der Seite.
@@ -1957,8 +2097,11 @@ export function EarsSection({ settings, patch }: Props): JSX.Element {
    */
   const check = async (): Promise<void> => {
     setBusy(true)
+    setCheckError(null)
     try {
       setHealth(await window.jarvis.invoke('whisper:health'))
+    } catch (err) {
+      setCheckError(err instanceof Error ? err.message : String(err))
     } finally {
       setBusy(false)
     }
@@ -1984,7 +2127,7 @@ export function EarsSection({ settings, patch }: Props): JSX.Element {
             <span className="badge err">geht nicht</span>
           )}
         </label>
-        <select
+        <select aria-label="Wer zuhört"
           value={speech.hearProvider}
           onChange={(e) =>
             patch({ speech: { ...speech, hearProvider: e.target.value as never } })
@@ -2012,9 +2155,11 @@ export function EarsSection({ settings, patch }: Props): JSX.Element {
               </button>
             </div>
             <div className="hint">
-              {health?.detail ??
-                'Noch nicht nachgesehen. Der erste Versuch startet den Dienst und lädt das ' +
-                  'Modell — das kann eine Minute dauern und passiert bewusst nicht von selbst.'}
+              {checkError
+                ? 'Nachsehen ging nicht: ' + checkError + ' — Bitte noch einmal versuchen.'
+                : health?.detail ??
+                  'Noch nicht nachgesehen. Der erste Versuch startet den Dienst und lädt das ' +
+                    'Modell — das kann eine Minute dauern und passiert bewusst nicht von selbst.'}
             </div>
           </div>
 
@@ -2034,7 +2179,7 @@ export function EarsSection({ settings, patch }: Props): JSX.Element {
             <label>
               Rechenfäden — {whisper.threads === 0 ? 'aus der Kernzahl abgeleitet' : whisper.threads}
             </label>
-            <input
+            <input aria-label="Rechenfäden —"
               type="range"
               min={0}
               max={16}
@@ -2052,7 +2197,7 @@ export function EarsSection({ settings, patch }: Props): JSX.Element {
 
           <div className="field">
             <label>Zeitfenster — mindestens {whisper.audioCtx}</label>
-            <input
+            <input aria-label="Zeitfenster — mindestens"
               type="range"
               min={768}
               max={1500}
@@ -2088,7 +2233,7 @@ export function EarsSection({ settings, patch }: Props): JSX.Element {
 
           <div className="field">
             <label>Port des Dienstes</label>
-            <input
+            <input aria-label="Port des Dienstes"
               type="number"
               value={whisper.port}
               onChange={(e) => patch({ whisper: { ...whisper, port: Number(e.target.value) } })}
@@ -2120,17 +2265,59 @@ function PersonaPicker({ settings, patch }: Props): JSX.Element {
   return (
     <div className="field">
       <label>Haltung</label>
-      <select
+      <select aria-label="Haltung"
         value={settings.persona}
         onChange={(e) => patch({ persona: e.target.value as never })}
       >
         <option value="jarvis">James — siezt dich, förmlich, knapp, trocken</option>
         <option value="sachlich">Sachlich — duzt dich, ohne den trockenen Zusatz</option>
+        <option value="herzlich">Herzlich — duzt dich, warm und ruhig</option>
       </select>
       <div className="hint">
-        James spricht dich förmlich an. „Sachlich“ verwendet du. Deine Wahl ändert nur den Ton.
+        James spricht dich förmlich an. „Sachlich“ und „Herzlich“ verwenden du. Deine Wahl ändert nur den Ton.
       </div>
     </div>
+  )
+}
+
+const HUMOR_LABELS = ['keiner', 'selten', 'gelegentlich', 'gern']
+
+/** Feinregler über der Haltung: Humor, Anrede, Name. */
+function PersonalityControls({ settings, patch }: Props): JSX.Element {
+  const p = settings.personality
+  const [name, setName] = useState(p.name)
+  const set = (next: Partial<typeof p>): void => { void patch({ personality: { ...p, ...next } }) }
+  const nameOk = /^[\p{L}][\p{L}\p{M} .'-]{0,31}$/u.test(name.trim())
+  return (
+    <>
+      <div className="field">
+        <label>Humor: {HUMOR_LABELS[p.humor] ?? p.humor}</label>
+        <input type="range" aria-label="Humor" min={0} max={3} step={1}
+          value={p.humor} onChange={(e) => set({ humor: Number(e.target.value) })} />
+      </div>
+      <div className="field">
+        <label>Anrede</label>
+        <select aria-label="Anrede" value={p.address}
+          onChange={(e) => set({ address: e.target.value as typeof p.address })}>
+          <option value="auto">Wie die Haltung</option>
+          <option value="du">Du</option>
+          <option value="sie">Sie</option>
+        </select>
+      </div>
+      <div className="field">
+        <label>Name</label>
+        <input type="text" aria-label="Name des Assistenten" value={name} maxLength={32}
+          onChange={(e) => setName(e.target.value)}
+          onBlur={() => { if (nameOk && name.trim() !== p.name) set({ name: name.trim() }) }} />
+        <div className="hint">
+          {nameOk ? 'So stellt er sich vor. Das Weckwort bleibt davon unberührt.' : 'Nur Buchstaben, höchstens 32 Zeichen.'}
+        </div>
+      </div>
+      <div className="field">
+        <button type="button" onClick={() => { void window.jarvis.invoke('persona:preview') }}>Probe hören</button>
+        <div className="hint">Spricht einen Beispielsatz im eingestellten Ton.</div>
+      </div>
+    </>
   )
 }
 
@@ -2143,6 +2330,7 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
       </p>
 
       <PersonaPicker settings={settings} patch={patch} />
+      <PersonalityControls settings={settings} patch={patch} />
       <hr className="section-divider" />
 
       <ElevenVoicePicker settings={settings} patch={patch} />
@@ -2150,7 +2338,7 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
       <details className="settings-disclosure"><summary>Stimme und Modelle genauer einstellen</summary>
       <div className="field">
         <label>Gemini-Stimme</label>
-        <select value={settings.voice} onChange={(e) => patch({ voice: e.target.value as never })}>
+        <select aria-label="Gemini-Stimme" value={settings.voice} onChange={(e) => patch({ voice: e.target.value as never })}>
           {VOICES.map((v) => (
             <option key={v.name} value={v.name}>
               {v.name} — {v.trait} · {v.hint}
@@ -2165,7 +2353,7 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Modell</label>
-        <select
+        <select aria-label="Modell"
           value={settings.liveModel}
           onChange={(e) => patch({ liveModel: e.target.value as never })}
         >
@@ -2185,7 +2373,7 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Gehirn (Werkzeuge, Recherche, Befehle)</label>
-        <input
+        <input aria-label="Gehirn (Werkzeuge, Recherche, Befehle)"
           type="text"
           list="brain-models"
           value={settings.brainModel}
@@ -2206,7 +2394,7 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Bildschirm (was James sieht)</label>
-        <input
+        <input aria-label="Bildschirm (was James sieht)"
           type="text"
           list="vision-models"
           value={settings.visionModel}
@@ -2236,7 +2424,7 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Recherche-Agent</label>
-        <select
+        <select aria-label="Recherche-Agent"
           value={settings.researchAgent}
           onChange={(e) => patch({ researchAgent: e.target.value as never })}
         >
@@ -2256,7 +2444,7 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Sprache</label>
-        <select value={settings.language} onChange={(e) => patch({ language: e.target.value as never })}>
+        <select aria-label="Sprache" value={settings.language} onChange={(e) => patch({ language: e.target.value as never })}>
           <option value="de-DE">Deutsch</option>
           <option value="en-US">Englisch</option>
         </select>
@@ -2278,9 +2466,11 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
   const [level, setLevel] = useState(0)
   const [testing, setTesting] = useState(false)
   const [cameras, setCameras] = useState<MediaDeviceInfo[]>([])
+  /** Gescheiterter Test: sonst bliebe der Balken still, ohne dass jemand weiß, warum. */
+  const [testError, setTestError] = useState<string | null>(null)
 
   useEffect(() => {
-    void listAudioDevices().then(setDevices)
+    void listAudioDevices().then(setDevices).catch(() => undefined)
     /*
      * Die Kameraliste ohne vorherige Freigabe.
      *
@@ -2300,11 +2490,37 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
   /**
    * Mikrofontest. Ohne den rät man bei Problemen ins Blaue —
    * ist das Gerät falsch, ist es stummgeschaltet, oder liegt es am Modell?
+   *
+   * Der Test läuft über rAF und hält nichts fest: Ein zweiter Klick würde
+   * deshalb zwei Mikrofone gleichzeitig aufnehmen. Die Sperrung über die
+   * laufende Nummer verhindert das, ohne sich auf ein `testing`-Flag zu
+   * verlassen, das von `finally` zu spät abgeräumt werden müsste. Und beim
+   * Wegblättern räumt der Rückruf das wieder ab, was offen bliebe.
+   *
+   * Der Knopf sperrt sich zwar, aber von außen kann jederzeit ein zweiter
+   * Versuch starten — deshalb bricht jeder Start zuerst den vorigen Test ab.
+   * Dasselbe Abräumen gilt, wenn die Seite weg geht, während der Test läuft.
    */
+  const cancelRef = useRef<(() => void) | null>(null)
+
   const runTest = async (): Promise<void> => {
+    cancelRef.current?.()
+    let cancelled = false
+    let stream: MediaStream | undefined
+    let ctx: AudioContext | undefined
+    let raf = 0
+    let timer: number | undefined
+    cancelRef.current = () => {
+      cancelled = true
+      window.clearTimeout(timer)
+      cancelAnimationFrame(raf)
+      stream?.getTracks().forEach((t) => t.stop())
+      void ctx?.close()
+      cancelRef.current = null
+    }
     setTesting(true)
-    let ctx: AudioContext | null = null
-    let stream: MediaStream | null = null
+    setLevel(0)
+    setTestError(null)
     try {
       stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -2314,6 +2530,10 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
           autoGainControl: settings.audio.autoGainControl
         }
       })
+      if (cancelled) {
+        stream.getTracks().forEach((t) => t.stop())
+        return
+      }
       ctx = new AudioContext()
       const source = ctx.createMediaStreamSource(stream)
       const analyser = ctx.createAnalyser()
@@ -2321,29 +2541,37 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
       source.connect(analyser)
 
       const buffer = new Float32Array(analyser.fftSize)
-      const started = Date.now()
-
       const tick = (): void => {
-        if (Date.now() - started > 12_000) {
-          setTesting(false)
-          setLevel(0)
-          stream?.getTracks().forEach((t) => t.stop())
-          void ctx?.close()
-          return
-        }
+        if (cancelled) return
         analyser.getFloatTimeDomainData(buffer)
         let sum = 0
         for (const s of buffer) sum += s * s
         setLevel(Math.min(1, Math.sqrt(sum / buffer.length) * 4))
-        requestAnimationFrame(tick)
+        raf = requestAnimationFrame(tick)
       }
+      const finish = (): void => {
+        if (cancelled) return
+        cancelRef.current?.()
+        setTesting(false)
+        setLevel(0)
+      }
+      timer = window.setTimeout(finish, 12_000)
       tick()
-    } catch {
+    } catch (err) {
+      if (cancelled) return
+      cancelRef.current?.()
       setTesting(false)
-      stream?.getTracks().forEach((t) => t.stop())
-      void ctx?.close()
+      setTestError(
+        err instanceof Error && err.name === 'NotAllowedError'
+          ? 'Der Zugang zum Mikrofon wurde verweigert. Erlaube ihn in den Windows-Datenschutz­einstellungen.'
+          : err instanceof Error
+            ? err.message
+            : 'Der Test lief nicht an.'
+      )
     }
   }
+
+  useEffect(() => () => cancelRef.current?.(), [])
 
   const audio = settings.audio
 
@@ -2358,7 +2586,7 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Mikrofon</label>
-        <select
+        <select aria-label="Mikrofon"
           value={audio.inputDeviceId ?? ''}
           onChange={(e) =>
             patch({ audio: { ...audio, inputDeviceId: e.target.value || null } })
@@ -2375,7 +2603,7 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Ausgabegerät</label>
-        <select
+        <select aria-label="Ausgabegerät"
           value={audio.outputDeviceId ?? ''}
           onChange={(e) => patch({ audio: { ...audio, outputDeviceId: e.target.value || null } })}
         >
@@ -2406,6 +2634,11 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
           Der Balken sollte beim normalen Sprechen etwa bis zur Mitte ausschlagen. Bleibt er ganz
           links, ist das falsche Gerät gewählt oder das Mikrofon stummgeschaltet.
         </div>
+        {testError && (
+          <div className="hint err" role="alert">
+            {testError}
+          </div>
+        )}
       </div>
 
       <hr className="section-divider" />
@@ -2466,6 +2699,7 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
           Präsenzanhebung ({audio.outputHighShelfGainDb} dB)
         </label>
         <input
+          aria-label="Präsenzanhebung in Dezibel"
           type="range"
           min={0}
           max={8}
@@ -2484,7 +2718,7 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Pufferzeit: {audio.jitterBufferMs} ms</label>
-        <input
+        <input aria-label="Pufferzeit:"
           type="range"
           min={40}
           max={300}
@@ -2506,7 +2740,7 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Kamera</label>
-        <select
+        <select aria-label="Kamera"
           value={settings.cameraDeviceId ?? ''}
           onChange={(e) => patch({ cameraDeviceId: e.target.value || null })}
         >
@@ -2536,9 +2770,14 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
   const vad = settings.vad
   const wake = settings.wake
   const [wakeAssets, setWakeAssets] = useState<{ installed: boolean; missing: string[]; model: string } | null>(null)
+  /** Die Modellfrage schlug fehl — sonst bliebe der Hinweis für immer „Prüft …". */
+  const [wakeError, setWakeError] = useState<string | null>(null)
   useEffect(() => {
     let active = true
-    void window.jarvis.invoke('wake:status').then(value => { if (active) setWakeAssets(value) }).catch(() => {})
+    void window.jarvis
+      .invoke('wake:status')
+      .then((value) => { if (active) setWakeAssets(value) })
+      .catch((err: unknown) => { if (active) setWakeError(err instanceof Error ? err.message : String(err)) })
     return () => { active = false }
   }, [wake.modelName])
 
@@ -2552,7 +2791,7 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Sprechpause bis er antwortet: {vad.silenceDurationMs} ms</label>
-        <input
+        <input aria-label="Sprechpause bis er antwortet:"
           type="range"
           min={200}
           max={1500}
@@ -2568,7 +2807,7 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Vorlauf: {vad.prefixPaddingMs} ms</label>
-        <input
+        <input aria-label="Vorlauf:"
           type="range"
           min={0}
           max={300}
@@ -2600,7 +2839,7 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Ab welchem Pegel es als Sprache gilt: {vad.localGateThreshold.toFixed(2)}</label>
-        <input
+        <input aria-label="Ab welchem Pegel es als Sprache gilt:"
           type="range"
           min={0.02}
           max={0.4}
@@ -2629,9 +2868,11 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
           Auf das installierte Weckwort reagieren
         </label>
         <div className="hint" style={{ marginLeft: 24 }}>
-          {wakeAssets?.installed ? `Aktiv: ${wakeAssets.model === 'jarvis.onnx' ? '„Hey Jarvis“' : wakeAssets.model === 'hey_james.onnx' ? '„Hey James“' : wakeAssets.model}. Die Erkennung läuft lokal.`
-            : wakeAssets ? `Noch nicht verfügbar: ${wakeAssets.missing.join(', ')} fehlt. Verwende Klick oder Hotkey.`
-            : 'Prüft die lokalen Modelldateien …'}
+          {wakeError
+            ? 'Prüfen ging nicht: ' + wakeError + ' — Bitte Zuhören erneut öffnen.'
+            : wakeAssets?.installed ? `Aktiv: ${wakeAssets.model === 'jarvis.onnx' ? '„Hey Jarvis“' : wakeAssets.model === 'hey_james.onnx' ? '„Hey James“' : wakeAssets.model}. Die Erkennung läuft lokal.`
+              : wakeAssets ? `Noch nicht verfügbar: ${wakeAssets.missing.join(', ')} fehlt. Verwende Klick oder Hotkey.`
+                : 'Prüft die lokalen Modelldateien …'}
         </div>
       </div>
 
@@ -2642,7 +2883,7 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Empfindlichkeit des Weckworts: {wake.threshold.toFixed(2)}</label>
-        <input
+        <input aria-label="Empfindlichkeit des Weckworts:"
           type="range"
           min={0.2}
           max={0.9}
@@ -2658,7 +2899,7 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Tastenkürzel zum Aufwecken</label>
-        <input
+        <input aria-label="Tastenkürzel zum Aufwecken"
           type="text"
           value={wake.pushToTalkHotkey}
           onChange={(e) => patch({ wake: { ...wake, pushToTalkHotkey: e.target.value } })}
@@ -2672,7 +2913,7 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Tastenkürzel zum Stilllegen</label>
-        <input
+        <input aria-label="Tastenkürzel zum Stilllegen"
           type="text"
           value={wake.pauseHotkey}
           onChange={(e) => patch({ wake: { ...wake, pauseHotkey: e.target.value } })}
@@ -2700,7 +2941,7 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Verbindung nach Stille trennen: {wake.idleDisconnectSec} s</label>
-        <input
+        <input aria-label="Verbindung nach Stille trennen:"
           type="range"
           min={0}
           max={300}
@@ -2755,9 +2996,14 @@ const GROUP_LABELS: Record<ToolGroup, string> = {
 
 export function PermissionsSection({ settings, patch }: Props): JSX.Element {
   const [tools, setTools] = useState<ToolMeta[]>([])
+  /** Die Werkzeugliste blieb aus — sonst stünde da stillschweigend gar nichts. */
+  const [loadError, setLoadError] = useState<string | null>(null)
 
   useEffect(() => {
-    void window.jarvis.invoke('tools:list').then(setTools)
+    void window.jarvis
+      .invoke('tools:list')
+      .then(setTools)
+      .catch((err: unknown) => setLoadError(err instanceof Error ? err.message : String(err)))
   }, [])
 
   const grouped = tools.reduce<Record<string, ToolMeta[]>>((acc, tool) => {
@@ -2776,6 +3022,11 @@ export function PermissionsSection({ settings, patch }: Props): JSX.Element {
         Im autonomen Profil führt James erlaubte Aktionen direkt aus. Explizit gesperrte
         Werkzeuge bleiben gesperrt. Bei eingeschalteten Bestätigungen wartet er auf dein Ja.
       </p>
+      {loadError ? (
+        <p className="hint err" role="alert">Die Liste der Werkzeuge ließ sich nicht aufnehmen: {loadError} Bitte die Einstellungen einmal schließen und wieder öffnen.</p>
+      ) : Object.keys(grouped).length === 0 ? (
+        <p className="hint">Sehe nach, was James kann…</p>
+      ) : null}
       <label className="row">
         <input type="checkbox" checked={settings.confirmActions}
           onChange={(e) => patch({ confirmActions: e.target.checked })} />
@@ -2800,6 +3051,7 @@ export function PermissionsSection({ settings, patch }: Props): JSX.Element {
                       <span className="badge missing">fragt immer</span>
                     ) : (
                       <select
+                        aria-label={`Berechtigung für ${tool.name}`}
                         value={settings.permissions[tool.name] ?? ''}
                         onChange={(e) => set(tool.name, e.target.value as ToolPermission)}
                       >
@@ -2837,7 +3089,7 @@ export function SaverSection({ settings, patch }: Props): JSX.Element {
   const saver = settings.tokenSaver
 
   const load = (): void => {
-    void window.jarvis.invoke('tokens:get').then(setReport)
+    void window.jarvis.invoke('tokens:get').then(setReport).catch(() => undefined)
   }
 
   useEffect(load, [])
@@ -2876,7 +3128,7 @@ export function SaverSection({ settings, patch }: Props): JSX.Element {
           Werkzeugergebnisse kürzen auf {saver.maxResultChars || 'unbegrenzt'}
           {saver.maxResultChars ? ' Zeichen' : ''}
         </label>
-        <input
+        <input aria-label="Werkzeugergebnisse kürzen auf"
           type="range"
           min={0}
           max={6000}
@@ -2899,7 +3151,7 @@ export function SaverSection({ settings, patch }: Props): JSX.Element {
           Gleiche Aufrufe zwischenspeichern:{' '}
           {saver.cacheTtlSec ? `${saver.cacheTtlSec} Sekunden` : 'aus'}
         </label>
-        <input
+        <input aria-label="Gleiche Aufrufe zwischenspeichern:"
           type="range"
           min={0}
           max={600}
@@ -2990,7 +3242,7 @@ export function SaverSection({ settings, patch }: Props): JSX.Element {
           <button onClick={load}>Aktualisieren</button>
           <button
             onClick={() => {
-              void window.jarvis.invoke('tokens:reset').then(load)
+              void window.jarvis.invoke('tokens:reset').then(load).catch(() => undefined)
             }}
           >
             Zähler zurücksetzen
@@ -3075,6 +3327,8 @@ export function SmartHomeSection({ settings, patch }: Props): JSX.Element {
     setBusy(true)
     try {
       setStatus(await window.jarvis.invoke('home:status'))
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Die Verbindung ging nicht.')
     } finally {
       setBusy(false)
     }
@@ -3105,6 +3359,8 @@ export function SmartHomeSection({ settings, patch }: Props): JSX.Element {
       await window.jarvis.invoke('secrets:clear', { key: 'homeAssistant' })
       setNote('Entfernt. James kann jetzt keine Geräte mehr schalten.')
       await check()
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Das Entfernen ging nicht.')
     } finally {
       setBusy(false)
     }
@@ -3131,11 +3387,15 @@ export function SmartHomeSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Adresse</label>
-        <input
+        <input aria-label="Adresse"
           type="text"
           value={home.baseUrl}
           placeholder="http://homeassistant.local:8123"
-          onChange={(e) => patch({ smartHome: { ...home, baseUrl: e.target.value.trim() } })}
+          onChange={(e) => patch({ smartHome: { ...home, baseUrl: e.target.value } })}
+          onBlur={(e) => {
+            const url = e.target.value.trim()
+            if (url !== e.target.value) void patch({ smartHome: { ...home, baseUrl: url } })
+          }}
         />
         <p className="hint">
           So, wie du es auch im Browser aufrufst — mit http oder https und mit Port, ohne
@@ -3145,7 +3405,7 @@ export function SmartHomeSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Langlebiger Zugriffstoken</label>
-        <input
+        <input aria-label="Langlebiger Zugriffstoken"
           type="password"
           value={token}
           placeholder={status?.hasToken ? '•••••••• hinterlegt' : 'Noch keiner hinterlegt'}
@@ -3179,7 +3439,7 @@ export function SmartHomeSection({ settings, patch }: Props): JSX.Element {
       </div>
 
       {note && (
-        <p className="hint" style={{ marginBottom: 18 }}>
+        <p className="hint" role="status" style={{ marginBottom: 18 }}>
           {note}
         </p>
       )}
@@ -3249,6 +3509,8 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
     setBusy(true)
     try {
       setStatus(await window.jarvis.invoke('music:status'))
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Der Musikstatus ließ sich nicht aufnehmen.')
     } finally {
       setBusy(false)
     }
@@ -3290,6 +3552,8 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
           : (result.error ?? 'Die Anmeldung ist fehlgeschlagen.')
       )
       await load()
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Die Anmeldung ging nicht.')
     } finally {
       setBusy(false)
     }
@@ -3301,6 +3565,8 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
       await window.jarvis.invoke('music:disconnectSpotify')
       setNote('Abgemeldet. Fernsteuern geht jetzt nur noch über die Ausgabegeräte dieses Rechners.')
       await load()
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Das Abmelden ging nicht.')
     } finally {
       setBusy(false)
     }
@@ -3368,7 +3634,7 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
             <span className="badge missing">keine Client-ID</span>
           )}
         </label>
-        <input
+        <input aria-label="Client-ID"
           type="password"
           value={clientId}
           placeholder={status?.spotify.hasClientId ? '•••••••• hinterlegt' : 'Noch keine hinterlegt'}
@@ -3442,6 +3708,7 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
         </label>
         <div className="row">
           <input
+            aria-label="Apple Team-ID"
             type="password"
             placeholder="Team-ID"
             value={apple.teamId}
@@ -3449,6 +3716,7 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
             autoComplete="off"
           />
           <input
+            aria-label="Apple Key-ID"
             type="password"
             placeholder="Key-ID"
             value={apple.keyId}
@@ -3457,6 +3725,7 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
           />
         </div>
         <textarea
+          aria-label="Inhalt der .p8-Datei"
           rows={4}
           placeholder="Inhalt der .p8-Datei, mit BEGIN- und END-Zeile"
           value={apple.privateKey}
@@ -3483,7 +3752,7 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Apple-Music-Laden</label>
-        <input
+        <input aria-label="Apple-Music-Laden"
           type="text"
           value={music.appleStorefront}
           placeholder="at"
@@ -3553,7 +3822,7 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Standardgerät</label>
-        <select
+        <select aria-label="Standardgerät"
           value={music.defaultDevice}
           onChange={(e) => update({ defaultDevice: e.target.value })}
         >
@@ -3579,7 +3848,7 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Wenn kein Dienst genannt wird</label>
-        <select
+        <select aria-label="Wenn kein Dienst genannt wird"
           value={music.preferred}
           onChange={(e) => update({ preferred: e.target.value as typeof music.preferred })}
         >
@@ -3595,7 +3864,7 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
       {settings.showAdvanced && (
         <div className="field">
           <label>Port für die Spotify-Rückleitung</label>
-          <input
+          <input aria-label="Port für die Spotify-Rückleitung"
             type="number"
             value={music.spotifyRedirectPort}
             onChange={(e) => update({ spotifyRedirectPort: Number(e.target.value) || 8888 })}
@@ -3608,7 +3877,7 @@ export function MusicSection({ settings, patch }: Props): JSX.Element {
         </div>
       )}
 
-      {note && <p className="hint">{note}</p>}
+      {note && <p className="hint" role="status">{note}</p>}
     </>
   )
 }
@@ -3639,7 +3908,11 @@ export function AlexaSection({ settings, patch }: Props): JSX.Element {
   const alexa = settings.alexa
 
   const load = async (): Promise<void> => {
-    setStatus(await window.jarvis.invoke('alexa:status'))
+    try {
+      setStatus(await window.jarvis.invoke('alexa:status'))
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Der Alexa-Status ließ sich nicht aufnehmen.')
+    }
   }
 
   useEffect(() => {
@@ -3670,6 +3943,8 @@ export function AlexaSection({ settings, patch }: Props): JSX.Element {
       const result = await window.jarvis.invoke('alexa:start')
       setStatus(result.status)
       setNote(result.ok ? 'Läuft. Die Adresse unten gehört in die Skill.' : (result.error ?? null))
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Der Tunnel ließ sich nicht aufbauen.')
     } finally {
       setBusy(false)
     }
@@ -3680,6 +3955,8 @@ export function AlexaSection({ settings, patch }: Props): JSX.Element {
     try {
       setStatus(await window.jarvis.invoke('alexa:stop'))
       setNote('Abgeschaltet. Von außen ist dieser Rechner jetzt nicht mehr erreichbar.')
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Das Abschalten ging nicht.')
     } finally {
       setBusy(false)
     }
@@ -3813,7 +4090,7 @@ export function AlexaSection({ settings, patch }: Props): JSX.Element {
             <span className="badge missing">fehlt</span>
           )}
         </label>
-        <input
+        <input aria-label="Skill-Kennung"
           type="password"
           value={skillId}
           placeholder={status?.hasSkillId ? '•••••••• hinterlegt' : 'amzn1.ask.skill.…'}
@@ -3853,11 +4130,15 @@ export function AlexaSection({ settings, patch }: Props): JSX.Element {
       {settings.showAdvanced && (
         <div className="field">
           <label>Feste öffentliche Adresse</label>
-          <input
+          <input aria-label="Feste öffentliche Adresse"
             type="text"
             value={alexa.publicUrl}
             placeholder="leer = die der Telefonie, sonst Tunnel selbst aufbauen"
-            onChange={(e) => update({ publicUrl: e.target.value.trim() })}
+            onChange={(e) => update({ publicUrl: e.target.value })}
+            onBlur={(e) => {
+              const url = e.target.value.trim()
+              if (url !== e.target.value) void update({ publicUrl: url })
+            }}
           />
           <p className="hint">
             Wer eine eigene Adresse hat — ngrok, eine Domain, ein fester cloudflared-Tunnel —,
@@ -3869,7 +4150,7 @@ export function AlexaSection({ settings, patch }: Props): JSX.Element {
         </div>
       )}
 
-      {note && <p className="hint">{note}</p>}
+      {note && <p className="hint" role="status">{note}</p>}
     </>
   )
 }
@@ -3885,6 +4166,8 @@ export function ConnectionsSection(): JSX.Element {
     try {
       setStatus(await window.jarvis.invoke('connect:status', { start: startBrowser }))
       setTimers(await window.jarvis.invoke('timers:list'))
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Die Verbindungsliste ließ sich nicht aufnehmen.')
     } finally {
       setBusy(false)
     }
@@ -3998,7 +4281,7 @@ export function ConnectionsSection(): JSX.Element {
                 <td style={{ width: 90 }}>
                   <button
                     onClick={() => {
-                      void window.jarvis.invoke('timers:cancel', { id: t.id }).then(() => load(false))
+                      void window.jarvis.invoke('timers:cancel', { id: t.id }).then(() => load(false)).catch(() => undefined)
                     }}
                   >
                     Abbrechen
@@ -4021,11 +4304,13 @@ export function AuditSection(): JSX.Element {
   const [entries, setEntries] = useState<AuditEntry[]>([])
   const [health, setHealth] = useState<SelfHealDashboard | null>(null)
   const [repairing, setRepairing] = useState(false)
+  /** Gescheiterte Reparatur — sonst bliebe der Knopf für immer auf „Prüfe und repariere…". */
+  const [repairError, setRepairError] = useState<string | null>(null)
 
   const load = (): void => {
     void Promise.all([
-      window.jarvis.invoke('audit:list', { limit: 200 }),
-      window.jarvis.invoke('selfheal:status', { hours: 24 })
+      window.jarvis.invoke('audit:list', { limit: 200 }).catch<AuditEntry[]>(() => []),
+      window.jarvis.invoke('selfheal:status', { hours: 24 }).catch<SelfHealDashboard | null>(() => null)
     ]).then(([actions, dashboard]) => {
       setEntries(actions)
       setHealth(dashboard)
@@ -4040,8 +4325,11 @@ export function AuditSection(): JSX.Element {
 
   const repair = async (): Promise<void> => {
     setRepairing(true)
+    setRepairError(null)
     try {
       setHealth(await window.jarvis.invoke('selfheal:repair', { restartVoice: true }))
+    } catch (err) {
+      setRepairError(err instanceof Error ? err.message : String(err))
     } finally {
       setRepairing(false)
     }
@@ -4061,13 +4349,19 @@ export function AuditSection(): JSX.Element {
             <strong>Systemzustand</strong>
             <div className="hint">Automatische Prüfung alle fünf Minuten</div>
           </div>
-          <span className={`badge ${health?.automatic ? 'ok' : 'err'}`}>
-            {health?.automatic ? 'Automatik aktiv' : 'Automatik aus'}
+          <span className={`badge ${repairError ?? (health?.automatic === undefined ? 'missing' : health?.automatic ? 'ok' : 'err')}`}>
+            {repairError
+              ? 'Prüfung fehlgeschlagen'
+              : health?.automatic === undefined
+                ? 'wird geladen…'
+                : health?.automatic ? 'Automatik aktiv' : 'Automatik aus'}
           </span>
         </div>
 
         <p className={health?.report.problems.length ? 'hint err' : 'hint ok'}>
-          {health?.report.summary ?? 'Zustand wird geladen…'}
+          {repairError
+            ? `Die Zustandsprüfung ging nicht: ${repairError} — Bitte erneut versuchen.`
+            : (health?.report.summary ?? 'Zustand wird geladen…')}
         </p>
 
         <div className="health-metrics">
@@ -4085,7 +4379,7 @@ export function AuditSection(): JSX.Element {
           </button>
           <button
             className="ghost"
-            onClick={() => void window.jarvis.invoke('selfheal:clear').then(load)}
+            onClick={() => void window.jarvis.invoke('selfheal:clear').then(load).catch(() => undefined)}
             disabled={!health?.recent.length}
           >
             Störungen leeren
@@ -4146,12 +4440,12 @@ export function AuditSection(): JSX.Element {
 
       <div className="row" style={{ marginBottom: 16 }}>
         <button onClick={load}>Aktualisieren</button>
-        <button
-          onClick={() => {
-            void window.jarvis.invoke('audit:clear').then(load)
-          }}
-        >
-          Aktionen leeren
+          <button
+            onClick={() => {
+              void window.jarvis.invoke('audit:clear').then(load).catch(() => undefined)
+            }}
+          >
+            Aktionen leeren
         </button>
       </div>
 
@@ -4217,7 +4511,7 @@ export function ResearchSection(): JSX.Element {
    */
   useEffect(() => {
     const load = (): void => {
-      void window.jarvis.invoke('research:list').then(setRuns)
+      void window.jarvis.invoke('research:list').then(setRuns).catch(() => undefined)
     }
     load()
     const offProgress = window.jarvis.on('research:progress', ({ id, thought }) =>
@@ -4330,7 +4624,10 @@ export function ContactsSection(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
 
   const load = (): void => {
-    void window.jarvis.invoke('contacts:list').then(setItems)
+    void window.jarvis
+      .invoke('contacts:list')
+      .then(setItems)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
   }
 
   useEffect(load, [])
@@ -4368,12 +4665,14 @@ export function ContactsSection(): JSX.Element {
 
       <div className="row" style={{ gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
         <input
+          aria-label="Name des Kontakts"
           placeholder="Name, etwa Anna"
           value={draft.name}
           style={{ flex: '1 1 30%' }}
           onChange={(e) => setDraft({ ...draft, name: e.target.value })}
         />
         <input
+          aria-label="Mailadresse des Kontakts"
           placeholder="anna@beispiel.at"
           value={draft.email}
           spellCheck={false}
@@ -4381,6 +4680,7 @@ export function ContactsSection(): JSX.Element {
           onChange={(e) => setDraft({ ...draft, email: e.target.value })}
         />
         <input
+          aria-label="Telefonnummer des Kontakts"
           placeholder="+43 660 123 4567"
           value={draft.phone}
           inputMode="tel"
@@ -4388,6 +4688,7 @@ export function ContactsSection(): JSX.Element {
           onChange={(e) => setDraft({ ...draft, phone: e.target.value })}
         />
         <input
+          aria-label="Notiz zum Kontakt"
           placeholder="Notiz, optional"
           value={draft.note}
           style={{ flex: '1 1 25%' }}
@@ -4408,7 +4709,7 @@ export function ContactsSection(): JSX.Element {
         )}
       </div>
 
-      <p className="hint" style={{ marginBottom: 18 }}>
+      <p className="hint" role={error ? 'alert' : undefined} style={{ marginBottom: 18 }}>
         {error ??
           (!hasEmail || !hasPhone
             ? 'Mailadresse oder Telefonnummer sieht noch nicht vollständig aus.'
@@ -4443,13 +4744,18 @@ export function ContactsSection(): JSX.Element {
                 <td style={{ width: 90 }}>
                   <button
                     onClick={() => {
-                      void window.jarvis.invoke('contacts:delete', { id: c.id }).then(() => {
-                        if (editing === c.id) {
-                          setEditing(null)
-                          setDraft({ name: '', email: '', phone: '', note: '' })
-                        }
-                        load()
-                      })
+                      void window.jarvis
+                        .invoke('contacts:delete', { id: c.id })
+                        .then(() => {
+                          if (editing === c.id) {
+                            setEditing(null)
+                            setDraft({ name: '', email: '', phone: '', note: '' })
+                          }
+                          load()
+                        })
+                        .catch((err: unknown) => {
+                          setError(err instanceof Error ? err.message : 'Löschen fehlgeschlagen.')
+                        })
                     }}
                   >
                     Löschen
@@ -4490,9 +4796,18 @@ export function MemorySection(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
 
   const load = (): void => {
-    void window.jarvis.invoke('memory:list', {}).then(setItems)
-    void window.jarvis.invoke('schedule:list').then(setSchedules)
-    void window.jarvis.invoke('watch:list').then(setWatches)
+    void window.jarvis
+      .invoke('memory:list', {})
+      .then(setItems)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+    void window.jarvis
+      .invoke('schedule:list')
+      .then(setSchedules)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
+    void window.jarvis
+      .invoke('watch:list')
+      .then(setWatches)
+      .catch((err: unknown) => setError(err instanceof Error ? err.message : String(err)))
   }
 
   useEffect(load, [])
@@ -4538,6 +4853,7 @@ export function MemorySection(): JSX.Element {
 
       <div className="row" style={{ gap: 10, alignItems: 'flex-start', marginBottom: 8 }}>
         <input
+          aria-label="Neue Notiz: vollständiger Satz"
           placeholder="Vollständiger Satz, etwa: Ich trinke Kaffee schwarz."
           value={draft}
           style={{ flex: '1 1 60%' }}
@@ -4548,6 +4864,7 @@ export function MemorySection(): JSX.Element {
             Übernehmen folgenlos bliebe, wäre eine Lüge im Formular. */}
         {editing === null && (
           <select
+            aria-label="Art der Notiz"
             value={kind}
             style={{ flex: '0 0 auto' }}
             onChange={(e) => setKind(e.target.value as MemoryEntry['kind'])}
@@ -4565,7 +4882,7 @@ export function MemorySection(): JSX.Element {
         {editing !== null && <button onClick={reset}>Abbrechen</button>}
       </div>
 
-      <p className="hint" style={{ marginBottom: 18 }}>
+      <p className="hint" role={error ? 'alert' : undefined} style={{ marginBottom: 18 }}>
         {error ??
           'Schreib es als ganzen Satz, so wie James es sich merken würde — daran sucht er ' +
             'später. Ein Stichwort findet er schlechter wieder.'}
@@ -4599,13 +4916,18 @@ export function MemorySection(): JSX.Element {
                 <td style={{ width: 90 }}>
                   <button
                     onClick={() => {
-                      void window.jarvis.invoke('memory:delete', { id: m.id }).then(() => {
-                        // Die gerade bearbeitete Zeile zu löschen, ohne das
-                        // Formular zu räumen, hinterließe ein „Übernehmen", das
-                        // auf eine Nummer zeigt, die es nicht mehr gibt.
-                        if (editing === m.id) reset()
-                        load()
-                      })
+                      void window.jarvis
+                        .invoke('memory:delete', { id: m.id })
+                        .then(() => {
+                          // Die gerade bearbeitete Zeile zu löschen, ohne das
+                          // Formular zu räumen, hinterließe ein „Übernehmen", das
+                          // auf eine Nummer zeigt, die es nicht mehr gibt.
+                          if (editing === m.id) reset()
+                          load()
+                        })
+                        .catch((err: unknown) => {
+                          setError(err instanceof Error ? err.message : 'Löschen fehlgeschlagen.')
+                        })
                     }}
                   >
                     Löschen
@@ -4636,7 +4958,12 @@ export function MemorySection(): JSX.Element {
                 <td style={{ width: 90 }}>
                   <button
                     onClick={() => {
-                      void window.jarvis.invoke('schedule:delete', { id: s.id }).then(load)
+                      void window.jarvis
+                        .invoke('schedule:delete', { id: s.id })
+                        .then(load)
+                        .catch((err: unknown) => {
+                          setError(err instanceof Error ? err.message : 'Löschen fehlgeschlagen.')
+                        })
                     }}
                   >
                     Löschen
@@ -4668,7 +4995,12 @@ export function MemorySection(): JSX.Element {
                 <td style={{ width: 90 }}>
                   <button
                     onClick={() => {
-                      void window.jarvis.invoke('watch:delete', { id: w.id }).then(load)
+                      void window.jarvis
+                        .invoke('watch:delete', { id: w.id })
+                        .then(load)
+                        .catch((err: unknown) => {
+                          setError(err instanceof Error ? err.message : 'Löschen fehlgeschlagen.')
+                        })
                     }}
                   >
                     Löschen
@@ -4703,14 +5035,25 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
   const [busy, setBusy] = useState(false)
 
   const load = async (): Promise<void> => {
-    setStatus(await window.jarvis.invoke('companion:status'))
+    try {
+      setStatus(await window.jarvis.invoke('companion:status'))
+    } catch (err) {
+      // Bei ausgeschalteter Fernbedienung ist „kein Status" normal und kein
+      // Grund zur Meldung.
+      if (settings.companion.enabled) {
+        setNote(err instanceof Error ? err.message : 'Der Status ließ sich nicht aufnehmen.')
+      }
+    }
   }
 
   // Die Leiter wird nicht mitgetaktet: Sie ruft `tailscale cert` auf, und das
   // ist ein Prozessstart. Einmal beim Öffnen und nach jedem Knopfdruck reicht —
   // was sich dazwischen ändert, ändert sich nicht von selbst.
   useEffect(() => {
-    void window.jarvis.invoke('companion:setup').then(setSetup)
+    void window.jarvis
+      .invoke('companion:setup')
+      .then(setSetup)
+      .catch((err: unknown) => setNote(err instanceof Error ? err.message : String(err)))
   }, [settings.companion.enabled])
 
   /**
@@ -4733,6 +5076,8 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
       } else {
         setSetup(await window.jarvis.invoke('companion:runSetup', { action }))
       }
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Die Einrichtung ging nicht.')
     } finally {
       setBusy(false)
     }
@@ -4751,6 +5096,8 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
     try {
       setStatus(await window.jarvis.invoke('companion:rotateToken'))
       setNote('Neue Marke. Alle gekoppelten Telefone müssen noch einmal verbunden werden.')
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Der Wechsel ging nicht.')
     } finally {
       setBusy(false)
     }
@@ -4760,6 +5107,8 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
     setBusy(true)
     try {
       setReadiness(await window.jarvis.invoke('companion:wakeReadiness'))
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Die Prüfung ging nicht.')
     } finally {
       setBusy(false)
     }
@@ -4771,6 +5120,8 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
       const result = await window.jarvis.invoke('companion:armWake')
       setNote(result.note)
       setReadiness(await window.jarvis.invoke('companion:wakeReadiness'))
+    } catch (err) {
+      setNote(err instanceof Error ? err.message : 'Das Aufwachen ließ sich nicht einschalten.')
     } finally {
       setBusy(false)
     }
@@ -4994,7 +5345,7 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
         </p>
       )}
 
-      {note && <p className="hint">{note}</p>}
+      {note && <p className="hint" role="status">{note}</p>}
     </>
   )
 }

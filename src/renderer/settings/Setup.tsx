@@ -244,6 +244,7 @@ function KeyStep({ hasKey, onDone, settings, patch }: {
 
       <div className="field">
         <input
+          aria-label={mode === 'openai' ? 'OpenAI API-Schlüssel' : 'Gemini API-Schlüssel'}
           type="password"
           autoFocus
           placeholder="Hier einfügen…"
@@ -300,7 +301,7 @@ function MicStep({
   const deviceId = settings.audio.inputDeviceId
 
   useEffect(() => {
-    void listAudioDevices().then((d) => setInputs(d.inputs))
+    void listAudioDevices().then((d) => setInputs(d.inputs)).catch(() => undefined)
   }, [])
 
   // Bei jedem Gerätewechsel neu aufbauen: Ein Analyser hängt fest an dem
@@ -365,7 +366,7 @@ function MicStep({
 
       <div className="field">
         <label>Gerät</label>
-        <select
+        <select aria-label="Gerät"
           value={deviceId ?? ''}
           onChange={(e) => {
             setPeak(0)

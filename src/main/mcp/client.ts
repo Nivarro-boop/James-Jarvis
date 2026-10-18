@@ -1,9 +1,16 @@
 import { z } from 'zod'
-import { register, unregisterGroup, type ToolDefinition } from '../tools/registry'
+import { createHash } from 'node:crypto'
+import type { Tool } from '@modelcontextprotocol/sdk/types.js'
+import { register, unregisterTool, type ToolDefinition } from '../tools/registry'
 import { getSettings } from '../store/settings'
 import { getMcpSecret } from '../secrets/keystore'
 import type { McpServerConfig, McpServerStatus } from '@shared/types'
-import { JarvisOAuthProvider, LoginRequiredError, waitForCallback } from './oauth'
+import { resolveMcpHeaders, validateMcpUrl } from '@shared/mcp'
+import { abortable } from '@shared/async'
+import { JarvisOAuthProvider, waitForCallback } from './oauth'
+import { expandMcpEnvironment, mcpEnvironment, mcpToolName } from './configuration'
+import { McpLifecycle } from './lifecycle'
+import { sendToCrystal } from '../ipc/emit'
 
 /**
  * MCP-Client.
@@ -17,24 +24,8 @@ import { JarvisOAuthProvider, LoginRequiredError, waitForCallback } from './oaut
  * Server mit einem `search`-Tool sich gegenseitig überschreiben.
  */
 
-interface ActiveServer {
-  id: string
-  name: string
-  close: () => Promise<void>
-}
-
-const active: ActiveServer[] = []
-
-/**
- * Wie es jedem eingetragenen Server beim letzten Laden ergangen ist.
- *
- * Die Einstellungen zeigen das an der Karte des Servers. Vorher musste man
- * die Werkzeugliste nach dem Präfix durchsuchen und raten, warum einer fehlt.
- */
-const status = new Map<string, McpServerStatus>()
-
 export function mcpStatus(): Record<string, McpServerStatus> {
-  return Object.fromEntries(status)
+  return lifecycle.status()
 }
 
 /**
@@ -53,30 +44,6 @@ const CONNECT_TIMEOUT_MS = 30_000
  * Versuch, und beim zweiten lag das Paket dann im Cache.
  */
 const FIRST_CONNECT_TIMEOUT_MS = 120_000
-
-/**
- * `%USERPROFILE%` und Verwandte auflösen.
- *
- * Der Server wird ohne Shell gestartet, also ersetzt niemand sonst die
- * Platzhalter — die Vorlage fürs Dateisystem bekäme sonst wörtlich
- * „%USERPROFILE%" als Ordner.
- */
-function expandEnv(value: string, env: Record<string, string>): string {
-  return value.replace(/%([A-Za-z_][A-Za-z0-9_]*)%/g, (whole, name: string) => {
-    const hit = Object.keys(env).find((k) => k.toLowerCase() === name.toLowerCase())
-    return hit ? env[hit] : whole
-  })
-}
-
-/** Umgebung für den Serverprozess: System, eigene Variablen, Schlüssel aus dem Keystore. */
-function serverEnv(config: McpServerConfig): Record<string, string> {
-  const env: Record<string, string> = { ...(process.env as Record<string, string>), ...(config.env ?? {}) }
-  for (const name of config.secretEnv ?? []) {
-    const value = getMcpSecret(config.id, name)
-    if (value) env[name] = value
-  }
-  return env
-}
 
 function withTimeout<T>(work: Promise<T>, ms: number, what: string): Promise<T> {
   let timer: NodeJS.Timeout | undefined
@@ -137,56 +104,37 @@ function jsonSchemaToZod(schema: unknown): z.ZodTypeAny {
   }
 }
 
-/**
- * Neuladen, eins nach dem anderen.
- *
- * Beim Start lädt die App, und wer gleich danach in den Einstellungen auf
- * „neu laden" drückt, startet einen zweiten Lauf. Gleichzeitig räumten beide
- * die Liste ab und trugen dieselben Werkzeuge ein — der zweite scheiterte an
- * „doppelt registriert", und dessen Serverprozesse liefen ohne Verwaltung weiter.
- */
-let reloadQueue: Promise<void> = Promise.resolve()
-
 export function reloadMcpServers(): Promise<void> {
-  const run = reloadQueue.then(() => reloadMcpServersNow())
-  reloadQueue = run.catch(() => undefined)
-  return run
+  return lifecycle.reload()
 }
 
 type SdkClient = InstanceType<typeof import('@modelcontextprotocol/sdk/client/index.js').Client>
 
-/** Ferne Server nur über https — außer zum Ausprobieren auf diesem Rechner. */
-function remoteUrl(raw: string): URL {
-  const url = new URL(raw)
-  if (url.protocol !== 'https:' && url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') {
-    throw new Error('Ferne MCP-Server nur über https.')
-  }
-  return url
-}
-
 /** Verbindung aufbauen, über die Kommandozeile oder über eine Adresse. */
-async function connect(config: McpServerConfig): Promise<SdkClient> {
+async function connect(config: McpServerConfig, signal: AbortSignal): Promise<SdkClient> {
   const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
   const client = new Client({ name: 'void-jarvis', version: '0.1.0' }, { capabilities: {} })
 
   try {
     if (config.url) {
       const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js')
-      const transport = new StreamableHTTPClientTransport(remoteUrl(config.url), {
-        authProvider: new JarvisOAuthProvider(config.id, config.name, false)
+      const hasHeaders = Object.keys(config.headers ?? {}).length > 0
+      const transport = new StreamableHTTPClientTransport(validateMcpUrl(config.url), {
+        ...(hasHeaders ? {} : { authProvider: new JarvisOAuthProvider(config.id, config.name, false) }),
+        requestInit: { headers: resolveMcpHeaders(config, name => getMcpSecret(config.id, name)) }
       })
-      await withTimeout(client.connect(transport), CONNECT_TIMEOUT_MS, config.name)
+      await client.connect(transport, { timeout: CONNECT_TIMEOUT_MS, signal })
       return client
     }
 
-    const { StdioClientTransport } = await import('@modelcontextprotocol/sdk/client/stdio.js')
-    const env = serverEnv(config)
+    const { StdioClientTransport, getDefaultEnvironment } = await import('@modelcontextprotocol/sdk/client/stdio.js')
+    const env = mcpEnvironment(config, getDefaultEnvironment(), name => getMcpSecret(config.id, name))
     const transport = new StdioClientTransport({
-      command: config.command,
-      args: config.args.map((arg) => expandEnv(arg, env)),
+      command: expandMcpEnvironment(config.command, env),
+      args: config.args.map((arg) => expandMcpEnvironment(arg, env)),
       env
     })
-    await withTimeout(client.connect(transport), FIRST_CONNECT_TIMEOUT_MS, config.name)
+    await client.connect(transport, { timeout: FIRST_CONNECT_TIMEOUT_MS, signal })
     return client
   } catch (err) {
     // Sein Prozess läuft womöglich schon — ohne Schließen bliebe er verwaist.
@@ -195,12 +143,11 @@ async function connect(config: McpServerConfig): Promise<SdkClient> {
   }
 }
 
-/** Die Werkzeuge eines verbundenen Servers in die Registry eintragen. */
-async function registerServerTools(config: McpServerConfig, connected: SdkClient): Promise<number> {
-  const { tools } = await withTimeout(connected.listTools(), CONNECT_TIMEOUT_MS, config.name)
-  for (const tool of tools) {
-    const readOnly = tool.annotations?.readOnlyHint === true
-    const localName = `mcp_${config.id}_${tool.name}`.replace(/[^a-zA-Z0-9_]/g, '_').slice(0, 63)
+/** Definitionen zuerst vollständig aufbauen; die Lifecycle ersetzt sie danach atomar. */
+export function serverToolDefinitions(config: McpServerConfig, connected: SdkClient, tools: Tool[]): ToolDefinition[] {
+  return tools.map(tool => {
+    const readOnly = tool.annotations?.readOnlyHint === true && !ALWAYS_ASK.test(tool.name)
+    const localName = mcpToolName(config.id, tool.name)
     const def: ToolDefinition = {
       name: localName,
       group: 'mcp',
@@ -213,8 +160,13 @@ async function registerServerTools(config: McpServerConfig, connected: SdkClient
       // nur Code ausführen, Dateien hochladen und Ähnliches bleibt fest.
       readOnly,
       alwaysAsk: !readOnly && ALWAYS_ASK.test(tool.name),
-      async execute(args) {
-        const res = await connected.callTool({ name: tool.name, arguments: args as Record<string, unknown> })
+      async execute(args, context) {
+        context.signal.throwIfAborted()
+        const res = await connected.callTool({ name: tool.name, arguments: args as Record<string, unknown> }, undefined, {
+          signal: context.signal,
+          timeout: 60_000,
+          maxTotalTimeout: 60_000
+        })
         // Ein Werkzeugfehler kommt bei MCP als gewöhnliche Antwort mit
         // `isError`. Durchgereicht als Ergebnis stand im Aktionslog
         // „erfolgreich", und James meldete den Fehlertext als Erfolg.
@@ -230,58 +182,24 @@ async function registerServerTools(config: McpServerConfig, connected: SdkClient
         return res.content
       }
     }
-    try {
-      register(def)
-    } catch (err) {
-      console.error(`[mcp] Tool ${localName} konnte nicht registriert werden:`, err)
-    }
-  }
-  return tools.length
+    return def
+  })
 }
 
-async function reloadMcpServersNow(): Promise<void> {
-  for (const server of active) {
-    try {
-      await server.close()
-    } catch (err) {
-      console.error(`[mcp] Konnte ${server.name} nicht sauber schließen:`, err)
-    }
-  }
-  active.length = 0
-  unregisterGroup('mcp')
-  status.clear()
-
-  for (const config of getSettings().mcpServers) {
-    if (!config.enabled) {
-      status.set(config.id, { state: 'off', tools: 0 })
-      continue
-    }
-    const missing = (config.secretEnv ?? []).filter((name) => !getMcpSecret(config.id, name))
-    if (missing.length > 0) {
-      // Ohne Schlüssel startet der Server meist trotzdem und scheitert erst
-      // beim ersten Aufruf — mit einer Meldung, die niemand zuordnen kann.
-      status.set(config.id, { state: 'key', tools: 0, error: `Schlüssel fehlt: ${missing.join(', ')}` })
-      continue
-    }
-    try {
-      const connected = await connect(config)
-      const count = await registerServerTools(config, connected)
-      active.push({ id: config.id, name: config.name, close: () => connected.close() })
-      status.set(config.id, { state: 'ok', tools: count })
-      console.log(`[mcp] ${config.name}: ${count} Werkzeuge geladen`)
-    } catch (err) {
-      // Ein kaputter MCP-Server darf den Start nicht blockieren.
-      const message = err instanceof Error ? err.message : String(err)
-      const login = Boolean(config.url) && (err instanceof LoginRequiredError || /unauthorized|401/i.test(message))
-      status.set(config.id, { state: login ? 'login' : 'error', tools: 0, error: message.slice(0, 300) })
-      // Eine fehlende Anmeldung ist kein Fehler, sondern ein ausstehender
-      // Schritt des Nutzers — als Fehler geloggt zählte die Selbstheilung sie
-      // als kaputtes Werkzeug.
-      if (login) console.warn(`[mcp] ${config.name}: Anmeldung nötig.`)
-      else console.error(`[mcp] ${config.name} nicht erreichbar:`, message)
-    }
-  }
-}
+const lifecycle = new McpLifecycle({
+  configs: () => getSettings().mcpServers,
+  fingerprint: () => {
+    const configs = getSettings().mcpServers
+    const secrets = configs.map(config => (config.secretEnv ?? []).map(name => getMcpSecret(config.id, name)))
+    return createHash('sha256').update(JSON.stringify({ configs, secrets })).digest('hex')
+  },
+  missingSecrets: config => (config.secretEnv ?? []).filter(name => !getMcpSecret(config.id, name)),
+  connect,
+  definitions: serverToolDefinitions,
+  register,
+  unregister: tool => unregisterTool(tool.name, tool),
+  onToolsChanged: () => { sendToCrystal('session:forceReconnect', undefined) }
+})
 
 /**
  * Bei einem fernen Server anmelden.
@@ -291,42 +209,48 @@ async function reloadMcpServersNow(): Promise<void> {
  * die beiden nicht in die Quere kommen.
  */
 export function loginMcpServer(id: string): Promise<void> {
-  const run = reloadQueue.then(async () => {
+  return lifecycle.exclusive(async () => {
     const config = getSettings().mcpServers.find((s) => s.id === id)
     if (!config?.url) throw new Error('Diesen fernen MCP-Server gibt es nicht.')
+    if (Object.keys(config.headers ?? {}).length) {
+      resolveMcpHeaders(config, name => getMcpSecret(config.id, name))
+      await lifecycle.reloadNow()
+      return
+    }
     const provider = new JarvisOAuthProvider(config.id, config.name, true)
     const callback = waitForCallback(provider.stateValue)
     // Der Rückkanal kann scheitern, bevor jemand auf ihn wartet — etwa wenn
     // der Port belegt ist. Ohne diesen Fänger wäre das ein unbehandelter Fehler.
     callback.code.catch(() => undefined)
+    let probe: SdkClient | undefined
     try {
       const { StreamableHTTPClientTransport } = await import('@modelcontextprotocol/sdk/client/streamableHttp.js')
       const { Client } = await import('@modelcontextprotocol/sdk/client/index.js')
-      const transport = new StreamableHTTPClientTransport(remoteUrl(config.url), { authProvider: provider })
-      const probe = new Client({ name: 'void-jarvis', version: '0.1.0' }, { capabilities: {} })
+      const transport = new StreamableHTTPClientTransport(validateMcpUrl(config.url), {
+        authProvider: provider,
+        requestInit: { headers: resolveMcpHeaders(config, name => getMcpSecret(config.id, name)) }
+      })
+      probe = new Client({ name: 'void-jarvis', version: '0.1.0' }, { capabilities: {} })
       let needsCode = true
       try {
         // Mit gültigem Token klappt das sofort, dann ist nichts weiter zu tun.
-        await withTimeout(probe.connect(transport), CONNECT_TIMEOUT_MS, config.name)
+        await withTimeout(probe.connect(transport, { signal: lifecycle.signal }), CONNECT_TIMEOUT_MS, config.name)
         needsCode = false
-        await probe.close()
       } catch (err) {
         if (!/unauthorized|401/i.test(String(err))) throw err
       }
       if (needsCode) {
-        const code = await callback.code
+        const code = await abortable(callback.code, lifecycle.signal)
         await transport.finishAuth(code)
       }
     } finally {
+      if (probe) await withTimeout(probe.close(), 5_000, config.name).catch(() => undefined)
       callback.close()
     }
-    await reloadMcpServersNow()
+    await lifecycle.reloadNow()
   })
-  reloadQueue = run.catch(() => undefined)
-  return run
 }
 
 export async function shutdownMcp(): Promise<void> {
-  await Promise.allSettled(active.map((s) => s.close()))
-  active.length = 0
+  await lifecycle.shutdown()
 }

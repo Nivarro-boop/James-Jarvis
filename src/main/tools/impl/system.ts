@@ -1,4 +1,8 @@
-import { clipboard, shell } from 'electron'
+import { app, clipboard, shell } from 'electron'
+import { statfs } from 'node:fs/promises'
+import { arch, cpus, freemem, totalmem } from 'node:os'
+import { evaluateSystem } from '@shared/systemCheck'
+import { getCrystalWindow } from '../../windows/crystal'
 import { z } from 'zod'
 import { defineTool, type ToolDefinition } from '../registry'
 import {
@@ -228,7 +232,76 @@ const writeClipboard = defineTool({
   }
 }) as ToolDefinition
 
+/** Antwortzeit einer kleinen Anfrage, `null` ohne Netz. */
+async function pingInternet(): Promise<number | null> {
+  for (const url of ['https://www.gstatic.com/generate_204', 'https://cloudflare.com/cdn-cgi/trace']) {
+    const t0 = Date.now()
+    try {
+      await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(4000) })
+      return Date.now() - t0
+    } catch {
+      // nächste Adresse versuchen
+    }
+  }
+  return null
+}
+
+/**
+ * Mikrofone und Lautsprecher zählt das Kristallfenster. Der Hauptprozess sieht
+ * keine Audiogeräte; `enumerateDevices` liefert die Arten auch ohne Freigabe.
+ */
+async function countAudio(): Promise<{ microphones: number | null; speakers: number | null }> {
+  const win = getCrystalWindow()
+  if (!win || win.isDestroyed()) return { microphones: null, speakers: null }
+  try {
+    const kinds = (await Promise.race([
+      win.webContents.executeJavaScript(
+        'navigator.mediaDevices.enumerateDevices().then(d => d.map(x => x.kind))',
+        true
+      ),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+    ])) as string[]
+    return {
+      microphones: kinds.filter((k) => k === 'audioinput').length,
+      speakers: kinds.filter((k) => k === 'audiooutput').length
+    }
+  } catch {
+    return { microphones: null, speakers: null }
+  }
+}
+
+const systemCheck = defineTool({
+  name: 'system_check',
+  group: 'system',
+  description:
+    'Prüft den Rechner: Arbeitsspeicher, Prozessor, freier Speicherplatz, Internet, Mikrofon und ' +
+    'Lautsprecher. Für "reicht mein PC", "warum hörst du mich nicht", "warum bist du so langsam", ' +
+    '"prüf meinen Rechner". Nur lesen. Lies dem Nutzer den Gesamtsatz und nur die Punkte mit Problem vor.',
+  schema: z.object({}),
+  readOnly: true,
+  spokenHint: 'Ich schau mir kurz deinen Rechner an.',
+  async execute() {
+    const [internetMs, audio, disk] = await Promise.all([
+      pingInternet(),
+      countAudio(),
+      statfs(app.getPath('userData')).then((s) => s.bavail * s.bsize).catch(() => null)
+    ])
+    const list = cpus()
+    return evaluateSystem({
+      totalMemBytes: totalmem(),
+      freeMemBytes: freemem(),
+      cpuModel: list[0]?.model?.trim() ?? 'unbekannt',
+      cpuCores: list.length,
+      arch: arch(),
+      freeDiskBytes: disk,
+      internetMs,
+      ...audio
+    })
+  }
+}) as ToolDefinition
+
 export const systemTools: ToolDefinition[] = [
+  systemCheck,
   openApp,
   openUrl,
   focus,

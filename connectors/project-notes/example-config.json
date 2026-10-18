@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "project-notes": {
+      "command": "node",
+      "args": [
+        "C:/Pfad/zu/James-Jarvis/connectors/project-notes/server.mjs",
+        "C:/Meine freigegebenen Notizen"
+      ]
+    }
+  }
+}

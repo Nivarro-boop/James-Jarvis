@@ -1,4 +1,4 @@
-import type { Persona } from '../types'
+import type { Persona, Personality } from '../types'
 
 /**
  * System-Prompt für die Sprachschleife.
@@ -73,6 +73,56 @@ Du bist sachlich, knapp und zugewandt. Kein Vorgeplänkel, keine Begeisterung,
 keine Beteuerungen. Du sagst, was ist, und wenn du etwas besser weißt,
 widersprichst du in einem Satz.
 `.trim()
+
+/**
+ * Warm, aber nicht beflissen. Der Unterschied zu „sachlich" ist ein Satz
+ * Anteilnahme, wo sie passt — nicht Ausrufezeichen und nicht „Gerne!".
+ */
+const PERSONA_WARM = `
+Du bist James — der persönliche Assistent des Nutzers. Ihr duzt euch.
+
+Du bist herzlich und ruhig. Du merkst, wie es dem Nutzer geht, und sagst es in
+einem kurzen Satz, wenn es passt — etwa nach einem langen Tag oder wenn etwas
+geklappt hat. Danach kommt die Sache. Keine Ausrufezeichen, kein "Gerne!", keine
+Beteuerungen. Wenn du etwas besser weißt, sagst du es freundlich in einem Satz.
+`.trim()
+
+const HUMOR_LINES = [
+  'Humor: keiner. Keine trockenen Zusätze, keine Pointen.',
+  'Humor: selten. Ein trockener Halbsatz nur, wenn er wirklich etwas trägt.',
+  'Humor: gelegentlich. Ein trockener Halbsatz, wenn die Lage es hergibt — immer nach der Antwort, nie statt ihr.',
+  'Humor: gern. Du darfst öfter einen trockenen Halbsatz anhängen, aber nie bei schlechten Nachrichten und nie statt der Antwort.'
+]
+
+/**
+ * Die Regler als eigener Block hinter der Haltung. Er steht danach, damit er
+ * die Haltung überstimmt — „Anrede: du" schlägt das Siezen der Butler-Haltung.
+ */
+/**
+ * Ein Beispielsatz im eingestellten Ton, für die Hörprobe in den
+ * Einstellungen. Fest geschrieben statt vom Modell erzeugt: Die Probe soll
+ * sofort klingen und kein Guthaben kosten.
+ */
+export function personaPreviewText(s: { persona: Persona; personality: Personality }): string {
+  const name = s.personality.name.trim() || 'James'
+  const sie = s.personality.address === 'sie' || (s.personality.address === 'auto' && s.persona === 'jarvis')
+  const greet = s.persona === 'jarvis' && s.personality.address !== 'du' ? 'Guten Abend, Sir.' : s.persona === 'herzlich' ? 'Hey, schön, dass du da bist.' : 'Hallo.'
+  const body = sie
+    ? `Hier ist ${name}. Ihr Rechner läuft seit vier Stunden, und Ihr Paket kommt morgen zwischen zehn und zwölf.`
+    : `Hier ist ${name}. Dein Rechner läuft seit vier Stunden, und dein Paket kommt morgen zwischen zehn und zwölf.`
+  const jokes = ['', '', ' Pünktlich, für einen Paketdienst.', ' Pünktlich, für einen Paketdienst. Ich würde trotzdem nicht darauf wetten.']
+  return `${greet} ${body}${jokes[Math.max(0, Math.min(3, Math.round(s.personality.humor)))]}`
+}
+
+export function personalityBlock(persona: Persona, p: Personality): string {
+  const lines = ['## Feineinstellung (überstimmt die Haltung oben)', '']
+  const name = p.name.trim()
+  if (name && name !== 'James') lines.push(`Dein Name ist ${name}, nicht James. Stell dich so vor und reagiere darauf.`)
+  if (p.address === 'du') lines.push('Anrede: Du duzt den Nutzer. Kein "Sir".')
+  if (p.address === 'sie') lines.push(persona === 'jarvis' ? 'Anrede: Du siezt den Nutzer.' : 'Anrede: Du siezt den Nutzer, höflich, aber ohne "Sir".')
+  lines.push(HUMOR_LINES[Math.max(0, Math.min(3, Math.round(p.humor)))])
+  return lines.join('\n')
+}
 
 const SYSTEM_PROMPT_BODY = `
 ## Wie du sprichst
@@ -365,8 +415,9 @@ export function guidesForTools(names: string[]): string {
 }
 
 /** Haltung und Handwerk, zusammengesetzt. `lazy`: ohne die Fachabschnitte. */
-export function systemPromptDe(persona: Persona, lazy = false): string {
-  const head = persona === 'sachlich' ? PERSONA_PLAIN : PERSONA_JARVIS
+export function systemPromptDe(persona: Persona, lazy = false, personality?: Personality): string {
+  const base = persona === 'sachlich' ? PERSONA_PLAIN : persona === 'herzlich' ? PERSONA_WARM : PERSONA_JARVIS
+  const head = personality ? `${base}\n\n${personalityBlock(persona, personality)}` : base
   const body = lazy
     ? sections()
         .filter((s) => !GUIDE_TOOLS[s.heading])

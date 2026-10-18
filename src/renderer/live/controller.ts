@@ -429,7 +429,7 @@ export class JarvisController {
 
     if (this.disposed || revision !== this.pauseRevision) return
     this.onPauseChange?.(paused, next)
-    void window.jarvis.invoke('app:pauseState', { paused, until: next })
+    void window.jarvis.invoke('app:pauseState', { paused, until: next }).catch(() => undefined)
   }
 
   // ─────────────────────────────────────────────────────────
@@ -912,7 +912,7 @@ export class JarvisController {
     void window.jarvis.invoke('tokens:record', {
       kind: 'silence',
       tokens: Math.round(seconds * COST_ESTIMATES.AUDIO_TOKENS_PER_SECOND)
-    })
+    }).catch(() => undefined)
   }
 }
 

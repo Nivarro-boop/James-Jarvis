@@ -60,10 +60,24 @@ function findTests(dir) {
   return found
 }
 
-const entries = findTests(testDir)
+let entries = findTests(testDir)
 if (entries.length === 0) {
   console.error('Keine Tests gefunden — erwartet werden tests/**/*.test.ts')
   process.exit(1)
+}
+const fileFilters = testArgs.filter((arg) => !arg.startsWith('-'))
+if (fileFilters.length > 0) {
+  entries = entries.filter((e) =>
+    fileFilters.some((f) => {
+      const normF = f.replace(/\\/g, '/')
+      const normE = e.replace(/\\/g, '/')
+      return normE.endsWith(normF) || normE.includes(normF)
+    })
+  )
+  if (entries.length === 0) {
+    console.error(`Keine passenden Tests für Filter: ${fileFilters.join(', ')}`)
+    process.exit(1)
+  }
 }
 
 await build({
@@ -98,7 +112,7 @@ const built = entries.map((e) =>
 // Der Electron-Ersatz geht über NODE_OPTIONS und nicht als Flag: `node --test`
 // startet jede Testdatei in einem eigenen Prozess, und nur die Umgebung erbt
 // sich dorthin sicher weiter.
-const child = spawn(process.execPath, ['--test', ...(lowResource ? ['--test-concurrency=1'] : []), ...testArgs, ...built], {
+const child = spawn(process.execPath, ['--test', ...(lowResource ? ['--test-concurrency=1'] : []), ...testArgs.filter(a => a.startsWith('-')), ...built], {
   stdio: 'inherit',
   cwd: root,
   env: {

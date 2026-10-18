@@ -27,6 +27,7 @@ export const DEFAULT_SETTINGS: Settings = {
   // warum das Ding James heißt. Wem das zu viel Butler ist, stellt auf
   // sachlich um — der Inhalt bleibt derselbe, nur der Ton nicht.
   persona: 'jarvis',
+  personality: { humor: 1, address: 'auto', name: 'James' },
 
   /**
    * Drei Wege, und sie stehen absichtlich nicht gleich.

@@ -25,6 +25,7 @@ import { minecraftTools } from './impl/minecraft'
 import { higgsfieldTools } from './impl/higgsfield'
 import { selfHealTools } from './impl/selfheal'
 import { calendarTools } from './impl/calendar'
+import { calendarLinkTools } from './impl/calendarLink'
 import { stocksTools } from './impl/stocks'
 import { knowledgeTools } from './impl/knowledge'
 import { officeTools } from './impl/office'
@@ -40,6 +41,7 @@ import { toolSearchTools } from './impl/toolSearch'
 import { selfConfigTools } from './impl/selfConfig'
 import { linphoneTools } from './impl/linphone'
 import { capabilityGapTools } from './impl/capabilityGap'
+import { brainTools } from './impl/brain'
 
 /**
  * Sammelstelle aller Werkzeuge.
@@ -60,6 +62,7 @@ export function registerAllTools(): void {
   unregisterBuiltins()
   registerAll([
     ...toolSearchTools,
+    ...brainTools,
     ...selfConfigTools,
     ...linphoneTools,
     ...webTools,
@@ -102,6 +105,7 @@ export function registerAllTools(): void {
     ...higgsfieldTools,
     ...selfHealTools,
     ...calendarTools,
+    ...calendarLinkTools,
     ...stocksTools,
     ...knowledgeTools,
     ...officeTools,

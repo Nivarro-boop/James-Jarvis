@@ -81,7 +81,54 @@ export function HealthPanel(): JSX.Element {
         void window.jarvis.invoke('app:openSettings', { section: 'voice' }).catch(() => setNotice('Einstellungen konnten nicht geöffnet werden.'))
       }}>Zugänge und Stimme einrichten</button>}
       {notice && <p role="status" aria-live="polite">{notice}</p>}
+      <SupportReport />
       <small>{health?.automatic ? 'Automatische Logüberwachung aktiv' : 'Logüberwachung wird gestartet'} · {health?.report.healed ?? 0} behoben / 24 h</small>
     </section>}
   </div>
+}
+
+/**
+ * Support-Meldung: beschreiben, Vorschau ansehen, dann selbst senden.
+ * Nichts geht von selbst raus — Mailprogramm, GitHub oder Zwischenablage.
+ */
+function SupportReport(): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [text, setText] = useState('')
+  const [diagnose, setDiagnose] = useState(true)
+  const [preview, setPreview] = useState('')
+  const [note, setNote] = useState('')
+  useEffect(() => {
+    if (!open) return
+    const timer = window.setTimeout(() => {
+      void window.jarvis.invoke('support:act', { action: 'preview', beschreibung: text, diagnose })
+        .then(r => setPreview(`${r.subject}
+
+${r.body}`)).catch(() => setPreview(''))
+    }, 250)
+    return () => window.clearTimeout(timer)
+  }, [open, text, diagnose])
+  const act = async (action: 'mail' | 'issue' | 'copy'): Promise<void> => {
+    try {
+      const r = await window.jarvis.invoke('support:act', { action, beschreibung: text, diagnose })
+      setNote(r.tooLong ? 'Zu lang für das Mailprogramm. Nimm „Text kopieren“.'
+        : action === 'copy' ? 'Kopiert. Füg den Text in eine Mail oder ein Issue ein.'
+        : action === 'mail' ? 'Mailprogramm sollte offen sein. Empfänger eintragen, prüfen und selbst senden.'
+        : 'GitHub ist offen. Prüfe den Text und sende das Issue selbst ab.')
+    } catch { setNote('Das hat nicht geklappt. Markiere den Text in der Vorschau und kopiere ihn selbst.') }
+  }
+  if (!open) return <button className="home-nav-btn" onClick={() => setOpen(true)}>Hilfe und Support</button>
+  return <section className="support-report" aria-label="Hilfe und Support">
+    <strong>Was ist passiert?</strong>
+    <textarea value={text} rows={3} maxLength={4000} onChange={e => setText(e.target.value)}
+      placeholder="Zum Beispiel: Nach dem Weckwort antwortet James nicht." />
+    <label><input type="checkbox" checked={diagnose} onChange={e => setDiagnose(e.target.checked)} />
+      {' '}Technische Angaben anhängen (Version, System, offene Störungen; keine Logs oder Schlüssel)</label>
+    <details><summary>Vorschau</summary><pre>{preview}</pre></details>
+    <div className="health-buttons">
+      <button className="home-btn-yes" onClick={() => void act('mail')}>Im Mailprogramm öffnen</button>
+      <button className="home-nav-btn" onClick={() => void act('issue')}>Als GitHub-Issue</button>
+      <button className="home-nav-btn" onClick={() => void act('copy')}>Text kopieren</button>
+    </div>
+    {note && <p role="status" aria-live="polite">{note}</p>}
+  </section>
 }

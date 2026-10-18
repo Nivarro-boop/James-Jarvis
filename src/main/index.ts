@@ -468,7 +468,9 @@ app.whenReady().then(async () => {
 
   // MCP, Zeitplaner und Timer blockieren den Start nicht — der Kristall ist
   // sofort da.
-  void reloadMcpServers()
+  void reloadMcpServers().then(() => {
+    sendToCrystal('session:forceReconnect', undefined)
+  }).catch(error => console.error('[mcp] Initiales Laden fehlgeschlagen:', error))
   scheduleMemoryCare()
   startScheduler()
   startTimers()

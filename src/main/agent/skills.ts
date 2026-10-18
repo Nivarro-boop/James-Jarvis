@@ -1,6 +1,6 @@
 import { rankSkills } from '@shared/workingContext'
 import { app } from 'electron'
-import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 /**
@@ -33,6 +33,8 @@ export interface Skill {
 
 const MAX_SKILLS = 200
 const MAX_BODY = 6000
+let cachedFolder = ''
+const cachedSkills = new Map<string, { stamp: string; skill: Skill | null }>()
 
 function dir(): string {
   const path = join(app.getPath('userData'), 'skills')
@@ -100,13 +102,28 @@ export function parseSkill(slug: string, text: string): Skill | null {
 
 export function listSkills(): Skill[] {
   const folder = dir()
+  if (folder !== cachedFolder) { cachedSkills.clear(); cachedFolder = folder }
+  const files = readdirSync(folder).filter(file => file.endsWith('.md'))
+  const present = new Set(files)
+  for (const file of cachedSkills.keys()) if (!present.has(file)) cachedSkills.delete(file)
   const skills: Skill[] = []
-  for (const file of readdirSync(folder)) {
-    if (!file.endsWith('.md')) continue
+  for (const file of files) {
     try {
-      const skill = parseSkill(file.slice(0, -3), readFileSync(join(folder, file), 'utf-8'))
-      if (skill) skills.push(skill)
+      const path = join(folder, file)
+      const stat = statSync(path, { bigint: true })
+      if (!stat.isFile()) { cachedSkills.delete(file); continue }
+      // Recheck metadata on every lookup so edits made in an external editor,
+      // additions, replacements and deletions are visible without a TTL.
+      const stamp = `${stat.dev}:${stat.ino}:${stat.size}:${stat.mtimeNs}:${stat.ctimeNs}`
+      let cached = cachedSkills.get(file)
+      if (cached?.stamp !== stamp) {
+        cached = { stamp, skill: parseSkill(file.slice(0, -3), readFileSync(path, 'utf-8')) }
+        cachedSkills.set(file, cached)
+      }
+      // Callers previously received freshly parsed objects; keep that isolation.
+      if (cached.skill) skills.push({ ...cached.skill })
     } catch {
+      cachedSkills.delete(file)
       // Eine kaputte Datei darf die anderen nicht verdecken.
     }
   }
@@ -129,6 +146,7 @@ export function useSkill(nameOrSlug: string): Skill | null {
   if (!skill) return null
   const next = { ...skill, uses: skill.uses + 1 }
   writeFileSync(join(dir(), `${skill.slug}.md`), serializeSkill(next), 'utf-8')
+  cachedSkills.delete(`${skill.slug}.md`)
   return next
 }
 
@@ -161,6 +179,7 @@ export function saveSkill(input: {
     updated: new Date().toISOString().slice(0, 10)
   }
   writeFileSync(join(dir(), `${skill.slug}.md`), serializeSkill(skill), 'utf-8')
+  cachedSkills.delete(`${skill.slug}.md`)
   return { skill, created: !existing }
 }
 
@@ -187,6 +206,7 @@ export function deleteSkill(nameOrSlug: string): boolean {
   const skill = findSkill(nameOrSlug)
   if (!skill) return false
   unlinkSync(join(dir(), `${skill.slug}.md`))
+  cachedSkills.delete(`${skill.slug}.md`)
   return true
 }
 

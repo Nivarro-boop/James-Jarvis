@@ -38,7 +38,8 @@ const ALL_KEYS: SecretKey[] = [
   'appleMusicTeamId',
   'appleMusicKeyId',
   'appleMusicPrivateKey',
-  'alexaSkillId'
+  'alexaSkillId',
+  'calendarIcsUrl'
 ]
 
 /**
