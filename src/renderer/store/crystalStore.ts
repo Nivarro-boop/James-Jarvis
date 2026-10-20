@@ -57,7 +57,8 @@ export const amplitude: AmplitudeRef = { input: 0, output: 0 }
  */
 const CONFIRM_TTL_MS = 3 * 60 * 1000
 let confirmTimer: number | null = null
-
+let errorTimer: number | null = null
+let errorGeneration = 0
 export interface Caption {
   id: number
   who: 'user' | 'james'
@@ -198,17 +199,20 @@ export const useCrystal = create<CrystalStore>((set, get) => ({
   },
 
   setError: (message) => {
+    const generation = ++errorGeneration
+    if (errorTimer !== null) window.clearTimeout(errorTimer)
+    errorTimer = null
     set({ lastError: message })
     if (!message) get().setWish('local', null)
     if (message) {
       get().setWish('local', 'error')
       // Fehlerzustand nach ein paar Sekunden auflösen, sonst bleibt der
       // Kristall rot stehen und man weiß nicht, ob es noch aktuell ist.
-      setTimeout(() => {
-        if (get().lastError === message) {
-          set({ lastError: null })
-          get().setWish('local', null)
-        }
+      errorTimer = window.setTimeout(() => {
+        if (generation !== errorGeneration) return
+        errorTimer = null
+        set({ lastError: null })
+        get().setWish('local', null)
       }, 6000)
     }
   }

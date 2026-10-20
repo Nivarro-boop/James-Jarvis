@@ -14,6 +14,7 @@ import {
 } from './permissions'
 import { resolveRecipient } from './impl/contacts'
 import { resolveMemory } from './impl/memory'
+import { commandConfirmation } from './impl/shell'
 import { resolvePhoneNumber } from '../providers/twilio'
 import { abortCameraCaptures } from '../automation/camera'
 import { cachedResult, compactResult, rememberResult } from '../agent/tokenSaver'
@@ -458,7 +459,7 @@ function buildQuestion(name: string, args: Record<string, unknown>): string {
       )
     }
     case 'run_command':
-      return `Ich führe den Befehl ${s('command')} aus. Soll ich?`
+      return commandConfirmation(s('command'), s('workDir'))
     case 'computer_task':
       return `Ich übernehme Maus und Tastatur und erledige folgendes: ${s('goal')}. Soll ich?`
     case 'price_watch_create':

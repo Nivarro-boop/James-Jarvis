@@ -62,7 +62,7 @@ function withTimeout<T>(work: Promise<T>, ms: number, what: string): Promise<T> 
  */
 const ALWAYS_ASK = /unsafe|evaluate|run_code|exec|shell|command|upload|delete|remove|send|write/i
 
-/** JSON-Schema erlaubt `"type": ["string", "null"]` — gemeint ist dann der erste echte Typ. */
+/** JSON-Schema erlaubt Vereinigungen mit null, etwa `["string", "null"]`. */
 function primaryType(type: unknown): unknown {
   if (!Array.isArray(type)) return type
   return type.find((t) => t !== 'null') ?? type[0]
@@ -72,19 +72,28 @@ function primaryType(type: unknown): unknown {
 function jsonSchemaToZod(schema: unknown): z.ZodTypeAny {
   if (!schema || typeof schema !== 'object') return z.object({}).passthrough()
   const s = schema as Record<string, unknown>
+  const nullable = Array.isArray(s.type) && s.type.includes('null')
+  const type = primaryType(s.type)
+  let result: z.ZodTypeAny
 
-  switch (primaryType(s.type)) {
+  switch (type) {
     case 'string':
-      return Array.isArray(s.enum) && s.enum.length > 0
+      result = Array.isArray(s.enum) && s.enum.length > 0
         ? z.enum(s.enum as [string, ...string[]])
         : z.string()
+      break
     case 'number':
+      result = z.number()
+      break
     case 'integer':
-      return z.number()
+      result = z.number().int()
+      break
     case 'boolean':
-      return z.boolean()
+      result = z.boolean()
+      break
     case 'array':
-      return z.array(jsonSchemaToZod(s.items))
+      result = z.array(jsonSchemaToZod(s.items))
+      break
     case 'object': {
       const props = (s.properties ?? {}) as Record<string, unknown>
       const required = new Set((s.required as string[]) ?? [])
@@ -97,11 +106,14 @@ function jsonSchemaToZod(schema: unknown): z.ZodTypeAny {
             : inner
         shape[key] = required.has(key) ? described : described.optional()
       }
-      return z.object(shape)
+      result = z.object(shape)
+      break
     }
     default:
-      return z.object({}).passthrough()
+      if (type === 'null') return z.null()
+      result = z.object({}).passthrough()
   }
+  return nullable ? result.nullable() : result
 }
 
 export function reloadMcpServers(): Promise<void> {

@@ -1,0 +1,57 @@
+name: Checks
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      # Diese Prüfungen brauchen weder die Electron-Binärdatei noch einen
+      # Installer. Tests verwenden den vorhandenen Electron-Ersatz.
+      - name: Abhängigkeiten ohne Installationsskripte
+        run: npm ci --ignore-scripts
+      - name: Typen prüfen
+        run: npm run typecheck
+      - name: Tests
+        run: npm test
+      # Kein npm run build: dessen prebuild lädt zusätzliche Weckwortmodelle.
+      - name: Anwendung bauen, ohne Installer oder Veröffentlichung
+        run: npx --no-install electron-vite build
+
+  dashboard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: error-dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: error-dashboard/package-lock.json
+      - name: Dashboard-Abhängigkeiten
+        run: npm ci --ignore-scripts
+      - name: Dashboard-Tests
+        run: npm test

@@ -50,6 +50,11 @@ const FORBIDDEN: { pattern: RegExp; why: string }[] = [
 const MAX_OUTPUT = 3000
 const TIMEOUT_MS = 60_000
 
+/** Das Arbeitsverzeichnis beeinflusst den Befehl und gehört deshalb zur Freigabe. */
+export function commandConfirmation(command: string, workDir: string): string {
+  return `Ich führe den Befehl ${command}${workDir ? ` im Arbeitsverzeichnis ${workDir}` : ''} aus. Soll ich?`
+}
+
 const runCommand = defineTool({
   name: 'run_command',
   group: 'system',
@@ -75,6 +80,11 @@ const runCommand = defineTool({
       }
     }
 
+    // Schon existsSync auf einem UNC-Pfad kann Windows-Anmeldedaten über SMB
+    // senden. Auch gemischte Trenner und Gerätepfade vor jedem Zugriff sperren.
+    if (workDir && /^[\\/]{2}/.test(workDir)) {
+      throw new Error('Netzwerk- und Gerätepfade sind als Arbeitsverzeichnis nicht erlaubt.')
+    }
     if (workDir && !existsSync(workDir)) {
       throw new Error('Das Arbeitsverzeichnis gibt es nicht.')
     }

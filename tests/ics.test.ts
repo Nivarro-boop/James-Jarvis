@@ -95,6 +95,68 @@ describe('eventsInRange', () => {
     assert.equal(out.length, 1)
     assert.equal(out[0].allDay, true)
   })
+
+  it('hält UTC- und TZID-Serien sowie ganztägige Enden über den Rechner-DST hinweg kalenderbasiert', () => {
+    const previousTimezone = process.env.TZ
+    process.env.TZ = 'America/New_York'
+    try {
+      const from = Date.UTC(2026, 2, 7)
+      const to = Date.UTC(2026, 2, 31)
+
+      const utcSeries = cal(
+        'BEGIN:VEVENT\r\nUID:utc\r\nDTSTART:20260307T090000Z\r\nDTEND:20260307T100000Z\r\nSUMMARY:UTC\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEND:VEVENT'
+      )
+      const utcEvents = eventsInRange(utcSeries, from, to)
+      assert.deepEqual(utcEvents.map((event) => event.start), [
+        Date.UTC(2026, 2, 7, 9),
+        Date.UTC(2026, 2, 8, 9),
+        Date.UTC(2026, 2, 9, 9)
+      ])
+
+      const allDaySeries = cal(
+        'BEGIN:VEVENT\r\nUID:all-day\r\nDTSTART;VALUE=DATE:20260307\r\nDTEND;VALUE=DATE:20260309\r\nSUMMARY:Mehrtagestermin\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEND:VEVENT'
+      )
+      const allDayEvents = eventsInRange(allDaySeries, from, to)
+      assert.deepEqual(allDayEvents.map((event) => event.start), [
+        new Date(2026, 2, 7).getTime(),
+        new Date(2026, 2, 8).getTime(),
+        new Date(2026, 2, 9).getTime()
+      ])
+      assert.deepEqual(allDayEvents.map((event) => event.end), [
+        new Date(2026, 2, 9).getTime(),
+        new Date(2026, 2, 10).getTime(),
+        new Date(2026, 2, 11).getTime()
+      ])
+
+      const viennaSeries = cal(
+        'BEGIN:VEVENT\r\nUID:vienna\r\nDTSTART;TZID=Europe/Vienna:20260328T090000\r\nDTEND;TZID=Europe/Vienna:20260328T100000\r\nSUMMARY:Wien\r\nRRULE:FREQ=DAILY;COUNT=3\r\nEND:VEVENT'
+      )
+      const viennaEvents = eventsInRange(viennaSeries, from, to)
+      assert.deepEqual(viennaEvents.map((event) => event.start), [
+        Date.UTC(2026, 2, 28, 8),
+        Date.UTC(2026, 2, 29, 7),
+        Date.UTC(2026, 2, 30, 7)
+      ])
+      assert.ok(viennaEvents.every((event) => event.end - event.start === 3600000))
+    } finally {
+      if (previousTimezone === undefined) delete process.env.TZ
+      else process.env.TZ = previousTimezone
+    }
+  })
+
+  it('behält bei unbekannter TZID den lokalen Fallback für Serien', () => {
+    const text = cal('BEGIN:VEVENT\r\nUID:unknown-zone\r\nDTSTART;TZID=Unknown/Zone:20261020T090000\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT')
+    const events = eventsInRange(text, new Date(2026, 9, 20).getTime(), new Date(2026, 9, 23).getTime())
+    assert.deepEqual(events.map(event => event.start), [new Date(2026, 9, 20, 9).getTime(), new Date(2026, 9, 21, 9).getTime()])
+  })
+
+  it('ignoriert TZID bei ganztägigen Serien und UTC-Datumswerten', () => {
+    const allDay = cal('BEGIN:VEVENT\r\nUID:date\r\nDTSTART;VALUE=DATE;TZID=Pacific/Honolulu:20261020\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT')
+    const dates = eventsInRange(allDay, new Date(2026, 9, 20).getTime(), new Date(2026, 9, 23).getTime())
+    assert.deepEqual(dates.map(event => event.start), [new Date(2026, 9, 20).getTime(), new Date(2026, 9, 21).getTime()])
+    const utc = cal('BEGIN:VEVENT\r\nUID:utc-zone\r\nDTSTART;TZID=Pacific/Honolulu:20261020T090000Z\r\nRRULE:FREQ=DAILY;COUNT=2\r\nEND:VEVENT')
+    assert.deepEqual(eventsInRange(utc, Date.UTC(2026, 9, 20), Date.UTC(2026, 9, 23)).map(event => event.start), [Date.UTC(2026, 9, 20, 9), Date.UTC(2026, 9, 21, 9)])
+  })
 })
 
 describe('normalizeIcsUrl', () => {

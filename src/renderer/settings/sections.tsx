@@ -108,6 +108,8 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
   const [status, setStatus] = useState<SecretStatus[]>([])
   const [values, setValues] = useState<Partial<Record<SecretKey, string>>>({})
   const [saving, setSaving] = useState<SecretKey | null>(null)
+  const [busyAction, setBusyAction] = useState<'save' | 'clear' | null>(null)
+  const keyOperationBusy = useRef(false)
   /** Ergebnis der Gemini-Prüfung, bis der nächste Tastendruck es verwirft. */
   const [keyNote, setKeyNote] = useState<{ key: SecretKey; ok: boolean; text: string } | null>(null)
   /** Der Empfänger, wie er beim Betreten des Feldes galt — er entscheidet, ob die Zusage noch gilt. */
@@ -134,8 +136,10 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
    */
   const save = async (key: SecretKey): Promise<void> => {
     const value = values[key]
-    if (!value) return
+    if (!value || keyOperationBusy.current) return
+    keyOperationBusy.current = true
     setSaving(key)
+    setBusyAction('save')
     try {
       if (key === 'gemini') {
         setKeyNote(null)
@@ -172,13 +176,24 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
     } catch (error) {
       setKeyNote({ key, ok: false, text: error instanceof Error ? error.message : 'Der Schlüssel konnte nicht gespeichert werden.' })
     } finally {
+      keyOperationBusy.current = false
       setSaving(null)
+      setBusyAction(null)
     }
   }
 
   const clear = async (key: SecretKey): Promise<void> => {
+    if (keyOperationBusy.current) return
+    keyOperationBusy.current = true
+    setSaving(key)
+    setBusyAction('clear')
     try { setStatus(await window.jarvis.invoke('secrets:clear', { key })) }
     catch (e) { setKeyNote({ key, ok: false, text: e instanceof Error ? e.message : 'Löschen fehlgeschlagen.' }) }
+    finally {
+      keyOperationBusy.current = false
+      setSaving(null)
+      setBusyAction(null)
+    }
   }
 
   const renderFields = (fields: typeof SECRET_FIELDS): JSX.Element => (<>
@@ -216,16 +231,18 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
             />
             <button
               className="primary"
-              disabled={!values[field.key] || saving === field.key}
+              disabled={!values[field.key] || saving !== null}
               onClick={() => void save(field.key)}
             >
               {field.key !== 'gemini' && field.key !== 'elevenlabs' && field.key !== 'openai'
                 ? 'Speichern'
                 : saving === field.key
-                  ? 'Wird geprüft…'
+                  ? busyAction === 'clear' ? 'Wird gelöscht…' : 'Wird geprüft…'
                   : 'Prüfen und speichern'}
             </button>
-            {present(field.key) && <button onClick={() => void clear(field.key)}>Löschen</button>}
+            {present(field.key) && <button disabled={saving !== null} onClick={() => void clear(field.key)}>
+              {saving === field.key && busyAction === 'clear' ? 'Wird gelöscht…' : 'Löschen'}
+            </button>}
           </div>
           {keyNote?.key === field.key && (
             <div className={keyNote.ok ? 'hint ok' : 'hint err'} role="status">{keyNote.text}</div>

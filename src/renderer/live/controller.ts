@@ -83,6 +83,7 @@ export class JarvisController {
   private disposed = false
   private captureGeneration = 0
   private wake: WakeWordHandle | null = null
+  private wakeGeneration = 0
   private readonly clap = new ClapDetector(() => {
     if (!this.settings.wake.clap || this.session?.isConnected() || this.session?.isStarting()) return
     console.info('[wake] zweimal geklatscht')
@@ -715,6 +716,7 @@ export class JarvisController {
 
   /** Weckwort neu laden — nötig, wenn sich der Klassifikator ändert. */
   private async rebuildWake(settings: Settings): Promise<void> {
+    const generation = ++this.wakeGeneration
     try {
       const next = await createWakeWord({
         threshold: settings.wake.threshold,
@@ -725,14 +727,15 @@ export class JarvisController {
           void this.wakeUp()
         }
       })
-      if (this.disposed || this.settings.wake.modelName !== settings.wake.modelName) {
+      if (this.disposed || generation !== this.wakeGeneration || this.settings.wake.modelName !== settings.wake.modelName) {
         next.destroy()
         return
       }
       this.wake?.destroy()
       this.wake = next
       useCrystal.getState().setWakeAvailable(next.available)
-      this.wake.setEnabled(settings.wake.enabled && !this.paused)
+      this.wake.setThreshold(this.settings.wake.threshold)
+      this.wake.setEnabled(this.settings.wake.enabled && !this.paused)
     } catch (err) {
       console.error('[wake] Wechsel des Modells fehlgeschlagen:', err)
     }
@@ -742,6 +745,7 @@ export class JarvisController {
     this.disposed = true
     this.sessionGeneration++
     this.captureGeneration++
+    this.wakeGeneration++
     if (this.reportTimer) window.clearInterval(this.reportTimer)
     this.reportTimer = null
     this.gaps.dispose()

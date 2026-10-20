@@ -37,6 +37,8 @@ interface RawEvent {
   end: number | null
   durationMs: number | null
   allDay: boolean
+  startTimeZone: string | null
+  startUtc: boolean
   rrule: string | null
   exdates: number[]
   recurrenceId: number | null
@@ -124,6 +126,23 @@ function wallToUtc(y: number, mo: number, d: number, h: number, mi: number, s: n
   return off2 === off1 ? first : guess - off2 * 60000
 }
 
+/** Lokale Kalenderfelder einer TZID-Zeit als UTC-basierte Rechendatei. */
+function zonedWallDate(utcMs: number, timeZone: string): Date {
+  const zone = WINDOWS_ZONES[timeZone] ?? timeZone
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: zone,
+    hourCycle: 'h23',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit'
+  }).formatToParts(new Date(utcMs))
+  const get = (t: string): number => Number(parts.find((p) => p.type === t)?.value)
+  return new Date(Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second')))
+}
+
 /** Ein DATE oder DATE-TIME lesen. Ganztägig heißt: lokale Mitternacht. */
 export function parseIcsDate(value: string, params: Record<string, string> = {}): { ms: number; allDay: boolean } | null {
   const v = value.trim()
@@ -180,6 +199,8 @@ function parseEvents(text: string): RawEvent[] {
           end: cur.end ?? null,
           durationMs: cur.durationMs ?? null,
           allDay: cur.allDay ?? false,
+          startTimeZone: cur.startTimeZone ?? null,
+          startUtc: cur.startUtc ?? false,
           rrule: cur.rrule ?? null,
           exdates: cur.exdates ?? [],
           recurrenceId: cur.recurrenceId ?? null,
@@ -201,7 +222,16 @@ function parseEvents(text: string): RawEvent[] {
       case 'DURATION': cur.durationMs = parseDuration(prop.value); break
       case 'DTSTART': {
         const d = parseIcsDate(prop.value, prop.params)
-        if (d) { cur.start = d.ms; cur.allDay = d.allDay }
+        if (d) {
+          cur.start = d.ms
+          cur.allDay = d.allDay
+          cur.startUtc = !d.allDay && /Z$/i.test(prop.value.trim())
+          const zone = prop.params.TZID
+          // Ungültige Anbieter-Zonennamen behalten den lokalen Fallback des
+          // Datumslesers. DATE-Werte haben grundsätzlich keine Zeitzone.
+          cur.startTimeZone = !d.allDay && !cur.startUtc && zone &&
+            Number.isFinite(tzOffsetMinutes(d.ms, WINDOWS_ZONES[zone] ?? zone)) ? zone : null
+        }
         break
       }
       case 'DTEND': {
@@ -245,10 +275,21 @@ function expandStarts(ev: RawEvent, until: number): number[] {
   const count = r.COUNT ? Number(r.COUNT) : Infinity
   const ruleUntil = r.UNTIL ? parseIcsDate(r.UNTIL)?.ms ?? Infinity : Infinity
   const limit = Math.min(until, ruleUntil)
-  const base = new Date(ev.start)
+  const calendarIsUtc = ev.startUtc || ev.startTimeZone !== null
+  const base = ev.startTimeZone ? zonedWallDate(ev.start, ev.startTimeZone) : new Date(ev.start)
+  const occurrenceTime = (d: Date): number => ev.startTimeZone
+    ? wallToUtc(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate(), d.getUTCHours(), d.getUTCMinutes(), d.getUTCSeconds(), ev.startTimeZone)
+    : d.getTime()
+  const getDay = (d: Date): number => calendarIsUtc ? d.getUTCDay() : d.getDay()
+  const getDate = (d: Date): number => calendarIsUtc ? d.getUTCDate() : d.getDate()
+  const getMonth = (d: Date): number => calendarIsUtc ? d.getUTCMonth() : d.getMonth()
+  const getFullYear = (d: Date): number => calendarIsUtc ? d.getUTCFullYear() : d.getFullYear()
+  const setDate = (d: Date, value: number): void => { if (calendarIsUtc) d.setUTCDate(value); else d.setDate(value) }
+  const setMonth = (d: Date, value: number): void => { if (calendarIsUtc) d.setUTCMonth(value); else d.setMonth(value) }
+  const setFullYear = (d: Date, value: number): void => { if (calendarIsUtc) d.setUTCFullYear(value); else d.setFullYear(value) }
   const out: number[] = []
   const push = (d: Date): boolean => {
-    const ms = d.getTime()
+    const ms = occurrenceTime(d)
     if (ms < ev.start) return true
     if (ms > limit || out.length >= count || out.length >= MAX_OCCURRENCES) return false
     out.push(ms)
@@ -262,12 +303,12 @@ function expandStarts(ev: RawEvent, until: number): number[] {
   if (freq === 'WEEKLY' && byDay.length > 0) {
     // Woche ab Montag, wie WKST=MO bei allen drei Anbietern.
     const weekStart = new Date(base)
-    weekStart.setDate(weekStart.getDate() - ((weekStart.getDay() + 6) % 7))
+    setDate(weekStart, getDate(weekStart) - ((getDay(weekStart) + 6) % 7))
     const days = [...byDay].sort((a, b) => ((a + 6) % 7) - ((b + 6) % 7))
     for (let w = 0; w < 5000; w += interval) {
       for (const wd of days) {
         const d = new Date(weekStart)
-        d.setDate(d.getDate() + w * 7 + ((wd + 6) % 7))
+        setDate(d, getDate(d) + w * 7 + ((wd + 6) % 7))
         if (!push(d)) return out
       }
     }
@@ -276,15 +317,15 @@ function expandStarts(ev: RawEvent, until: number): number[] {
 
   for (let i = 0; i < MAX_OCCURRENCES * interval; i += interval) {
     const d = new Date(base)
-    if (freq === 'DAILY') d.setDate(d.getDate() + i)
-    else if (freq === 'WEEKLY') d.setDate(d.getDate() + i * 7)
+    if (freq === 'DAILY') setDate(d, getDate(d) + i)
+    else if (freq === 'WEEKLY') setDate(d, getDate(d) + i * 7)
     else if (freq === 'MONTHLY') {
-      d.setMonth(d.getMonth() + i)
+      setMonth(d, getMonth(d) + i)
       // 31. im Februar gibt es nicht — solche Monate überspringt die Regel.
-      if (d.getDate() !== base.getDate()) continue
+      if (getDate(d) !== getDate(base)) continue
     } else if (freq === 'YEARLY') {
-      d.setFullYear(d.getFullYear() + i)
-      if (d.getMonth() !== base.getMonth()) continue
+      setFullYear(d, getFullYear(d) + i)
+      if (getMonth(d) !== getMonth(base)) continue
     } else return [ev.start]
     if (!push(d)) return out
   }
@@ -304,8 +345,22 @@ export function eventsInRange(text: string, from: number, to: number): IcsEvent[
   }
   const out: IcsEvent[] = []
   const add = (ev: RawEvent, start: number): void => {
-    const dur = ev.end !== null ? ev.end - ev.start : ev.durationMs ?? (ev.allDay ? 86400000 : 0)
-    const end = start + Math.max(0, dur)
+    let end: number
+    if (ev.allDay) {
+      const dayNumber = (ms: number): number => {
+        const d = new Date(ms)
+        return Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86400000
+      }
+      const days = ev.end !== null
+        ? dayNumber(ev.end) - dayNumber(ev.start)
+        : Math.floor((ev.durationMs ?? 86400000) / 86400000)
+      const endDate = new Date(start)
+      endDate.setDate(endDate.getDate() + Math.max(0, days))
+      end = endDate.getTime()
+    } else {
+      const dur = ev.end !== null ? ev.end - ev.start : ev.durationMs ?? 0
+      end = start + Math.max(0, dur)
+    }
     if (ev.cancelled) return
     if (end <= from && !(end === start && start >= from)) return
     if (start >= to) return
