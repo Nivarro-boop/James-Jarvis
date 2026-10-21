@@ -47,6 +47,98 @@ require(${JSON.stringify(resolve('out/main/index.js'))});\n`)
     const settings = await invoke('settings:get')
     assert.equal(settings.companion.enabled, false); assert.equal(settings.alexa.enabled, false)
     mark('isolated-app-start-and-preload')
+
+    // The clean home keeps only the conversation surface until the user opens Overview.
+    const assertCleanHome = async () => {
+      assert.equal(await page.locator('.workspace-board').count(), 0, 'Workspace board stays out of the default DOM')
+      for (const selector of ['.feature-packs-panel', '.data-transparency', '.context-panel', '.widget-tiles', '.feature-pack-widgets']) {
+        assert.equal(await page.locator(selector).count(), 0, `${selector} stays out of the default DOM`)
+      }
+      assert.ok(await page.locator('.orb').count(), 'Orb remains on the clean home')
+      assert.ok(await page.getByLabel('Nachricht an James', { exact: true }).count(), 'Text bar remains on the clean home')
+      assert.ok(await page.locator('.conversation').count(), 'Conversation remains on the clean home')
+    }
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes('crystal.html')).setSize(1100, 900))
+    await assertCleanHome()
+    await page.screenshot({ path: join(output, 'home-clean.png') })
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes('crystal.html')).setSize(520, 800))
+    assert.equal(await page.evaluate(() => document.documentElement.scrollWidth > innerWidth), false, 'Clean narrow home must not horizontally overflow')
+    assert.equal(await page.evaluate(() => {
+      const brand = document.querySelector('.home-top-left').getBoundingClientRect()
+      const actions = document.querySelector('.home-actions').getBoundingClientRect()
+      const horizontal = brand.right <= actions.left + 1
+      const vertical = brand.bottom <= actions.top + 1 || actions.bottom <= brand.top + 1
+      return horizontal || vertical
+    }), true, 'Clean header brand and actions must not overlap')
+    await page.screenshot({ path: join(output, 'home-clean-narrow.png') })
+    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().find(window => window.webContents.getURL().includes('crystal.html')).setSize(1100, 900))
+
+    const overviewButton = page.getByRole('button', { name: 'Übersicht', exact: true })
+    await overviewButton.click()
+    let overview = page.getByRole('dialog', { name: 'Übersicht', exact: true })
+    await overview.waitFor()
+    const tab = name => overview.getByRole('tab', { name, exact: true })
+    assert.equal(await tab('Heute').getAttribute('aria-selected'), 'true', 'Heute is the default overview tab')
+    assert.equal(await overview.locator('.workspace-board').count(), 1, 'Today tab contains the workspace board')
+    await tab('Feature-Packs').click()
+    assert.equal(await tab('Feature-Packs').getAttribute('aria-selected'), 'true')
+    await overview.locator('.feature-packs-panel').waitFor()
+    await overview.getByRole('heading', { name: 'Deklarative Feature-Packs', exact: true }).waitFor()
+    await tab('Daten & KI').click()
+    assert.equal(await tab('Daten & KI').getAttribute('aria-selected'), 'true')
+    await overview.locator('.data-transparency').waitFor()
+    await overview.getByRole('heading', { name: 'Was auf diesem Rechner bleibt', exact: true }).waitFor()
+    await tab('Arbeitsstand').click()
+    assert.equal(await tab('Arbeitsstand').getAttribute('aria-selected'), 'true')
+    await overview.locator('.context-manage').waitFor()
+    await overview.getByText('Gesprächskontext verwalten', { exact: true }).waitFor()
+    await tab('Widgets').click()
+    assert.equal(await tab('Widgets').getAttribute('aria-selected'), 'true')
+    assert.ok(await overview.getByRole('tabpanel').count(), 'Widgets tab exposes its tab panel even when there are no tiles')
+
+    // Exercise both ends of the modal focus cycle, then Esc and focus restoration.
+    await page.evaluate(() => {
+      const dialog = document.querySelector('[role="dialog"]')
+      const focusable = [...dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(el => !el.disabled && el.getClientRects().length)
+      focusable.at(-1)?.focus()
+    })
+    await page.keyboard.press('Tab')
+    assert.equal(await page.evaluate(() => document.querySelector('[role="dialog"]')?.contains(document.activeElement)), true, 'Tab stays inside the overview dialog')
+    await page.evaluate(() => {
+      const dialog = document.querySelector('[role="dialog"]')
+      const focusable = [...dialog.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')].filter(el => !el.disabled && el.getClientRects().length)
+      focusable[0]?.focus()
+    })
+    await page.keyboard.press('Shift+Tab')
+    assert.equal(await page.evaluate(() => document.querySelector('[role="dialog"]')?.contains(document.activeElement)), true, 'Shift+Tab stays inside the overview dialog')
+    await page.keyboard.press('Escape')
+    assert.equal(await page.getByRole('dialog', { name: 'Übersicht', exact: true }).count(), 0, 'Escape closes the overview dialog')
+    assert.equal(await overviewButton.evaluate(el => document.activeElement === el), true, 'Closing restores focus to Übersicht')
+    await assertCleanHome()
+    await page.reload()
+    await assertCleanHome()
+    const more = page.getByLabel('Weitere Bereiche', { exact: true })
+    await more.click()
+    const destinations = page.getByRole('navigation', { name: 'Weitere Bereiche', exact: true })
+    await destinations.getByRole('button', { name: 'Gehirn', exact: true }).waitFor()
+    await destinations.getByRole('button', { name: 'Fertigkeiten', exact: true }).waitFor()
+    await destinations.getByRole('button', { name: 'Aktionslog', exact: true }).waitFor()
+    await destinations.getByRole('button', { name: 'Einstellungen', exact: true }).waitFor()
+    await destinations.getByRole('button', { name: 'Steuerzentrale', exact: true }).click()
+    await page.getByRole('button', { name: 'Steuerzentrale schließen', exact: true }).click()
+    assert.equal(await more.evaluate(element => document.activeElement === element), true, 'Closing a secondary dialog returns focus to the menu opener')
+    await more.click()
+    await page.keyboard.press('Escape')
+    assert.equal(await page.locator('.home-menu[open]').count(), 0, 'Escape closes the secondary menu')
+    assert.equal(await more.evaluate(element => document.activeElement === element), true)
+    mark('real-clean-home-default-no-board-and-overview-tabs-focus-return-and-reload')
+
+    // Workspace interactions below are deliberately performed only after opening Übersicht.
+    await overviewButton.click()
+    overview = page.getByRole('dialog', { name: 'Übersicht', exact: true })
+    await overview.waitFor()
+    await tab('Heute').click()
+    await overview.locator('.workspace-board').waitFor()
     await application.evaluate(async ({ BrowserWindow }, preload) => {
       const foreign = new BrowserWindow({ show: false, webPreferences: { preload, sandbox: true, contextIsolation: true, nodeIntegration: false } })
       await foreign.loadURL('data:text/html,<title>Foreign IPC fixture</title>')
@@ -166,7 +258,9 @@ require(${JSON.stringify(resolve('out/main/index.js'))});\n`)
     assert.equal(await page.evaluate(() => {
       const left = document.querySelector('.home-top-left').getBoundingClientRect()
       const actions = document.querySelector('.home-actions').getBoundingClientRect()
-      return left.bottom <= actions.top + 1
+      const horizontal = left.right <= actions.left + 1
+      const vertical = left.bottom <= actions.top + 1 || actions.bottom <= left.top + 1
+      return horizontal || vertical
     }), true, 'Header navigation must not overlap brand/activity controls')
     await page.screenshot({ path: join(output, 'workspace-integration-narrow.png') })
     assert.deepEqual(errors, [], 'No renderer page errors')

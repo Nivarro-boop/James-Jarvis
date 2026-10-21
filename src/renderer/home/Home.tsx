@@ -1,23 +1,19 @@
 import { SkillsPanel } from './SkillsPanel'
-import { ContextPanel } from './ContextPanel'
 import { SkillProposalPanel } from './SkillProposalPanel'
 import { Conversation } from './Conversation'
 import { useEffect, useState, type CSSProperties, type JSX } from 'react'
 import { ORB_LOOKS, PixelOrb } from '../crystal/PixelOrb'
 import { useCrystal } from '../store/crystalStore'
-import { ActivityPanel, ActivityToggle, useActivityPanel } from './ActivityPanel'
+import { ActivityPanel, useActivityPanel } from './ActivityPanel'
 import { useDisplayCards } from './StockCard'
 import { AnswerCard } from './AnswerCard'
 import { LiveStage } from './LiveStage'
-import { WeatherCard } from './WeatherCard'
-import { HealthPanel } from './HealthPanel'
 import { UpdateBar, useUpdateStatus } from './UpdateBar'
 import { TextBar } from './TextBar'
 import { ControlCenter } from './ControlCenter'
-import { BrainMap, WidgetTiles } from './BrainMap'
-import { WorkspaceBoard } from './WorkspaceBoard'
-import { FeaturePacksPanel, FeaturePackWidgets } from './FeaturePacksPanel'
-import { DataTransparencyPanel } from './DataTransparencyPanel'
+import { BrainMap } from './BrainMap'
+import { WorkspacePanel } from './WorkspacePanel'
+import { HomeMenu } from './HomeMenu'
 import { RecoveryBanner } from './RecoveryBanner'
 import type { ResearchRun, TimerEntry } from '@shared/types'
 
@@ -37,24 +33,6 @@ function mmss(ms: number): string {
   const s = total % 60
   const two = (n: number): string => String(n).padStart(2, '0')
   return h > 0 ? `${h}:${two(m)}:${two(s)}` : `${two(m)}:${two(s)}`
-}
-
-function GearIcon(): JSX.Element {
-  const teeth = Array.from({ length: 8 }, (_, i) => {
-    const a = (i * Math.PI) / 4
-    return (
-      <line key={i} x1={12 + Math.cos(a) * 6.4} y1={12 + Math.sin(a) * 6.4} x2={12 + Math.cos(a) * 9.4} y2={12 + Math.sin(a) * 9.4} />
-    )
-  })
-  return (
-    <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="6.4" stroke="currentColor" strokeWidth="1.7" />
-      <circle cx="12" cy="12" r="2.4" stroke="currentColor" strokeWidth="1.7" opacity="0.75" />
-      <g stroke="currentColor" strokeWidth="1.7" strokeLinecap="round">
-        {teeth}
-      </g>
-    </svg>
-  )
 }
 
 function CloseIcon(): JSX.Element {
@@ -267,7 +245,12 @@ export function Home(): JSX.Element {
   const display = useDisplayCards()
   const [brainOpen, setBrainOpen] = useState(false)
   const [controlCenterOpen, setControlCenterOpen] = useState(false)
-  useEffect(() => { if (state === 'confirm') setControlCenterOpen(false) }, [state])
+  const [workspaceOpen, setWorkspaceOpen] = useState(false)
+  useEffect(() => {
+    if (state === 'confirm') {
+      setControlCenterOpen(false); setWorkspaceOpen(false); setBrainOpen(false)
+    }
+  }, [state])
   const update = useUpdateStatus()
 
   // Der Schlüssel wird im Einstellungsfenster gesetzt — beim Zurückkommen
@@ -344,7 +327,6 @@ export function Home(): JSX.Element {
     <div className="home" data-state={state} data-compact={hasConversation || hasCards} style={tone}>
       <header className="home-bar">
         <div className="home-top-left">
-          <ActivityToggle open={activity.open} busy={activity.busy} onToggle={activity.toggle} />
           <span className="home-brand"><span className="home-mark">James<span className="brand-dot">.</span></span><small>DEIN ASSISTENT</small></span>
           {(() => {
             // Statt live zuzusehen: nur der aktuelle Schritt als eine Zeile oben.
@@ -353,13 +335,8 @@ export function Home(): JSX.Element {
           })()}
         </div>
         <div className="home-actions">
-          <button className="home-gear" onClick={() => setControlCenterOpen(true)}>Steuerzentrale</button>
-          <button className="home-gear" onClick={() => setBrainOpen(true)}>Gehirn</button>
-          <button className="home-gear" onClick={() => window.dispatchEvent(new Event('jarvis:skills'))}>Fertigkeiten</button>
-          <HealthPanel />
-          <button className="home-gear" title="Einstellungen" aria-label="Einstellungen" onClick={() => openSettings()}>
-            <GearIcon /><span>Einstellungen</span>
-          </button>
+          <button type="button" className="home-overview-button" aria-haspopup="dialog" aria-expanded={workspaceOpen} onClick={() => setWorkspaceOpen(true)}>Übersicht</button>
+          <HomeMenu onControl={() => setControlCenterOpen(true)} onBrain={() => setBrainOpen(true)} onSkills={() => window.dispatchEvent(new Event('jarvis:skills'))} onActivity={activity.toggle} onSettings={() => openSettings()} activityOpen={activity.open} activityBusy={activity.busy} />
         </div>
       </header>
 
@@ -376,15 +353,9 @@ export function Home(): JSX.Element {
               <p className="home-hint" role={state === 'error' ? 'alert' : undefined}>{hint}</p>
             </div>
           </main>
-          <WorkspaceBoard
-            featurePackWidgets={<><FeaturePacksPanel /><FeaturePackWidgets /></>}
-            dataAndAi={<details className="home-data-disclosure"><summary>Daten &amp; KI – was bleibt lokal?</summary><DataTransparencyPanel /></details>}
-          />
           <SkillsPanel />
           <SkillProposalPanel />
           <Conversation snapshot={activity.snapshot} />
-          <WeatherCard />
-          <WidgetTiles />
           <div className="home-context">
             {hasCards && (
               <div className="home-cards">
@@ -401,17 +372,17 @@ export function Home(): JSX.Element {
             )}
 
           </div>
-          <ContextPanel />
         </div>
 
         {activity.open && <ActivityPanel snapshot={activity.snapshot} />}
       </div>
 
       <footer className="home-dock">
-        <LiveStage snapshot={activity.snapshot} />
+        {(hasConversation || activity.busy || ['connecting', 'listening', 'thinking', 'tool', 'speaking', 'research', 'confirm'].includes(state)) && <LiveStage snapshot={activity.snapshot} />}
         <TextBar disabled={!settings || recoveryMode} disabledReason={recoveryMode ? 'Recovery-Prüfmodus – KI-Eingabe gesperrt' : undefined} />
       </footer>
 
+      {workspaceOpen && <WorkspacePanel onClose={() => setWorkspaceOpen(false)} />}
       {controlCenterOpen && <ControlCenter onClose={() => setControlCenterOpen(false)} />}
       {brainOpen && <BrainMap onClose={() => setBrainOpen(false)} />}
 

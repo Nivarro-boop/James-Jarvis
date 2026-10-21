@@ -109,3 +109,33 @@
 .recovery-banner button { cursor: pointer; margin-top: 6px; padding: 7px 10px; border: 1px solid #d4a95d; border-radius: 6px; background: transparent; color: inherit; max-width: 100%; white-space: normal; }
 .recovery-banner button:focus-visible { outline: 2px solid #ffe2a8; outline-offset: 3px; }
 .recovery-banner button:disabled { opacity: .65; cursor: wait; }
+
+/* Clean by default: the conversation owns the home, extra tools open on demand. */
+.home .home-bar { flex-wrap: nowrap; gap: 16px; }
+.home .home-top-left { flex: 1 1 auto; min-width: 0; }
+.home .home-actions { flex: 0 0 auto; align-items: center; gap: 8px; }
+.home-overview-button, .home-menu > summary { min-height: 38px; border: 1px solid #3c534630; border-radius: 11px; background: #b8dac708; color: #bfcec4; font: inherit; font-size: 12px; cursor: pointer; }
+.home-overview-button { padding: 8px 15px; }
+.home-overview-button:hover, .home-menu > summary:hover { background: #b8dac713; border-color: #607969; color: #e4eee7; }
+.home-menu { position: relative; }
+.home-menu > summary { display: grid; place-items: center; list-style: none; width: 38px; padding: 0 0 5px; font-size: 26px; letter-spacing: 1px; line-height: 1; }
+.home-menu > summary::-webkit-details-marker { display: none; }
+.home-menu-content { position: absolute; right: 0; top: calc(100% + 12px); z-index: 70; width: min(240px, calc(100vw - 32px)); padding: 8px; border: 1px solid #3a5145; border-radius: 14px; background: #1a2820; box-shadow: 0 18px 50px #0006; display: grid; gap: 3px; }
+.home-menu-label { padding: 10px 11px 8px; color: #91a99b; font-size: 10px; letter-spacing: .6px; }
+.home-menu-content > button, .home-menu-content .health-toggle { display: block; width: 100%; text-align: left; padding: 11px 12px; min-height: 40px; border: none; border-radius: 8px; background: transparent; color: #d7e3da; font: inherit; font-size: 13px; cursor: pointer; }
+.home-menu-content > button:hover, .home-menu-content .health-toggle:hover { background: #b8dac710; }
+.home-menu-content > button:last-child { margin-top: 4px; border-top: 1px solid #3a5145; border-radius: 0 0 8px 8px; }
+.home-menu .health-popover { position: fixed; inset: 80px 16px auto; width: min(640px, calc(100vw - 32px)); max-height: calc(100dvh - 100px); margin-left: auto; overflow: auto; z-index: 90; }
+.home:not([data-compact='true']) .home-stage { display: grid; justify-items: center; gap: 24px; margin: auto 0; padding-block: 28px; }
+.home:not([data-compact='true']) .home-stage .orb { width: clamp(130px, 21vh, 190px); }
+.home .home-dock { width: min(100%, 876px); margin-inline: auto; }
+@media (max-width: 760px) {
+  .home .home-top-left { flex: 1 1 auto; justify-content: flex-start; }
+  .home .home-actions { flex: 0 0 auto; flex-wrap: nowrap; justify-content: flex-end; }
+  .home .home-bar { padding: 14px 16px; }
+  .home-overview-button { padding-inline: 12px; }
+}
+@media (max-height: 570px) {
+  .home:not([data-compact='true']) .home-stage { gap: 12px; padding-block: 12px; }
+  .home:not([data-compact='true']) .home-stage .orb { width: 100px; }
+}

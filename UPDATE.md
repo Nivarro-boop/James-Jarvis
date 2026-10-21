@@ -1,3 +1,9 @@
+# PR-Ergänzung – aufgeräumte Startseite – 21.10.2026
+- Standardansicht auf Kugel, Gespräch und Eingabe reduziert; keine dauerhaft sichtbare Board-, Pack-, Daten- oder Arbeitsstandverwaltung. Aktive Timer/Ergebnisse, Fehlerhinweise, Freigaben und Recovery-Warnung bleiben sichtbar.
+- **Übersicht** öffnet einen separaten Dialog mit Heute-Board, Feature-Packs, Daten & KI, Arbeitsstand und Widgets einschließlich Wetter. Nur das gewählte Register wird geladen; Schließen kehrt zur ruhigen Startansicht zurück. Keine Daten oder Funktionen entfernt.
+- **Mehr-Menü** bündelt Steuerzentrale, Gehirn, Fertigkeiten, Aktionslog, Diagnose und Einstellungen. Kopfzeile bleibt auch in schmalen Fenstern einzeilig. Im Leerlauf entfällt die doppelte Live-Statuskarte.
+- Tastaturbedienung mit Tab-/Pfeiltasten, Fokusbegrenzung, Escape und Rückkehr zum Aufrufknopf; echte Electron-Prüfungen für Standardansicht, alle Übersichtregister, Menü, erneutes Laden und schmale Fenster ergänzt.
+
 # PR-Ergänzung – Arbeitsbereich, Feature-Packs und sichere Recovery – 21.10.2026
 
 - **Heute-Board:** eigene lokale Aufgaben, nächste Schritte aus dem Arbeitskontext und optionale Google-/iCal-Termine neben Erinnerungen und Timern. Widgets per Drag-and-drop oder Hoch/Runter anordnen, ausblenden und wiederherstellen; Anordnung und Aufgaben persistent. Kalender nur nach Opt-in und manuellem Abruf, unabhängige Quellenfehler, lokale Tagesgrenzen einschließlich DST, keine Kalenderänderungen oder automatische Anmeldung. Opt-out verwirft laufende Ergebnisse.
