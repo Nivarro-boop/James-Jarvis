@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { createWorkspaceStore, DEFAULT_WORKSPACE_LAYOUT, normalizeDarwinSystemAliasPath, validateTask, validateWorkspaceLayout } from '../src/main/workspace/store'
 import { invalidateWorkspaceCalendarReads, localTodayBounds, readWorkspaceCalendar, workspaceCalendarReadIsCurrent } from '../src/main/workspace/calendar'
 import { WORKSPACE_WIDGET_IDS, type WorkspaceTask } from '../src/shared/workspace'
@@ -187,7 +187,7 @@ describe('Workspace storage and layout validation', () => {
     assert.equal(normalizeDarwinSystemAliasPath('/var/folders/user/data.json', 'darwin', canonicalize), '/private/var/folders/user/data.json')
     assert.equal(normalizeDarwinSystemAliasPath('/tmp/workspace/data.json', 'darwin', canonicalize), '/private/tmp/workspace/data.json')
     assert.deepEqual(resolvedAliases, ['/var', '/tmp'])
-    assert.equal(normalizeDarwinSystemAliasPath('/var/folders/user/data.json', 'linux', () => { throw new Error('must not resolve') }), '/var/folders/user/data.json')
+    assert.equal(normalizeDarwinSystemAliasPath('/var/folders/user/data.json', 'linux', () => { throw new Error('must not resolve') }), resolve('/var/folders/user/data.json'))
     assert.equal(normalizeDarwinSystemAliasPath('/various/data.json', 'darwin', () => { throw new Error('must not resolve') }), '/various/data.json')
     assert.throws(() => normalizeDarwinSystemAliasPath('/var/folders/user/data.json', 'darwin', () => { throw new Error('missing') }), /kann nicht sicher aufgelöst werden/)
     assert.throws(() => normalizeDarwinSystemAliasPath('/tmp/workspace/data.json', 'darwin', () => '/unexpected/tmp'), /zeigt nicht auf das erwartete Ziel/)
