@@ -215,6 +215,7 @@ export interface IpcInvokeMap {
   'hermes:run': { req: { requestId: string; sessionId: string; input: string }; res: { ok: boolean; text?: string; error?: string } }
   'hermes:cancel': { req: { requestId: string }; res: void }
   'reminder:create': { req: { text: string; at?: string; inMinutes?: number; repeat?: ReminderEntry['repeat'] }; res: ReminderEntry }
+  'reminder:update': { req: { id: number; text?: string; at?: string; inMinutes?: number; repeat?: ReminderEntry['repeat'] }; res: ReminderEntry }
   'reminder:done': { req: { id: number }; res: void }
   'reminder:snooze': { req: { id: number; minutes: number }; res: void }
   'schedule:upsert': { req: Partial<ScheduleEntry> & { cron: string; prompt: string }; res: ScheduleEntry }
@@ -618,6 +619,7 @@ export const IPC_INVOKE_CHANNELS = [
   'hermes:run',
   'hermes:cancel',
   'reminder:create',
+  'reminder:update',
   'reminder:done',
   'reminder:snooze',
   'schedule:upsert',

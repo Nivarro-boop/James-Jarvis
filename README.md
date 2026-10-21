@@ -102,7 +102,7 @@ Während ein Spiel läuft, lassen sich die Tests mit `npm test -- --low-resource
 einzeln und mit niedriger Prozesspriorität ausführen. Der Modus begrenzt auch
 die Parallelität des Test-Builds.
 
-### Unterbrechen, Erinnerungen und Hermes
+### Unterbrechen und Erinnerungen
 
 **Stopp** auf der Startseite oder **einmal Escape** unterbricht die aktuelle
 Antwort und fordert den Abbruch ihrer laufenden Werkzeuge an. Mit aktivem
@@ -121,6 +121,37 @@ und meldet fällige Termine per Sprache und Windows-Benachrichtigung. Erstellen,
 Erledigen und Verschieben funktionieren über Sprache oder die Texteingabe.
 James muss für die Zustellung laufen; verpasste Termine werden beim nächsten
 Start nachgeholt. Eine pausierte Stimme verhindert die Windows-Benachrichtigung nicht.
+
+Unter **Gedächtnis → Erinnerungen** lassen sich bestehende Erinnerungen jetzt
+bearbeiten: Text, Zeitpunkt und Wiederholung können geändert werden, ohne den
+Eintrag neu anzulegen. **Abbrechen** verwirft den Entwurf. Zum Verschieben stehen
+10, 30 und 60 Minuten zur Wahl. Auch per Sprache kann James mit
+`reminder_update` eine über `reminder_list` gefundene Erinnerung ändern;
+erledigte Einträge werden dabei nicht wieder aktiviert.
+
+### Finden und bedienen
+
+Die **Gehirn-Ansicht** bietet eine Suche nach Titel und Dateiname sowie Filter
+für Projekte und Notizen. Die Trefferliste öffnet Einträge auch per Tastatur;
+die Kugel und die freiwillige Handsteuerung bleiben erhalten. Über
+**Aktualisieren** werden neue Einträge geladen. Ladefehler werden mit einem
+erneuten Versuch angezeigt, statt dauerhaft „Lädt …“ stehenzulassen.
+
+Im **Aktionslog** lassen sich Aktionen nach Text und Status filtern. Die Suche
+berücksichtigt auch Unteragenten-Schritte und deren Werkzeugnamen; der
+übergeordnete Auftrag bleibt als Zusammenhang sichtbar. Alle Einträge des
+aktuellen Verlaufs werden berücksichtigt, nicht nur die ersten 14 Aktionen.
+Die Filter können zurückgesetzt werden; der aktuelle Plan bleibt unabhängig
+davon sichtbar.
+
+Interaktive **Karten** haben Knöpfe zum Vergrößern, Verkleinern und
+Zurücksetzen. Nach dem Fokussieren verschieben die Pfeiltasten die Karte,
+**+ / −** ändern den Zoom und **Pos1** stellt den ursprünglichen Ausschnitt
+wieder her. Benannte Orte sind zusätzlich als Text erreichbar. Bei fehlender
+Kartengrundlage ist ein erneuter Ladeversuch möglich; beim Wechsel von Ort,
+Route oder Zoom erscheint wieder der passende Ladezustand.
+
+### Hermes als lokaler Motor
 
 Unter **Stimme → Denken → Hermes** arbeitet der vollständige Hermes-Agent
 aus dem bereitgestellten ZIP als zusätzlicher lokaler Motor. James übernimmt

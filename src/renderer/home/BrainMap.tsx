@@ -78,16 +78,79 @@ function useHandSwipe(enabled: boolean, onSwipe: (dx: number) => void): string {
   return status
 }
 
+type BrainEntry = { label: string; id: string; kind: 'projekt' | 'notiz' }
+type OpenNote = { label: string; id: string; loading: boolean; text: string; error: string }
+type EntryFilter = 'alle' | 'projekte' | 'notizen'
+function errorMessage(error: unknown, fallback: string): string {
+  if (typeof error === 'object' && error !== null && 'message' in error) return String(error.message)
+  return fallback
+}
+
 export function BrainMap({ onClose }: { onClose: () => void }): JSX.Element {
   const canvas = useRef<HTMLCanvasElement>(null)
   const [graph, setGraph] = useState<BrainGraph | null>(null)
-  const [selected, setSelected] = useState<{ label: string; text: string } | null>(null)
+  const [graphStatus, setGraphStatus] = useState<'loading' | 'error' | 'ready'>('loading')
+  const [graphError, setGraphError] = useState('')
+  const [selected, setSelected] = useState<OpenNote | null>(null)
   const [hand, setHand] = useState(false)
+  const [query, setQuery] = useState('')
+  const [filter, setFilter] = useState<EntryFilter>('alle')
+  const graphRequest = useRef(0)
+  const noteRequest = useRef(0)
+  const selectedRef = useRef<OpenNote | null>(null)
+  const closeRef = useRef(onClose)
   const rotation = useRef({ yaw: 0, pitch: 0.3, spin: 0.002 })
-  const projected = useRef<{ id: string; label: string; x: number; y: number; r: number }[]>([])
+  const projected = useRef<{ id: string; label: string; kind: BrainEntry['kind']; x: number; y: number; r: number }[]>([])
   const handStatus = useHandSwipe(hand, (dx) => { rotation.current.spin = 0; rotation.current.yaw += dx })
+  selectedRef.current = selected
+  closeRef.current = onClose
 
-  useEffect(() => { void window.jarvis.invoke('brain:graph').then(setGraph) }, [])
+  const loadGraph = (): void => {
+    const request = ++graphRequest.current
+    setGraphStatus('loading')
+    setGraphError('')
+    void window.jarvis.invoke('brain:graph').then((result) => {
+      if (graphRequest.current !== request) return
+      setGraph(result as BrainGraph)
+      setGraphStatus('ready')
+    }).catch((error: unknown) => {
+      if (graphRequest.current !== request) return
+      setGraphError(errorMessage(error, 'Die Gehirn-Karte konnte nicht geladen werden.'))
+      setGraphStatus('error')
+    })
+  }
+
+  useEffect(() => {
+    loadGraph()
+    return () => { graphRequest.current++; noteRequest.current++ }
+  }, [])
+
+  const openEntry = (entry: BrainEntry): void => {
+    const request = ++noteRequest.current
+    setSelected({ id: entry.id, label: entry.label, loading: true, text: '', error: '' })
+    void window.jarvis.invoke('brain:note', { file: entry.id }).then((text) => {
+      if (noteRequest.current !== request) return
+      setSelected({ id: entry.id, label: entry.label, loading: false, text: typeof text === 'string' ? text : 'Nicht lesbar.', error: '' })
+    }).catch((error: unknown) => {
+      if (noteRequest.current !== request) return
+      setSelected({ id: entry.id, label: entry.label, loading: false, text: '', error: errorMessage(error, 'Der Eintrag konnte nicht geladen werden.') })
+    })
+  }
+
+  const closeSelected = (): void => {
+    noteRequest.current++
+    setSelected(null)
+  }
+
+  useEffect(() => {
+    const keydown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      if (selectedRef.current) closeSelected()
+      else closeRef.current()
+    }
+    window.addEventListener('keydown', keydown)
+    return () => window.removeEventListener('keydown', keydown)
+  }, [])
 
   useEffect(() => {
     const el = canvas.current
@@ -138,7 +201,7 @@ export function BrainMap({ onClose }: { onClose: () => void }): JSX.Element {
           ctx.font = '11px system-ui, sans-serif'
           ctx.fillText(node.label.slice(0, 28), s.x + r + 3, s.y + 4)
         }
-        projected.current.push({ id: node.id, label: node.label, x: s.x, y: s.y, r: r + 4 })
+        projected.current.push({ id: node.id, label: node.label, kind: node.kind, x: s.x, y: s.y, r: r + 4 })
       }
       ctx.globalAlpha = 1
       frame = requestAnimationFrame(draw)
@@ -150,50 +213,117 @@ export function BrainMap({ onClose }: { onClose: () => void }): JSX.Element {
   useEffect(() => {
     const el = canvas.current
     if (!el) return
-    let drag: { x: number; y: number } | null = null
-    const down = (e: PointerEvent): void => { drag = { x: e.clientX, y: e.clientY }; rotation.current.spin = 0 }
+    let drag: { x: number; y: number; startX: number; startY: number; moved: boolean } | null = null
+    const down = (e: PointerEvent): void => {
+      drag = { x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, moved: false }
+      rotation.current.spin = 0
+    }
     const move = (e: PointerEvent): void => {
       if (!drag) return
+      if (Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > 4) drag.moved = true
       rotation.current.yaw += (e.clientX - drag.x) * 0.008
       rotation.current.pitch = Math.max(-1.3, Math.min(1.3, rotation.current.pitch + (e.clientY - drag.y) * 0.008))
-      drag = { x: e.clientX, y: e.clientY }
+      drag.x = e.clientX; drag.y = e.clientY
     }
     const up = (e: PointerEvent): void => {
-      const moved = drag && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 3
+      if (!drag) return
+      const wasDrag = drag.moved || Math.hypot(e.clientX - drag.startX, e.clientY - drag.startY) > 4
       drag = null
-      if (moved) return
+      if (wasDrag) return
       const box = el.getBoundingClientRect()
       const x = e.clientX - box.left; const y = e.clientY - box.top
       const hit = [...projected.current].reverse().find((p) => Math.hypot(p.x - x, p.y - y) <= p.r)
-      if (hit) void window.jarvis.invoke('brain:note', { file: hit.id }).then((text) => setSelected({ label: hit.label, text: text ?? 'Nicht lesbar.' }))
+      if (hit) openEntry({ id: hit.id, label: hit.label, kind: hit.kind })
     }
+    const cancel = (): void => { drag = null }
     el.addEventListener('pointerdown', down)
     window.addEventListener('pointermove', move)
     window.addEventListener('pointerup', up)
-    return () => { el.removeEventListener('pointerdown', down); window.removeEventListener('pointermove', move); window.removeEventListener('pointerup', up) }
+    window.addEventListener('pointercancel', cancel)
+    return () => {
+      el.removeEventListener('pointerdown', down)
+      window.removeEventListener('pointermove', move)
+      window.removeEventListener('pointerup', up)
+      window.removeEventListener('pointercancel', cancel)
+    }
   }, [])
 
+  const nodes = graph?.nodes ?? []
+  const normalizedQuery = query.trim().toLocaleLowerCase()
+  const results = nodes.filter((node) => {
+    if (filter === 'projekte' && node.kind !== 'projekt') return false
+    if (filter === 'notizen' && node.kind !== 'notiz') return false
+    return !normalizedQuery || node.label.toLocaleLowerCase().includes(normalizedQuery) || node.id.toLocaleLowerCase().includes(normalizedQuery)
+  })
+
   return (
-    <div className="brain-overlay" role="dialog" aria-label="Gehirn-Karte">
+    <div className="brain-overlay" role="dialog" aria-label="Gehirn-Karte" aria-modal="true">
       <div className="brain-head">
         <strong>Gehirn</strong>
-        <span className="brain-count">{graph ? `${graph.nodes.length} Einträge · ${graph.links.length} Verbindungen` : 'Lädt …'}</span>
+        <span className="brain-count" aria-live="polite">
+          {graphStatus === 'loading' ? 'Karte wird geladen …' : graphStatus === 'error' ? 'Karte nicht verfügbar' : `${nodes.length} Einträge · ${graph?.links.length ?? 0} Verbindungen`}
+        </span>
         <label className="brain-hand">
           <input type="checkbox" checked={hand} onChange={(e) => setHand(e.target.checked)} /> Handsteuerung
         </label>
-        <button type="button" onClick={onClose}>Schließen</button>
+        <button type="button" onClick={onClose} aria-label="Gehirn-Karte schließen">Schließen</button>
       </div>
-      {handStatus && <div className="brain-status">{handStatus}</div>}
-      {graph && graph.nodes.length === 0 && (
-        <div className="brain-empty">Noch leer. Sag „leg ein Projekt an“ oder „speicher eine Notiz“.</div>
-      )}
-      <canvas ref={canvas} className="brain-canvas" />
-      {selected && (
-        <aside className="brain-note">
-          <div className="brain-note-head"><strong>{selected.label}</strong><button type="button" onClick={() => setSelected(null)}>×</button></div>
-          <pre>{selected.text}</pre>
-        </aside>
-      )}
+      {handStatus && <div className="brain-status" role="status">{handStatus}</div>}
+      <div className="brain-workspace">
+        <section className="brain-browser" aria-label="Einträge durchsuchen">
+          <div className="brain-search-row">
+            <label htmlFor="brain-search">Einträge suchen</label>
+            <input id="brain-search" type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Titel oder Dateiname" />
+          </div>
+          <div className="brain-filters" role="group" aria-label="Einträge filtern">
+            {(['alle', 'projekte', 'notizen'] as const).map((value) => (
+              <button key={value} type="button" aria-pressed={filter === value} onClick={() => setFilter(value)}>
+                {value === 'alle' ? 'Alle' : value === 'projekte' ? 'Projekte' : 'Notizen'}
+              </button>
+            ))}
+          </div>
+          <div className="brain-results-head">
+            <span aria-live="polite">{graphStatus === 'ready' ? `${results.length} Treffer` : ''}</span>
+            <button type="button" onClick={loadGraph} disabled={graphStatus === 'loading'} aria-label="Gehirn-Karte aktualisieren">Aktualisieren</button>
+          </div>
+          {graphStatus === 'loading' && <p className="brain-feedback" role="status">Einträge werden geladen …</p>}
+          {graphStatus === 'error' && (
+            <div className="brain-feedback brain-error" role="alert">
+              <p>Einträge konnten nicht geladen werden{graphError ? `: ${graphError}` : '.'}</p>
+              <button type="button" onClick={loadGraph}>Erneut versuchen</button>
+            </div>
+          )}
+          {graphStatus === 'ready' && results.length === 0 && <p className="brain-feedback">Keine passenden Einträge.</p>}
+          {graphStatus === 'ready' && results.length > 0 && (
+            <ul className="brain-results" aria-label="Suchtreffer">
+              {results.map((node) => (
+                <li key={node.id}>
+                  <button type="button" onClick={() => openEntry(node)} aria-label={`${node.label} öffnen (${node.kind === 'projekt' ? 'Projekt' : 'Notiz'})`}>
+                    <span className="brain-result-title">{node.label}</span>
+                    <span className="brain-result-meta">{node.kind === 'projekt' ? 'Projekt' : 'Notiz'} · {node.id}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+          {selected && (
+            <aside className="brain-note" aria-label={`Eintrag: ${selected.label}`} aria-live="polite">
+              <div className="brain-note-head">
+                <strong>{selected.label}</strong>
+                <button type="button" onClick={closeSelected} aria-label="Eintrag schließen">Schließen</button>
+              </div>
+              {selected.loading ? <p className="brain-feedback" role="status">Eintrag wird geladen …</p>
+                : selected.error ? <p className="brain-feedback brain-error" role="alert">Eintrag konnte nicht geladen werden: {selected.error}</p>
+                  : <pre>{selected.text}</pre>}
+            </aside>
+          )}
+        </section>
+        <div className="brain-map-area">
+          {graphStatus === 'error' && <div className="brain-map-error" role="alert">{graphError || 'Die Karte konnte nicht geladen werden.'}</div>}
+          {graph && graph.nodes.length === 0 && <div className="brain-empty">Noch leer. Sag „leg ein Projekt an“ oder „speicher eine Notiz“.</div>}
+          <canvas ref={canvas} className="brain-canvas" aria-label="Drehbare Gehirn-Karte. Mit Maus oder Touch ziehen, um sie zu drehen." />
+        </div>
+      </div>
     </div>
   )
 }

@@ -74,7 +74,7 @@ import { forgetMcpLogin } from '../mcp/oauth'
 import { activitySnapshot } from '../agent/activity'
 import { reloadSchedules } from '../scheduler/cron'
 import { listReminders } from '../db'
-import { completeReminder, createReminder, snoozeReminder } from '../scheduler/reminders'
+import { completeReminder, createReminder, editReminder, snoozeReminder } from '../scheduler/reminders'
 import { hermesHealth, hermesRun } from '../providers/hermes'
 import { startHermesGateway } from '../providers/hermesService'
 import { cancelChatGptSignIn, chatGptStatus, connectChatGpt, disconnectChatGpt } from '../providers/chatgptAuth'
@@ -511,6 +511,7 @@ export function registerIpcHandlers(version: string): void {
     finally { hermesRequests.delete(requestId) }
   })
   handle('reminder:create', (input) => createReminder(input))
+  handle('reminder:update', (input) => editReminder(input))
   handle('reminder:done', ({ id }) => completeReminder(id))
   handle('reminder:snooze', ({ id, minutes }) => snoozeReminder(id, minutes))
   handle('schedule:upsert', (entry) => {

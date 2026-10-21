@@ -757,11 +757,12 @@ export function insertReminder(text: string, dueAt: number, repeat: ReminderEntr
   return listReminders().find(r => r.id === toNumber(result.lastInsertRowid))!
 }
 
-export function updateReminder(id: number, patch: { dueAt?: number; state?: ReminderEntry['state']; lastNotifiedAt?: number }): void {
-  const existing = listReminders(true).find(r => r.id === id)
-  if (!existing) throw new Error('Diese Erinnerung existiert nicht.')
-  conn().run('UPDATE reminders SET due_at = ?, state = ?, last_notified_at = ? WHERE id = ?',
-    [patch.dueAt ?? existing.dueAt, patch.state ?? existing.state, patch.lastNotifiedAt ?? existing.lastNotifiedAt, id])
+export function updateReminder(id: number, patch: { dueAt?: number; text?: string; repeat?: ReminderEntry['repeat']; state?: ReminderEntry['state']; lastNotifiedAt?: number }): void {
+  const existing = listReminders().find(r => r.id === id)
+  if (!existing) throw new Error('Diese aktive Erinnerung existiert nicht.')
+  conn().run("UPDATE reminders SET due_at = ?, text = ?, repeat = ?, state = ?, last_notified_at = ? WHERE id = ? AND state != 'done'",
+    [patch.dueAt ?? existing.dueAt, patch.text ?? existing.text, patch.repeat ?? existing.repeat,
+      patch.state ?? existing.state, patch.lastNotifiedAt ?? existing.lastNotifiedAt, id])
 }
 
 export function deleteTimer(id: number): void {
