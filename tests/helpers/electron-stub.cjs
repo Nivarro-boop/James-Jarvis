@@ -41,8 +41,30 @@ const mk = (name) =>
     construct: () => mk(`new ${name}`)
   })
 
+// Jeder Testprozess bekommt ein eigenes Profil. Der bisherige Fallback auf
+// '.' schrieb beim bloßen Import von Modulen settings.json und data/jarvis.db
+// ins Repository und ließ parallel laufende Tests dieselbe Datenbank benutzen.
+let testProfile
+const initialTemp = process.env.TEMP
+function profilePath() {
+  if (process.env.JAMES_TEST_PROFILE) return process.env.JAMES_TEST_PROFILE
+  // Einzeltests dürfen TEMP gezielt umstellen; der geerbte Windows-Tempordner
+  // ist dagegen kein individuelles Profil für alle parallelen Testprozesse.
+  if (process.env.TEMP && process.env.TEMP !== initialTemp) return process.env.TEMP
+  if (!testProfile) {
+    const { mkdtempSync, rmSync } = require('node:fs')
+    const { tmpdir } = require('node:os')
+    const { join } = require('node:path')
+    testProfile = mkdtempSync(join(tmpdir(), 'james-test-profile-'))
+    process.once('exit', () => {
+      try { rmSync(testProfile, { recursive: true, force: true }) } catch { /* Windows may still hold a handle at exit. */ }
+    })
+  }
+  return testProfile
+}
+
 const app = {
-  getPath: () => process.env.TEMP ?? '.',
+  getPath: profilePath,
   getAppPath: () => process.env.TEMP ?? '.',
   getName: () => 'void-jarvis',
   getVersion: () => '0.0.0-test',

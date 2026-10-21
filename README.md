@@ -1,11 +1,20 @@
 # James-Jarvis
 
-## Steuerzentrale: Telefon und Computer
+## Tages-Cockpit und Alltagsvorlagen
 
-Auf der Startseite öffnet **Steuerzentrale** eine gemeinsame Oberfläche mit zwei Bereichen:
+**Heute** zeigt lokale Erinnerungen für den aktuellen Tag, überfällige offene Einträge und laufende Timer. Kalendertermine sind hier nicht enthalten. Die Übersicht liest nur vorhandene lokale Daten; sie startet keine Dienste und ändert keine Erinnerungen. Bei Ladefehlern lassen sich die Daten erneut abrufen.
+
+Unter **Steuerzentrale → Alltag** stehen sechs editierbare Auftragsvorlagen bereit: Tagesüberblick, Wochenprioritäten, Gespräch nachbereiten, Antwortentwurf, Projektstatus und Fokusplan. Die Auswahl befüllt nur einen Entwurf. Erst **Entwurf an James übergeben** übergibt ihn an den normalen Assistenten. Verbundene Zugänge und die bestehenden Rechte/Freigaben bleiben erforderlich; eine Vorlage ersetzt keine Integration. Antwortentwürfe werden nicht automatisch versendet.
+
+Die allgemeine Idee eines Tages-Cockpits und wiederverwendbarer Alltagsabläufe ist von Packstart inspiriert. Die Umsetzung ist eigenständig; aus dem proprietären Installer wurden weder Code noch Dateien übernommen.
+
+## Steuerzentrale: Telefon, Computer und Alltag
+
+Auf der Startseite öffnet **Steuerzentrale** eine gemeinsame Oberfläche mit drei Bereichen:
 
 - **Telefon:** Telefonnummer oder Kontaktname und Gesprächsauftrag eingeben, mit **Auftrag prüfen** kontrollieren und erst danach **Anruf beauftragen** wählen. Telefonate können Kosten verursachen. Fehlende Zugänge werden angezeigt; die Einrichtung bleibt unter den vorhandenen Einstellungen. Eine Statusabfrage startet weder Telefonserver noch Tunnel und ruft niemanden an.
 - **Computer:** einen Auftrag formulieren oder **Systemstatus**, **Bildschirm ansehen**, **Fenster anordnen** beziehungsweise **Browser öffnen** verwenden. Fensteraktionen benötigen den gewünschten Fenstertitel. Auch diese Aufträge laufen über den normalen Assistenten mit unveränderten Rechten und Freigaben.
+- **Alltag:** einen vorbereiteten Ablauf wählen, den Auftragsentwurf bearbeiten und bewusst übergeben.
 
 „Auftrag an James übergeben“ bestätigt nur die Übergabe, nicht ein erfolgreiches Telefonat oder eine ausgeführte Computeraktion. Der weitere Verlauf und eventuelle Rückfragen erscheinen in der normalen Unterhaltung. Die Steuerzentrale lässt sich per Tastatur bedienen und mit Escape schließen.
 

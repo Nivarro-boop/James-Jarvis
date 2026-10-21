@@ -14,7 +14,7 @@ async function setup(reply: any = status()) {
     b.onResolve({ filter: /^react$/ }, () => ({ path: 'react', namespace: 'fixture' })); b.onResolve({ filter: /^react\/jsx-runtime$/ }, () => ({ path: 'jsx-runtime', namespace: 'fixture' })); b.onResolve({ filter: /\.css$/ }, () => ({ path: 'css', namespace: 'fixture' }))
     b.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ loader: 'js', contents: args.path === 'react' ? 'export const useState=(v)=>harness.useState(v);export const useRef=(v)=>harness.useRef(v);export const useEffect=(f,d)=>harness.useEffect(f,d);export const useCallback=(f,d)=>harness.useCallback(f,d);' : args.path === 'jsx-runtime' ? 'export const jsx=(type,props)=>({type,props});export const jsxs=jsx;export const Fragment=0;' : '' }))
   } }] })
-  const states: any[] = [], refs: any[] = [], effects: any[] = [], callbacks: any[] = []; let cursor = 0, effectCursor = 0, tree: any; let pending: (() => void)[] = []
+  const states: any[] = [], refs: any[] = [], effects: any[] = [], callbacks: any[] = []; let cursor = 0, effectCursor = 0, tree: any; let pending: (() => void)[] = []; let cleanup: (() => void) | null = null
   const invocations: string[] = [], sent: any[] = [], listeners = new Map<string, Function>(), closes: number[] = []
   const document: any = { activeElement: null, addEventListener: (k: string, fn: Function) => listeners.set(k, fn), removeEventListener: (k: string) => listeners.delete(k), querySelectorAll: () => [] }
   const win: any = { jarvis: { invoke: (channel: string) => { invocations.push(channel); if (channel !== 'control:status') throw Error(`unexpected IPC ${channel}`); return typeof reply === 'function' ? reply() : reply } }, dispatchEvent: (event: any) => { sent.push(event); return true }, setTimeout: () => 1, clearTimeout() {} }
@@ -27,13 +27,13 @@ async function setup(reply: any = status()) {
   const mod: any = { exports: {} }
   runInNewContext(built.outputFiles[0].text, { module: mod, exports: mod.exports, harness, window: win, document, HTMLElement: class HTMLElement {}, CustomEvent: class CustomEvent { type: string; detail: any; constructor(type: string, init: any) { this.type = type; this.detail = init.detail } } })
   function render() { cursor = 0; effectCursor = 0; tree = mod.exports.ControlCenter({ onClose: () => closes.push(1) }) }
-  function flush() { while (pending.length) pending.shift()!() }
+  function flush() { while (pending.length) { const result = pending.shift()!(); if (typeof result === 'function') cleanup = result } }
   render(); flush()
   const settle = async () => { await Promise.resolve(); await Promise.resolve(); await new Promise<void>(r => setImmediate(r)) }
   const find = (pred: (n: Node) => boolean) => all(tree, pred)
   const button = (label: string) => { const b = find(n => n.type === 'button' && (text(n).trim() === label || n.props['aria-label'] === label))[0]; assert.ok(b, `missing button ${label}: ${find(n => n.type === 'button').map(text)}`); return b }
   const input = (id: string) => { const n = find(x => (x.type === 'input' || x.type === 'textarea') && x.props.id === id)[0]; assert.ok(n); return n }
-  return { settle, find, button, input, get tree() { return tree }, sent, invocations, closes, listeners }
+  return { settle, find, button, input, get tree() { return tree }, sent, invocations, closes, listeners, unmount() { cleanup?.(); cleanup = null } }
 }
 
 it('fragt den passiven Status nur einmal ab, behandelt Fehler und Retry ohne Dienste zu starten', async () => {
@@ -79,4 +79,61 @@ it('zeigt ein nicht verfügbares Computerbackend nicht als grün an', async () =
   const card = ui.find(n => n.props.className === 'cc-computer')[0]
   assert.match(text(card), /Kein Eingabe-Backend/)
   assert.equal(all(card, n => n.type === 'span' && /is-on/.test(n.props.className || '')).length, 0)
+})
+
+it('lädt Vorlagen als editierbaren Entwurf und übergibt sie erst per ausdrücklichem Klick', async () => {
+  const ui = await setup(); await ui.settle(); ui.button('Alltag').props.onClick()
+  assert.match(text(ui.tree), /verbundene Zugänge/)
+  const presets = ui.find(n => n.type === 'button' && n.props.className === 'cc-preset')
+  assert.equal(presets.length, 6)
+  const preset = presets.find(n => text(n).startsWith('Tagesüberblick'))!
+  assert.ok(preset)
+  preset.props.onClick()
+  assert.equal(ui.sent.length, 0)
+  assert.match(ui.input('cc-workflow-draft').props.value, /Überblick für heute/)
+  ui.input('cc-workflow-draft').props.onChange({ target: { value: 'Bitte nur meine offenen Punkte ordnen.' } })
+  assert.equal(ui.sent.length, 0)
+  ui.button('Entwurf an James übergeben').props.onClick()
+  assert.equal(ui.sent.length, 1)
+  assert.equal(ui.sent[0].type, 'jarvis:text')
+  assert.equal(ui.sent[0].detail.text, 'Bitte nur meine offenen Punkte ordnen.')
+})
+
+it('zeigt fehlende Telefonzugänge erst nach abgeschlossenem Statusladen', async () => {
+  let resolveStatus!: (value: any) => void
+  const ui = await setup(() => new Promise(resolve => { resolveStatus = resolve }))
+  assert.match(text(ui.tree), /Status wird geladen/)
+  assert.doesNotMatch(text(ui.tree), /Telefonzugänge fehlen/)
+  resolveStatus(status(false)); await ui.settle()
+  assert.match(text(ui.tree), /Telefonzugänge fehlen/)
+})
+
+it('bewahrt die globale Übergabeanzeige beim Tabwechsel und ignoriert verspätete Rückrufe nach Unmount', async () => {
+  const ui = await setup(); await ui.settle(); ui.button('Computer').props.onClick()
+  ui.input('cc-computer-task').props.onChange({ target: { value: 'Bitte Status prüfen' } })
+  ui.button('Auftrag übergeben').props.onClick()
+  assert.match(text(ui.tree), /Auftrag wird übergeben/)
+  ui.button('Alltag').props.onClick()
+  assert.match(text(ui.tree), /Auftrag wird übergeben/)
+  assert.equal(ui.sent.length, 1)
+  const oldTree = ui.tree
+  ui.unmount()
+  ui.sent[0].detail.onResult(true)
+  assert.equal(ui.tree, oldTree)
+  assert.match(text(ui.tree), /Auftrag wird übergeben/)
+})
+
+it('navigiert mit Pfeilen, Home und End durch alle drei Tabs', async () => {
+  const ui = await setup(); await ui.settle()
+  const tab = (label: string) => ui.button(label)
+  tab('Telefon').props.onKeyDown({ key: 'ArrowRight', preventDefault() {} })
+  assert.equal(tab('Computer').props['aria-selected'], true)
+  tab('Computer').props.onKeyDown({ key: 'ArrowRight', preventDefault() {} })
+  assert.equal(tab('Alltag').props['aria-selected'], true)
+  tab('Alltag').props.onKeyDown({ key: 'ArrowRight', preventDefault() {} })
+  assert.equal(tab('Telefon').props['aria-selected'], true)
+  tab('Telefon').props.onKeyDown({ key: 'End', preventDefault() {} })
+  assert.equal(tab('Alltag').props['aria-selected'], true)
+  tab('Alltag').props.onKeyDown({ key: 'Home', preventDefault() {} })
+  assert.equal(tab('Telefon').props['aria-selected'], true)
 })

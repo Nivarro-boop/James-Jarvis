@@ -1,3 +1,16 @@
+# PR-Ergänzung – Tages-Cockpit und Alltagsvorlagen – 21.10.2026
+
+- Startseite: **Heute** zeigt lokale offene/überfällige Erinnerungen und laufende Timer. Bereits benachrichtigte Erinnerungen bleiben offen, bis sie erledigt sind. Kalenderdaten sind ausdrücklich nicht enthalten. Lade-/Fehler-/Retry-Zustände, Erhalt zuletzt geladener Daten, Schutz vor veralteten Antworten und Aktualisierung am lokalen Tageswechsel.
+- Steuerzentrale: neues Register **Alltag** mit sechs editierbaren Auftragsvorlagen. Auswahl startet nichts; Übergabe läuft erst nach Klick über den bestehenden Assistenten. Normale Rechte und Freigaben bleiben unverändert. Drei Register sind per Pfeiltasten/Pos1/Ende bedienbar.
+- Steuerzentrale: verspätete Übergaberückrufe nach Schließen werden ignoriert; keine falsche Meldung fehlender Zugänge während des Statusladens; laufende Übergabe bleibt beim Registerwechsel sichtbar.
+- Skills: unterschiedliche Namen mit identischem normalisiertem Dateinamen überschreiben einander nicht mehr. Exakte Namenssuche vor Slug-Fallback, freie Suffixe bei Kollisionen und Regressionstest für unabhängiges Aktualisieren.
+- Testprofile: standardmäßig pro Prozess ein temporäres Profil statt einer gemeinsamen Datenbank im Repository bzw. im Windows-Tempordner; explizite Testpfade bleiben möglich.
+- Paketstand: Vite auf 7.3.7 und transitive Hono-Abhängigkeit auf 4.13.13 innerhalb bestehender Versionsvorgaben aktualisiert. Produktions-Audit ohne bekannte Warnungen; acht mittlere Build-Abhängigkeitswarnungen bleiben. Keine erzwungenen Downgrades.
+- Browserprüfung mit echten React-Komponenten und synthetischer Schnittstelle: Vorlage wählen/bearbeiten/übergeben, Drei-Register-Tastaturbedienung, Tageslisten einschließlich benachrichtigter offener Einträge, Ladefehler mit Datenerhalt und Wiederherstellung. Keine Konsolenfehler im Prüflauf.
+- Gesamttests: 2.149 bestanden, 0 Fehler (Ausgangsbasis: 2.139). Typecheck und App-Build erfolgreich; Build meldet weiterhin bekannte Chunk-/Import-Warnungen. Dashboard: 11 Tests bestanden. Echte Windows-, Mikrofon-, Anbieter- und Telefonläufe bleiben offen; kein Installer gebaut oder installiert.
+
+Packstart-Installer ausschließlich statisch untersucht, nicht ausgeführt. Allgemeine Funktionsideen eigenständig umgesetzt; proprietären Code und Dateien nicht übernommen. Änderungen bleiben im bestehenden PR; `main` wird nicht verändert und kein Release ausgelöst.
+
 # Update 1.3.9 – Kalender-Link, Rechner-Check, Support-Meldung – 18.10.2026
 
 Ideen aus Packstart (Emin Simsek) selbst nachgebaut; kein fremder Code und

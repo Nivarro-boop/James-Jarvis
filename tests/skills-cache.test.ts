@@ -4,7 +4,7 @@ import { app } from 'electron'
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync, unlinkSync, utimesSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { listSkills, saveSkill, useSkill, patchSkill, deleteSkill, serializeSkill, skillIndexForPrompt } from '@main/agent/skills'
+import { listSkills, findSkill, saveSkill, useSkill, patchSkill, deleteSkill, serializeSkill, skillIndexForPrompt } from '@main/agent/skills'
 
 it('reuses unchanged skill files and refreshes edits, additions, deletions, writes and profile changes', t => {
   const root = mkdtempSync(join(tmpdir(), 'james-skill-cache-'))
@@ -51,6 +51,15 @@ it('reuses unchanged skill files and refreshes edits, additions, deletions, writ
   assert.equal(listSkills().find(s => s.slug === 'kalender')?.steps, 'saved')
   assert.equal(useSkill('Kalender')?.uses, 2)
   assert.equal(listSkills().find(s => s.slug === 'kalender')?.uses, 2)
+  const plusName = saveSkill({ ...skill, name: 'A+B', steps: 'plus steps' }).skill
+  const spacedName = saveSkill({ ...skill, name: 'A B', steps: 'space steps' }).skill
+  assert.equal(plusName.slug, 'a-b')
+  assert.notEqual(spacedName.slug, plusName.slug)
+  assert.equal(findSkill('A+B')?.steps, 'plus steps')
+  assert.equal(findSkill('A B')?.steps, 'space steps')
+  saveSkill({ ...skill, name: 'A B', steps: 'updated space steps' })
+  assert.equal(findSkill('A+B')?.steps, 'plus steps', 'updating a slug collision must not overwrite its neighbor')
+  assert.equal(findSkill('A B')?.steps, 'updated space steps')
   patchSkill('Kalender', 'saved', 'patched')
   assert.equal(listSkills().find(s => s.slug === 'kalender')?.steps, 'patched')
   assert.equal(deleteSkill('Kalender'), true)

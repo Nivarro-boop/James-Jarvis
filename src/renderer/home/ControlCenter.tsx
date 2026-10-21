@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState, type JSX, type FormEvent, type KeyboardEvent } from 'react'
 import './control-center.css'
 import type { IpcInvokeMap } from '@shared/ipc'
+import { workflowPresets } from './workflowPresets'
 
 type ControlStatus = IpcInvokeMap['control:status']['res']
-type Tab = 'phone' | 'computer'
+type Tab = 'phone' | 'computer' | 'everyday'
+const tabs: Tab[] = ['phone', 'computer', 'everyday']
 
 function requestJames(text: string, result: (sent: boolean) => void): void {
   window.dispatchEvent(new CustomEvent('jarvis:text', { detail: { text, onResult: result } }))
@@ -19,6 +21,8 @@ export function ControlCenter({ onClose }: { onClose: () => void }): JSX.Element
   const [review, setReview] = useState(false)
   const [computerTask, setComputerTask] = useState('')
   const [windowTitle, setWindowTitle] = useState('')
+  const [selectedPreset, setSelectedPreset] = useState('')
+  const [workflowDraft, setWorkflowDraft] = useState('')
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState('')
   const busyRef = useRef(false)
@@ -57,7 +61,15 @@ export function ControlCenter({ onClose }: { onClose: () => void }): JSX.Element
       else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus() }
     }
     document.addEventListener('keydown', keydown)
-    return () => { alive.current = false; statusSeq.current++; if (resultTimer.current !== null) window.clearTimeout(resultTimer.current); document.removeEventListener('keydown', keydown); priorFocus.current?.focus() }
+    return () => {
+      alive.current = false
+      statusSeq.current++
+      if (resultTimer.current !== null) window.clearTimeout(resultTimer.current)
+      resultTimer.current = null
+      busyRef.current = false
+      document.removeEventListener('keydown', keydown)
+      priorFocus.current?.focus()
+    }
   }, [loadStatus])
 
   const send = (text: string): void => {
@@ -65,7 +77,7 @@ export function ControlCenter({ onClose }: { onClose: () => void }): JSX.Element
     busyRef.current = true; setBusy(true); setMessage('Auftrag wird übergeben …')
     let answered = false
     const finish = (sent: boolean): void => {
-      if (answered) return
+      if (answered || !alive.current) return
       answered = true
       if (resultTimer.current !== null) window.clearTimeout(resultTimer.current)
       resultTimer.current = null
@@ -73,9 +85,15 @@ export function ControlCenter({ onClose }: { onClose: () => void }): JSX.Element
       if (sent) setReview(false)
       setMessage(sent ? 'Auftrag an James übergeben' : 'Auftrag konnte nicht übergeben werden. Bitte erneut versuchen.')
     }
-    resultTimer.current = window.setTimeout(() => { if (!answered) { answered = true; busyRef.current = false; setBusy(false); setMessage('Keine Übergabebestätigung erhalten. Es wurde nicht automatisch erneut gesendet.') } }, 20000)
+    resultTimer.current = window.setTimeout(() => {
+      if (!answered && alive.current) {
+        answered = true; resultTimer.current = null; busyRef.current = false; setBusy(false)
+        setMessage('Keine Übergabebestätigung erhalten. Es wurde nicht automatisch erneut gesendet.')
+      }
+    }, 20000)
     requestJames(text.trim(), finish)
   }
+
   const submitPhone = (event: FormEvent): void => {
     event.preventDefault()
     if (!phoneReady || busy || !target.trim() || !brief.trim()) return
@@ -86,14 +104,22 @@ export function ControlCenter({ onClose }: { onClose: () => void }): JSX.Element
     if (!task.trim()) return
     setComputerTask(task); send(task)
   }
-  const switchTab = (next: Tab): void => { setTab(next); setMessage(''); setReview(false) }
+  const switchTab = (next: Tab): void => {
+    setTab(next)
+    if (!busyRef.current) setMessage('')
+    setReview(false)
+  }
   const onTabKey = (event: KeyboardEvent<HTMLButtonElement>): void => {
-    const keys = ['ArrowLeft', 'ArrowRight', 'Home', 'End']
-    if (!keys.includes(event.key)) return
+    const index = tabs.indexOf(tab)
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight' && event.key !== 'Home' && event.key !== 'End') return
     event.preventDefault()
-    const index = event.key === 'Home' ? 0 : event.key === 'End' ? 1 : (tab === 'phone' ? 1 : 0)
-    const next: Tab = index === 0 ? 'phone' : 'computer'
-    switchTab(next); tabRefs.current[index]?.focus()
+    const nextIndex = event.key === 'Home' ? 0 : event.key === 'End' ? tabs.length - 1 : (index + (event.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length
+    switchTab(tabs[nextIndex]); tabRefs.current[nextIndex]?.focus()
+  }
+  const choosePreset = (id: string): void => {
+    const preset = workflowPresets.find((item) => item.id === id)
+    if (!preset) return
+    setSelectedPreset(id); setWorkflowDraft(preset.prompt); setMessage('')
   }
 
   return <div className="cc-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose() }}>
@@ -102,6 +128,7 @@ export function ControlCenter({ onClose }: { onClose: () => void }): JSX.Element
       <div className="cc-tabs" role="tablist" aria-label="Steuerzentrale Bereiche">
         <button ref={(el) => { tabRefs.current[0] = el }} id="cc-tab-phone" role="tab" aria-selected={tab === 'phone'} aria-controls="cc-panel-phone" tabIndex={tab === 'phone' ? 0 : -1} onClick={() => switchTab('phone')} onKeyDown={onTabKey}>Telefon</button>
         <button ref={(el) => { tabRefs.current[1] = el }} id="cc-tab-computer" role="tab" aria-selected={tab === 'computer'} aria-controls="cc-panel-computer" tabIndex={tab === 'computer' ? 0 : -1} onClick={() => switchTab('computer')} onKeyDown={onTabKey}>Computer</button>
+        <button ref={(el) => { tabRefs.current[2] = el }} id="cc-tab-everyday" role="tab" aria-selected={tab === 'everyday'} aria-controls="cc-panel-everyday" tabIndex={tab === 'everyday' ? 0 : -1} onClick={() => switchTab('everyday')} onKeyDown={onTabKey}>Alltag</button>
       </div>
       {loadError ? <div className="cc-error" role="alert"><strong>Status konnte nicht geladen werden.</strong><span>Es wurde kein Dienst gestartet.</span><button onClick={() => void loadStatus()} disabled={loading}>{loading ? 'Wird aktualisiert …' : 'Erneut versuchen'}</button></div> : <>
         <div className="cc-status" aria-live="polite">
@@ -111,7 +138,7 @@ export function ControlCenter({ onClose }: { onClose: () => void }): JSX.Element
         </div>
         {tab === 'phone' ? <section id="cc-panel-phone" role="tabpanel" aria-labelledby="cc-tab-phone" className="cc-panel">
           {status && !status.conversationEnabled && <div className="cc-notice cc-notice-info"><b>Zweiweg-Gespräche sind ausgeschaltet</b><span>Telefonaufträge können so nicht ausgeführt werden. James aktiviert den Dienst nicht automatisch.</span></div>}
-          {!status?.phoneConfigured && <div className="cc-notice"><b>Telefonzugänge fehlen</b><span>Richte deine Zugänge ein, bevor ein Anruf beauftragt werden kann.</span><button onClick={() => void window.jarvis.invoke('app:openSettings', { section: 'keys' })}>Zugänge öffnen</button></div>}
+          {status && !status.phoneConfigured && <div className="cc-notice"><b>Telefonzugänge fehlen</b><span>Richte deine Zugänge ein, bevor ein Anruf beauftragt werden kann.</span><button onClick={() => void window.jarvis.invoke('app:openSettings', { section: 'keys' })}>Zugänge öffnen</button></div>}
           <form onSubmit={submitPhone}>
             <label htmlFor="cc-target">Ziel <span>Telefonnummer oder Kontaktname</span></label><input id="cc-target" value={target} onChange={(e) => { setTarget(e.target.value); setReview(false) }} maxLength={120} placeholder="z. B. +49 30 123456 oder Alex" required />
             <label htmlFor="cc-brief">Gesprächsauftrag</label><textarea id="cc-brief" value={brief} onChange={(e) => { setBrief(e.target.value); setReview(false) }} maxLength={500} rows={3} placeholder="Was soll James im Gespräch sagen oder klären?" required />
@@ -119,7 +146,7 @@ export function ControlCenter({ onClose }: { onClose: () => void }): JSX.Element
             {review && <div className="cc-review" aria-live="polite"><b>Bitte genau prüfen</b><p><span>Ziel</span>{target.trim()}</p><p><span>Gesprächsauftrag</span>{brief.trim()}</p></div>}
             <button className="cc-primary" type="submit" disabled={!phoneReady || busy || !target.trim() || !brief.trim()}>{busy ? 'Wird übergeben …' : review ? 'Anruf beauftragen' : 'Auftrag prüfen'}</button>
           </form>
-        </section> : <section id="cc-panel-computer" role="tabpanel" aria-labelledby="cc-tab-computer" className="cc-panel">
+        </section> : tab === 'computer' ? <section id="cc-panel-computer" role="tabpanel" aria-labelledby="cc-tab-computer" className="cc-panel">
           <div className="cc-computer"><span className={`cc-status-dot ${status && !status.computer.grund && status.computer.name !== 'nicht verfügbar' ? 'is-on' : ''}`}/><div><b>{status?.computer.name || 'Computer'}</b><small>{status?.computer.grund || 'Aktionen werden über James angefragt und unterliegen den üblichen Freigaben.'}</small></div></div>
           <label htmlFor="cc-computer-task">Auftrag an James</label><textarea id="cc-computer-task" value={computerTask} onChange={(e) => setComputerTask(e.target.value)} maxLength={1000} rows={3} placeholder="Beschreibe, was James am Computer tun soll …" />
           <button className="cc-primary" onClick={() => computerRequest(computerTask)} disabled={busy || !computerTask.trim()}>Auftrag übergeben</button>
@@ -131,6 +158,17 @@ export function ControlCenter({ onClose }: { onClose: () => void }): JSX.Element
             <button disabled={busy} onClick={() => computerRequest('Öffne den Browser und hilf mir mit meinem Anliegen.')}>Browser öffnen</button>
           </div>
           <p className="cc-permissions">Vor jeder Aktion gelten weiterhin die normalen Rechte und Freigaben.</p>
+        </section> : <section id="cc-panel-everyday" role="tabpanel" aria-labelledby="cc-tab-everyday" className="cc-panel cc-workflows">
+          <p className="cc-workflow-intro">Wähle eine Vorlage als Startpunkt und passe den Entwurf an deine Situation an.</p>
+          <div className="cc-presets" aria-label="Alltagsvorlagen">
+            {workflowPresets.map((preset) => <button key={preset.id} type="button" className="cc-preset" aria-pressed={selectedPreset === preset.id} onClick={() => choosePreset(preset.id)}>
+              <b>{preset.title}</b><span>{preset.description}</span>
+            </button>)}
+          </div>
+          <label htmlFor="cc-workflow-draft">Editierbarer Auftragsentwurf</label>
+          <textarea id="cc-workflow-draft" value={workflowDraft} onChange={(e) => setWorkflowDraft(e.target.value)} maxLength={2000} rows={6} placeholder="Wähle eine Vorlage oder formuliere deinen Auftrag …" />
+          <div className="cc-notice cc-notice-info"><b>Du behältst die Kontrolle</b><span>Vorlagen starten nichts automatisch. Inhalte können verbundene Zugänge erfordern. Erst mit „Entwurf an James übergeben“ wird dieser Text übergeben; Versand, Änderungen und weitere Aktionen unterliegen den üblichen Freigaben.</span></div>
+          <button className="cc-primary" type="button" onClick={() => send(workflowDraft)} disabled={busy || !workflowDraft.trim()}>{busy ? 'Wird übergeben …' : 'Entwurf an James übergeben'}</button>
         </section>}
       </>}
       {message && <div className="cc-message" role="status">{message}</div>}

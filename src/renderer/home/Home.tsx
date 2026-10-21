@@ -15,6 +15,7 @@ import { UpdateBar, useUpdateStatus } from './UpdateBar'
 import { TextBar } from './TextBar'
 import { ControlCenter } from './ControlCenter'
 import { BrainMap, WidgetTiles } from './BrainMap'
+import { TodayPanel } from './TodayPanel'
 import type { ResearchRun, TimerEntry } from '@shared/types'
 
 /**
@@ -368,6 +369,7 @@ export function Home(): JSX.Element {
               <p className="home-hint" role={state === 'error' ? 'alert' : undefined}>{hint}</p>
             </div>
           </main>
+          <TodayPanel />
           <SkillsPanel />
           <SkillProposalPanel />
           <Conversation snapshot={activity.snapshot} />
