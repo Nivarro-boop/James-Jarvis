@@ -3,6 +3,7 @@ import { websiteAccounts, saveWebsiteAccount, removeWebsiteAccount } from '../se
 import { listSkills } from '../agent/skills'
 import { clearPlan } from '../agent/activity'
 import { workingContext, clearWorkingContext } from '../agent/workingContext'
+import { controlStatus } from '../control/status'
 import { appendTranscript, clearTranscript } from '../db'
 import { skillProposals, decideSkill } from '../agent/skillProposals'
 import { realtimeAccess } from '../providers/realtimeAccess'
@@ -606,6 +607,7 @@ export function registerIpcHandlers(version: string): void {
   })
 
   // ── Telefongespräch ────────────────────────────────────────
+  handle('control:status', async () => controlStatus())
   handle('telephony:test', async () => testTelephonySetup())
   handle('telephony:stop', async () => {
     // Vom Nutzer ausgelöst — hier wird die Adresse bei Twilio mit ausgetragen.

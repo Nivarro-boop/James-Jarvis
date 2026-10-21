@@ -1,5 +1,16 @@
 # James-Jarvis
 
+## Steuerzentrale: Telefon und Computer
+
+Auf der Startseite öffnet **Steuerzentrale** eine gemeinsame Oberfläche mit zwei Bereichen:
+
+- **Telefon:** Telefonnummer oder Kontaktname und Gesprächsauftrag eingeben, mit **Auftrag prüfen** kontrollieren und erst danach **Anruf beauftragen** wählen. Telefonate können Kosten verursachen. Fehlende Zugänge werden angezeigt; die Einrichtung bleibt unter den vorhandenen Einstellungen. Eine Statusabfrage startet weder Telefonserver noch Tunnel und ruft niemanden an.
+- **Computer:** einen Auftrag formulieren oder **Systemstatus**, **Bildschirm ansehen**, **Fenster anordnen** beziehungsweise **Browser öffnen** verwenden. Fensteraktionen benötigen den gewünschten Fenstertitel. Auch diese Aufträge laufen über den normalen Assistenten mit unveränderten Rechten und Freigaben.
+
+„Auftrag an James übergeben“ bestätigt nur die Übergabe, nicht ein erfolgreiches Telefonat oder eine ausgeführte Computeraktion. Der weitere Verlauf und eventuelle Rückfragen erscheinen in der normalen Unterhaltung. Die Steuerzentrale lässt sich per Tastatur bedienen und mit Escape schließen.
+
+Zusätzlich abgesichert: 20-Sekunden-Grenze beim Aufbau eines Live-Telefongesprächs, Aufräumen verspäteter Verbindungen und Stopp-Prüfung vor der Ausführung verspätet gelieferter Computerpläne. Echte Anbieter-, Telefon- und Windows-Integrationstests sind weiterhin erforderlich.
+
 Lokale Verbesserungen **16.10.2026**: aufgeräumte Startseite, mehrzeilige
 Texteingabe mit sicherem Entwurf, besserer Gesprächsverlauf und durchsuchbare
 Einstellungen. Abbruch und paralleles Dateispeichern sind zusätzlich abgesichert.

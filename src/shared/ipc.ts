@@ -242,6 +242,8 @@ export interface IpcInvokeMap {
   'speech:status': { req: { start?: boolean } | void; res: VoiceServiceStatus }
   'speech:stop': { req: void; res: VoiceServiceStatus }
 
+  /** Passive Statusabfrage; startet weder Telefonie noch Tunnel. */
+  'control:status': { req: void; res: { telephony: TelephonyStatus; phoneConfigured: boolean; conversationEnabled: boolean; incomingEnabled: boolean; computer: { name: string; grund?: string } } }
   /** Tunnel und Telefondienst hochfahren, ohne zu telefonieren. */
   'telephony:test': { req: void; res: TelephonyStatus }
   'telephony:stop': { req: void; res: TelephonyStatus }
@@ -638,6 +640,7 @@ export const IPC_INVOKE_CHANNELS = [
   'speech:stop',
   'telephony:test',
   'telephony:stop',
+  'control:status',
   'telephony:incoming',
   'connect:status',
   'connect:login',

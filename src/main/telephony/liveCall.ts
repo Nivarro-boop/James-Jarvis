@@ -59,6 +59,8 @@ type LiveMessage = Record<string, any>
 
 /** Wie lange ein Anruf höchstens läuft, bevor von selbst aufgelegt wird. */
 const MAX_CALL_MS = 10 * 60 * 1000
+/** Der Handschlag darf deutlich kürzer dauern als ein laufendes Gespräch. */
+const CONNECT_TIMEOUT_MS = 20_000
 
 /**
  * Wie lange ein Werkzeug am Telefon laufen darf.
@@ -78,6 +80,9 @@ export class LiveCall {
   private lastUpsampled = 0
   private downsampler = new Downsampler24kTo8k()
   private hardStop: NodeJS.Timeout | null = null
+  private connectPromise: Promise<void> | null = null
+  private readonly closedSignal: Promise<void>
+  private resolveClosed!: () => void
   /** Ton, der schon ankommt, während die Live-API noch den Handschlag macht. */
   private pendingCallerAudio: Buffer[] = []
   private pendingCallerBytes = 0
@@ -105,16 +110,26 @@ export class LiveCall {
     private readonly fullAccess = false
   ) {
     this.pacer = new OutboundPacer((frame) => this.events.onAudio(frame))
+    this.closedSignal = new Promise((resolve) => { this.resolveClosed = resolve })
   }
 
-  async start(): Promise<void> {
+  start(): Promise<void> {
+    if (!this.connectPromise) this.connectPromise = this.startOnce()
+    return this.connectPromise
+  }
+
+  private async startOnce(): Promise<void> {
+    if (this.closed) return
     const apiKey = getSecret('gemini')
     if (!apiKey) throw new Error('Kein Gemini-Zugang hinterlegt — ohne den gibt es kein Gespräch.')
 
     const settings = getSettings()
     const ai = new GoogleGenAI({ apiKey })
 
-    const session = await ai.live.connect({
+    // Hänge Erfolg und Fehler sofort an: auch wenn Close/Timeout den Race
+    // gewinnt, bleibt ein später Reject konsumiert und eine späte Sitzung wird
+    // sicher geschlossen.
+    const connecting = ai.live.connect({
       model: settings.liveModel,
       config: {
         responseModalities: [Modality.AUDIO],
@@ -156,16 +171,34 @@ export class LiveCall {
         onclose: (event: { reason?: string } | undefined) =>
           this.finish(`Die Live-Sitzung wurde beendet${event?.reason ? `: ${event.reason.slice(0, 200)}` : ''}.`)
       }
-    })
+    }).then(
+      (session: any) => {
+        if (this.closed) this.closeSession(session)
+        return { session } as const
+      },
+      (error: unknown) => ({ error }) as const
+    )
 
-    // Auflegen kann schneller sein als der Netzwerk-Handschlag. Eine danach
-    // eintreffende Sitzung darf weder grüßen noch weiter Kosten erzeugen.
+    let connectTimer: NodeJS.Timeout | undefined
+    const outcome = await Promise.race([
+      connecting,
+      this.closedSignal.then(() => ({ closed: true as const })),
+      new Promise<{ timeout: true }>((resolve) => {
+        connectTimer = setTimeout(() => resolve({ timeout: true }), CONNECT_TIMEOUT_MS)
+      })
+    ]).finally(() => clearTimeout(connectTimer))
+
+    if ('closed' in outcome) return
+    if ('timeout' in outcome) {
+      this.finish('Zeitüberschreitung beim Verbindungsaufbau.')
+      throw new Error('Zeitüberschreitung beim Verbindungsaufbau.')
+    }
+    if ('error' in outcome) throw outcome.error
+    const { session } = outcome
+
+    // Auflegen kann schneller sein als der Netzwerk-Handschlag.
     if (this.closed) {
-      try {
-        session.close()
-      } catch {
-        // Der Handschlag kann schon beim Schließen abgebrochen worden sein.
-      }
+      this.closeSession(session)
       return
     }
     this.session = session
@@ -450,20 +483,21 @@ export class LiveCall {
     return this.pacer.pendingMs()
   }
 
+  private closeSession(session: any): void {
+    try { session?.close() } catch { /* Schon zu oder Handshake abgebrochen. */ }
+  }
+
   private finish(reason: string): void {
     if (this.closed) return
     this.closed = true
+    this.resolveClosed()
     this.pacer.stop()
     this.downsampler.reset()
     this.pendingCallerAudio = []
     this.pendingCallerBytes = 0
     if (this.hardStop) clearTimeout(this.hardStop)
     this.hardStop = null
-    try {
-      this.session?.close()
-    } catch {
-      // Schon zu.
-    }
+    this.closeSession(this.session)
     this.session = null
     this.events.onClosed(reason)
   }

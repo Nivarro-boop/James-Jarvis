@@ -13,6 +13,7 @@ import { WeatherCard } from './WeatherCard'
 import { HealthPanel } from './HealthPanel'
 import { UpdateBar, useUpdateStatus } from './UpdateBar'
 import { TextBar } from './TextBar'
+import { ControlCenter } from './ControlCenter'
 import { BrainMap, WidgetTiles } from './BrainMap'
 import type { ResearchRun, TimerEntry } from '@shared/types'
 
@@ -260,6 +261,8 @@ export function Home(): JSX.Element {
   const research = useResearch()
   const display = useDisplayCards()
   const [brainOpen, setBrainOpen] = useState(false)
+  const [controlCenterOpen, setControlCenterOpen] = useState(false)
+  useEffect(() => { if (state === 'confirm') setControlCenterOpen(false) }, [state])
   const update = useUpdateStatus()
 
   // Der Schlüssel wird im Einstellungsfenster gesetzt — beim Zurückkommen
@@ -343,6 +346,7 @@ export function Home(): JSX.Element {
           })()}
         </div>
         <div className="home-actions">
+          <button className="home-gear" onClick={() => setControlCenterOpen(true)}>Steuerzentrale</button>
           <button className="home-gear" onClick={() => setBrainOpen(true)}>Gehirn</button>
           <button className="home-gear" onClick={() => window.dispatchEvent(new Event('jarvis:skills'))}>Fertigkeiten</button>
           <HealthPanel />
@@ -396,6 +400,7 @@ export function Home(): JSX.Element {
         <TextBar disabled={!settings} />
       </footer>
 
+      {controlCenterOpen && <ControlCenter onClose={() => setControlCenterOpen(false)} />}
       {brainOpen && <BrainMap onClose={() => setBrainOpen(false)} />}
 
       {state === 'confirm' && confirmation && (
