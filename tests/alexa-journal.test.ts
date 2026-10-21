@@ -36,7 +36,9 @@ describe('Alexa persistent request tombstones', () => {
       assert.equal(calls, 2)
       const stored = readFileSync(join(directory, 'alexa-request-journal.json'), 'utf8')
       assert.equal(stored.includes('same-authenticated-id'), false)
-      assert.equal(statSync(join(directory, 'alexa-request-journal.json')).mode & 0o777, 0o600)
+      // Windows exposes synthetic POSIX bits, not the file's ACL. The journal
+      // remains functional there; do not report an ACL check we did not perform.
+      if (process.platform !== 'win32') assert.equal(statSync(join(directory, 'alexa-request-journal.json')).mode & 0o777, 0o600)
     })
   })
 
@@ -80,8 +82,7 @@ describe('Alexa persistent request tombstones', () => {
     })
   })
 
-  it('fails closed on unsafe journal permissions before calling the operation', async () => {
-    if (process.platform === 'win32') return
+  it('fails closed on unsafe journal permissions before calling the operation', { skip: process.platform === 'win32' ? 'POSIX permissions do not describe Windows ACLs' : false }, async () => {
     await withDirectory(async (directory) => {
       const journalFile = join(directory, 'alexa-request-journal.json')
       writeFileSync(journalFile, JSON.stringify({ version: 1, entries: [] }), { mode: 0o600 })

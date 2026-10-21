@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFileSync, spawnSync } from 'node:child_process'
+import { randomInt } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { request as httpRequest, createServer as createHttpServer } from 'node:http'
 import { request as httpsRequest } from 'node:https'
@@ -12,17 +13,29 @@ import { companionStatus, startCompanion, stopCompanion } from '@main/companion/
 const opensslAvailable = spawnSync('openssl', ['version'], { stdio: 'ignore' }).status === 0
 
 async function availablePort(): Promise<number> {
-  const server = createHttpServer()
-  await new Promise<void>((resolve, reject) => {
-    server.once('error', reject)
-    server.listen(0, '127.0.0.1', () => resolve())
-  })
-  const address = server.address()
-  assert.ok(address && typeof address !== 'string')
-  const port = address.port
-  await new Promise<void>((resolve) => server.close(() => resolve()))
-  assert.ok(port < 65533, 'need room for companion bridge and CA ports')
-  return port
+  // Companion binds public, bridge (+1) and optional CA (+2). Probing only one
+  // ephemeral port races with unrelated Windows client sockets on its neighbors.
+  for (let attempt = 0; attempt < 30; attempt++) {
+    const port = randomInt(20_000, 30_000)
+    const reservations: ReturnType<typeof createHttpServer>[] = []
+    try {
+      for (const offset of [0, 1, 2]) {
+        const server = createHttpServer()
+        reservations.push(server)
+        await new Promise<void>((resolve, reject) => {
+          server.once('error', reject)
+          server.listen(port + offset, '0.0.0.0', () => resolve())
+        })
+      }
+      return port
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== 'EADDRINUSE') throw error
+    } finally {
+      await Promise.all(reservations.filter(server => server.listening).map(server =>
+        new Promise<void>(resolve => server.close(() => resolve()))))
+    }
+  }
+  throw new Error('No free contiguous three-port range for Companion test')
 }
 
 function requestStatus(port: number, host: string): Promise<boolean> {
