@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { randomUUID } from 'node:crypto'
 import { lstatSync, mkdirSync, readFileSync, realpathSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
-import { dirname, isAbsolute, join, parse, resolve } from 'node:path'
+import { dirname, isAbsolute, join, parse, posix, resolve } from 'node:path'
 import { WORKSPACE_WIDGET_IDS, type WorkspaceLayout, type WorkspaceTask, type WorkspaceWidgetId } from '@shared/workspace'
 
 export interface WorkspacePersistedState {
@@ -67,15 +67,16 @@ export function normalizeDarwinSystemAliasPath(
   platform: NodeJS.Platform = process.platform,
   canonicalize: (path: string) => string = realpathSync
 ): string {
-  const absolute = resolve(file)
-  if (platform !== 'darwin') return absolute
+  if (platform !== 'darwin') return resolve(file)
+  // Darwin paths remain POSIX even when this pure helper is exercised by Windows CI.
+  const absolute = posix.resolve(file)
   for (const [alias, expectedTarget] of [['/var', '/private/var'], ['/tmp', '/private/tmp']] as const) {
     if (absolute !== alias && !absolute.startsWith(`${alias}/`)) continue
     let actualTarget: string
-    try { actualTarget = resolve(canonicalize(alias)) }
+    try { actualTarget = posix.resolve(canonicalize(alias)) }
     catch { throw new Error(`Workspace-Systempfadalias kann nicht sicher aufgelöst werden: ${alias}`) }
     if (actualTarget !== expectedTarget) throw new Error(`Workspace-Systempfadalias zeigt nicht auf das erwartete Ziel: ${alias}`)
-    return join(expectedTarget, absolute.slice(alias.length).replace(/^\/+/, ''))
+    return posix.join(expectedTarget, absolute.slice(alias.length).replace(/^\/+/, ''))
   }
   return absolute
 }
