@@ -23,10 +23,17 @@ function App(): JSX.Element {
     const cleanups: (() => void)[] = []
 
     void (async () => {
-      const settings = await window.jarvis.invoke('settings:get')
+      const [settings, recovery] = await Promise.all([
+        window.jarvis.invoke('settings:get'), window.jarvis.invoke('recovery:status')
+      ])
       if (disposed) return
 
       useCrystal.getState().setSettings(settings)
+      useCrystal.getState().setRecoveryMode(recovery.active)
+      if (recovery.active) {
+        useCrystal.getState().setPaused(true)
+        return
+      }
 
       const ctrl = new JarvisController(settings)
       controller.current = ctrl

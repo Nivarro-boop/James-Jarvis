@@ -15,7 +15,10 @@ import { UpdateBar, useUpdateStatus } from './UpdateBar'
 import { TextBar } from './TextBar'
 import { ControlCenter } from './ControlCenter'
 import { BrainMap, WidgetTiles } from './BrainMap'
-import { TodayPanel } from './TodayPanel'
+import { WorkspaceBoard } from './WorkspaceBoard'
+import { FeaturePacksPanel, FeaturePackWidgets } from './FeaturePacksPanel'
+import { DataTransparencyPanel } from './DataTransparencyPanel'
+import { RecoveryBanner } from './RecoveryBanner'
 import type { ResearchRun, TimerEntry } from '@shared/types'
 
 /**
@@ -249,6 +252,7 @@ function ConfirmDialog({ toolName, question }: { toolName: string; question: str
 export function Home(): JSX.Element {
   const state = useCrystal((s) => s.state)
   const paused = useCrystal((s) => s.paused)
+  const recoveryMode = useCrystal((s) => s.recoveryMode)
   const pauseUntil = useCrystal((s) => s.pauseUntil)
   const lastError = useCrystal((s) => s.lastError)
   const confirmation = useCrystal((s) => s.confirmation)
@@ -300,7 +304,9 @@ export function Home(): JSX.Element {
   let hint: string
   // Nur die Bedienungsanleitung darf verblassen. Fehler, Rückfrage und
   // fehlender Schlüssel bleiben stehen, bis sie erledigt sind.
-  if (state === 'error' && lastError) {
+  if (recoveryMode) {
+    hint = 'Lokaler Recovery-Prüfmodus. Zum Arbeiten mit KI oder Mikrofon zum Originalprofil zurückkehren.'
+  } else if (state === 'error' && lastError) {
     hint = lastError
   } else if (!hasVoiceAccess) {
     hint = 'Öffne Einstellungen → Stimme, um deinen Sprachzugang einzurichten.'
@@ -324,8 +330,8 @@ export function Home(): JSX.Element {
   const look = ORB_LOOKS[state] ?? ORB_LOOKS.idle
   const tone = { '--state': look.c } as CSSProperties
   const hasCards = timers.length > 0 || research.runs.length > 0 || display.cards.length > 0
-  const statusLabel = paused ? 'Pausiert' : !hasVoiceAccess && state === 'idle' ? 'Sprachzugang fehlt' : ({ idle: 'Bereit für dich', connecting: 'Verbindet sich', listening: 'Hört zu', thinking: 'Denkt nach', tool: 'Arbeitet für dich', speaking: 'Spricht', research: 'Recherchiert', confirm: 'Braucht deine Freigabe', error: 'Prüfung erforderlich', offline: 'Offline', paused: 'Pausiert' })[state]
-  const heading = paused ? 'Ich bin gleich wieder da.'
+  const statusLabel = recoveryMode ? 'Recovery-Prüfmodus' : paused ? 'Pausiert' : !hasVoiceAccess && state === 'idle' ? 'Sprachzugang fehlt' : ({ idle: 'Bereit für dich', connecting: 'Verbindet sich', listening: 'Hört zu', thinking: 'Denkt nach', tool: 'Arbeitet für dich', speaking: 'Spricht', research: 'Recherchiert', confirm: 'Braucht deine Freigabe', error: 'Prüfung erforderlich', offline: 'Offline', paused: 'Pausiert' })[state]
+  const heading = recoveryMode ? 'Wiederherstellung sicher prüfen.' : paused ? 'Ich bin gleich wieder da.'
     : state === 'listening' ? 'Ich höre dir zu.'
     : state === 'connecting' ? 'Einen Moment, ich verbinde mich.'
     : ['thinking', 'tool', 'research'].includes(state) ? 'Ich kümmere mich darum.'
@@ -358,6 +364,7 @@ export function Home(): JSX.Element {
       </header>
 
       <UpdateBar status={update} state={state} />
+      <RecoveryBanner />
 
       <div className="home-main">
         <div className="home-center">
@@ -369,7 +376,10 @@ export function Home(): JSX.Element {
               <p className="home-hint" role={state === 'error' ? 'alert' : undefined}>{hint}</p>
             </div>
           </main>
-          <TodayPanel />
+          <WorkspaceBoard
+            featurePackWidgets={<><FeaturePacksPanel /><FeaturePackWidgets /></>}
+            dataAndAi={<details className="home-data-disclosure"><summary>Daten &amp; KI – was bleibt lokal?</summary><DataTransparencyPanel /></details>}
+          />
           <SkillsPanel />
           <SkillProposalPanel />
           <Conversation snapshot={activity.snapshot} />
@@ -399,7 +409,7 @@ export function Home(): JSX.Element {
 
       <footer className="home-dock">
         <LiveStage snapshot={activity.snapshot} />
-        <TextBar disabled={!settings} />
+        <TextBar disabled={!settings || recoveryMode} disabledReason={recoveryMode ? 'Recovery-Prüfmodus – KI-Eingabe gesperrt' : undefined} />
       </footer>
 
       {controlCenterOpen && <ControlCenter onClose={() => setControlCenterOpen(false)} />}

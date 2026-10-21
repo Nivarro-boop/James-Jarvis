@@ -79,6 +79,67 @@ Messgerät; das hier soll atmen.
 
 ## Schnellstart
 
+### Arbeitsbereich, Packs und Datentransparenz
+
+Die Startseite hat ein lokales **Heute-Board**: offene Erinnerungen und Timer,
+eigene Aufgaben mit Erledigt-Status, nächste Schritte aus dem Arbeitskontext
+und optionale Kalendertermine. Widgets lassen sich ziehen, mit **Hoch/Runter**
+per Tastatur verschieben, ausblenden und wiederherstellen. Anordnung und Aufgaben
+bleiben nach dem Neustart gespeichert. Kalender werden erst nach **Kalenderzugriff
+aktivieren & heute einmal laden** aus verbundenen Google-/iCal-Quellen gelesen;
+weitere Abrufe erfolgen auf Knopfdruck, ohne Anmeldung oder Kalenderänderungen.
+Quellenfehler werden getrennt angezeigt. Das Board allein sendet keine Termine
+oder Aufgaben an eine KI.
+
+**Feature-Packs** sind versionierte, rein deklarative JSON-Dateien mit lokalen
+Notiz- und Checklisten-Widgets, keine ausführbaren Plugins. Ein Beispiel liegt
+unter [`resources/feature-packs/beispiel-alltag.json`](resources/feature-packs/beispiel-alltag.json).
+Vor Installation oder Update zeigt die App Inhalt, Version und Berechtigungen;
+Vertrauen und jede angeforderte Berechtigung müssen für die geprüfte Version
+bestätigt werden. `local-widget-state` erlaubt ausschließlich das Speichern
+lokaler Häkchen. Kein Pack bekommt Netzwerk, Kamera, Mikrofon, Programme oder
+Shell-Zugriff. Downgrades werden abgelehnt; Packs lassen sich deaktivieren oder
+entfernen. Das Format ist eine eigenständige Implementierung und importiert
+keine Packstart-Programme oder proprietären Dateien.
+
+Unter **Daten & KI** zeigt eine einstellungsabhängige Übersicht lokale Ablagen,
+Text-/Sprachanbieter, mögliche Fallbacks, Gemini-Spezialfunktionen, Kalender,
+Alexa, Companion, Telefonie und Diagnose-Opt-ins. Eine lokale Stimme bedeutet
+nicht automatisch lokale KI-Verarbeitung. Relevante Erinnerungen, Arbeitsstand
+und Werkzeug-Ergebnisse können Teil einer Modellanfrage werden. Die Übersicht
+ist kein Live-Netzwerkprotokoll.
+
+**Einstellungen → Datensicherung** bietet eine Integritätsvorschau und die
+bestätigte Wiederherstellung in ein neues, getrenntes **Recovery-Prüfprofil**.
+Das Originalprofil wird nicht überschrieben. Recovery startet ohne KI-Controller,
+Mikrofon, Fernzugriff, Zeitpläne, Downloads oder automatische Updates; externe
+IPC-Funktionen bleiben gesperrt. Eine eigene Bestätigung führt per Neustart zum
+Originalprofil zurück. Das aktuelle Backupformat enthält Datenbank, Einstellungen
+und Fertigkeiten; Fertigkeiten werden nur als passives Archiv zurückgelegt.
+**Arbeitskontext, Board, separate Aufgaben und Feature-Packs sind derzeit nicht
+im Backup enthalten**, ebenso wenig Schlüssel, OAuth-Tokens oder MCP-Konfigurationen.
+Die Vorschau nennt diesen Umfang ausdrücklich. Kein automatischer Austausch
+eines laufenden Profils und keine automatische Reaktivierung von Diensten.
+
+Ohne gültiges TLS-Zertifikat ist Companion nur als lokale Loopback-Diagnose
+erreichbar; ein Telefon-QR-Code oder Klartext-Fernzugriff wird nicht angeboten.
+Alexa dedupliziert authentifizierte Aufträge und führt unklare Tool-Timeouts
+nicht automatisch erneut aus. Ein begrenztes lokales Journal verhindert
+Neuausführung derselben Kennung auch nach einem Prozessneustart.
+
+### Integration prüfen
+
+`npm test` prüft die Regressionen; nach `npx --no-install electron-vite build`
+startet `node scripts/check-workspace-integration.cjs` eine **echte Electron-App**
+mit einem Wegwerfprofil, ohne geerbte API-Schlüssel und mit gesperrten externen
+Testanfragen. Auf einem headless Linux-Rechner gegebenenfalls `xvfb-run -a`
+voranstellen. Das Skript schreibt einen Befund und Testansichten nach `out/audit/`.
+Die PR-Prüfung führt Tests, Typprüfung, Build und diesen Electron-Lauf auf Linux,
+Windows und macOS aus, ohne Installer oder Release. Physisches Mikrofon, echte
+Anbieter-Konten, Kalenderkonten, Echo-Geräte und Telefonnetz werden dadurch
+**nicht** als getestet behauptet; fehlende Geräte/Zugänge sind als nicht verfügbar
+gekennzeichnet. Details: [Integrations-Prüfmatrix](docs/Integration-Pruefmatrix.md).
+
 ### ChatGPT-Abo oder direkte Live-Sprache
 
 Im Einrichtungsassistenten **ChatGPT-Abo → Continue with ChatGPT** wählen,

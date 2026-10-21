@@ -21,7 +21,7 @@ it('sichert die offene Datenbank konsistent, hält sieben tägliche Kopien und l
   const manual = await createBackup()
   const payload = JSON.parse(gunzipSync(readFileSync(manual.file)).toString())
   assert.equal(payload.format, 'void-james-backup')
-  assert.deepEqual(payload.settings.mcpServers[0].env, {})
+  assert.deepEqual(payload.settings.mcpServers, [])
   assert.ok(!JSON.stringify(payload).includes('test-private-value'))
   const snapshot = join(root,'read-only-snapshot.db')
   writeFileSync(snapshot,Buffer.from(payload.database.sqlite,'base64'))

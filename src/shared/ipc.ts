@@ -2,6 +2,9 @@ import type { WebsiteAccountInfo, WebsiteAccountInput } from './websiteAccounts'
 import type { WorkingContext } from './workingContext'
 import type { SkillProposal } from './skillProposal'
 import type { BrainGraph, Widget } from './brain'
+import type { FeaturePackIpcMap } from './featurePacks'
+import type { RecoveryIpcMap } from './recovery'
+import type { WorkspaceIpcMap } from './workspace'
 /**
  * Typisierter IPC-Vertrag.
  *
@@ -67,7 +70,7 @@ import type {
 } from './types'
 
 /** Renderer → Main, mit Antwort. */
-export interface IpcInvokeMap {
+export interface IpcInvokeMap extends FeaturePackIpcMap, RecoveryIpcMap, WorkspaceIpcMap {
   'settings:get': { req: void; res: Settings }
   'brain:graph': { req: void; res: BrainGraph }
   'brain:note': { req: { file: string }; res: string | null }
@@ -578,6 +581,25 @@ export const IPC_INVOKE_CHANNELS = [
   'backup:list',
   'backup:create',
   'backup:openFolder',
+  'recovery:status',
+  'recovery:preview',
+  'recovery:createProfile',
+  'recovery:activateProfile',
+  'recovery:returnToDefault',
+  'packs:preview',
+  'packs:install',
+  'packs:list',
+  'packs:setEnabled',
+  'packs:remove',
+  'packs:widgets',
+  'packs:toggle',
+  'workspace:get',
+  'workspace:task-create',
+  'workspace:task-set-done',
+  'workspace:task-delete',
+  'workspace:layout-set',
+  'workspace:calendar-enabled',
+  'workspace:calendar-read',
   'settings:set',
   'settings:reset',
   'secrets:status',

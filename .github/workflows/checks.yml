@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -26,8 +26,8 @@ jobs:
         with:
           node-version: 26
           cache: npm
-      # Diese Prüfungen brauchen weder die Electron-Binärdatei noch einen
-      # Installer. Tests verwenden den vorhandenen Electron-Ersatz.
+      # Die Regressionstests verwenden den Electron-Ersatz. Der getrennte
+      # Integrationslauf unten startet danach tatsächlich Electron, ohne Installer.
       - name: Abhängigkeiten ohne Installationsskripte
         run: npm ci --ignore-scripts
       - name: Typen prüfen
@@ -37,6 +37,22 @@ jobs:
       # Kein npm run build: dessen prebuild lädt zusätzliche Weckwortmodelle.
       - name: Anwendung bauen, ohne Installer oder Veröffentlichung
         run: npx --no-install electron-vite build
+      - name: Electron-Laufzeit für echte Integration bereitstellen
+        run: node node_modules/electron/install.js
+      - name: Echte Electron-Integration unter Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a node scripts/check-workspace-integration.cjs
+      - name: Echte Electron-Integration unter Windows und macOS
+        if: runner.os != 'Linux'
+        run: node scripts/check-workspace-integration.cjs
+      - name: Integrationsbefund und isolierte Testansicht sichern
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: workspace-integration-${{ matrix.os }}
+          path: out/audit/workspace-integration*
+          if-no-files-found: ignore
+          retention-days: 7
 
   dashboard:
     runs-on: ubuntu-latest

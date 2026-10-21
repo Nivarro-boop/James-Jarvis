@@ -105,21 +105,38 @@ interface Content {
  * Amazons Deckel, also bekommt das Modell nach der Frist einen Fehler, den es
  * vorlesen kann, statt weiter zu warten.
  */
-async function callWithTimeout(name: string, args: Record<string, unknown>): Promise<unknown> {
+interface ToolExecution {
+  value: unknown
+  timedOut: boolean
+}
+
+async function callWithTimeout(name: string, args: Record<string, unknown>): Promise<ToolExecution> {
   // Wie am Telefon: Nur was deklariert wurde, darf laufen. Ein Name aus dem
   // Prompttext — oder tool_use, das jedes Werkzeug erreicht — bekommt eine Absage.
   if (!alexaToolNames().includes(name)) {
-    return { error: `${name} gibt es über Alexa nicht. Biete an, es am Rechner zu erledigen.` }
+    return { value: { error: `${name} gibt es über Alexa nicht. Biete an, es am Rechner zu erledigen.` }, timedOut: false }
   }
-  const result = await Promise.race([
-    runTool({ id: randomUUID(), name, args }),
-    new Promise<null>((resolve) => setTimeout(() => resolve(null), TOOL_TIMEOUT_MS))
-  ])
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), TOOL_TIMEOUT_MS)
+  })
+  let result: Awaited<ReturnType<typeof runTool>> | null
+  try {
+    result = await Promise.race([runTool({ id: randomUUID(), name, args }), timeout])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
 
   if (result === null) {
-    return { fehler: `${name} hat zu lange gebraucht. Sag, dass das über Alexa nicht geht.` }
+    return {
+      value: { ausgangUnklar: true, fehler: `${name} hat nicht rechtzeitig geantwortet.` },
+      timedOut: true
+    }
   }
-  return result.ok ? (result.result ?? { erledigt: true }) : { fehler: result.error }
+  return {
+    value: result.ok ? (result.result ?? { erledigt: true }) : { fehler: result.error },
+    timedOut: false
+  }
 }
 
 /**
@@ -177,7 +194,7 @@ export async function runAlexaTurn(question: string): Promise<TurnResult> {
        */
       if (Date.now() > deadline) {
         return {
-          text: 'Das dauert länger, als Alexa mir zugesteht. Ich mache am Rechner weiter und melde mich dort.',
+          text: 'Das dauert länger, als Alexa mir zugesteht. Ich wiederhole die Aktion nicht automatisch, weil ihr Ausgang unklar sein kann.',
           overran: true
         }
       }
@@ -191,28 +208,39 @@ export async function runAlexaTurn(question: string): Promise<TurnResult> {
         )
       )
 
-      const results = await Promise.all(
-        calls.map(async (call) => ({
-          functionResponse: {
-            name: call.name ?? 'unbekannt',
-            response: {
-              // Mit der Frage: Ein Werkzeugfehler landet so beim selben
-              // Lückenbericht wie die Absage, statt ohne Anfrage daneben.
-              result: await withGapUserText(question, () => callWithTimeout(
-                call.name ?? '',
-                (call.args ?? {}) as Record<string, unknown>
-              ))
+      const executions = await Promise.all(
+        calls.map(async (call) => {
+          const execution = await withGapUserText(question, () => callWithTimeout(
+            call.name ?? '',
+            (call.args ?? {}) as Record<string, unknown>
+          ))
+          return {
+            timedOut: execution.timedOut,
+            part: {
+              functionResponse: {
+                name: call.name ?? 'unbekannt',
+                response: { result: execution.value }
+              }
             }
           }
-        }))
+        })
       )
 
-      contents.push({ role: 'user', parts: results as Part[] })
+      if (executions.some((execution) => execution.timedOut)) {
+        // The external action may have completed despite a missing response.
+        // Do not ask the model to retry or to dispatch any further actions.
+        return {
+          text: 'Ein Werkzeug hat nicht rechtzeitig geantwortet. Ob die Aktion ausgeführt wurde, ist unklar; ich wiederhole sie nicht automatisch.',
+          overran: false
+        }
+      }
+
+      contents.push({ role: 'user', parts: executions.map(({ part }) => part) as Part[] })
     }
 
     // Alle Runden aufgebraucht und das Modell will immer noch Werkzeuge.
     return {
-      text: 'Da komme ich über Alexa nicht weiter. Frag mich das nochmal am Rechner.',
+      text: 'Da komme ich über Alexa nicht weiter. Ob eine frühere Aktion bereits ausgeführt wurde, kann unklar sein; ich wiederhole sie nicht automatisch.',
       overran: true
     }
   } catch (err) {

@@ -77,11 +77,11 @@
 .home .orb:focus-visible { outline-color: #b8dac7; }
 .home * { scrollbar-color: #4b6557 transparent; }
 @media (max-width: 760px) {
-  .home .home-bar { padding: 13px 16px; gap: 8px; }
-  .home .home-top-left { gap: 12px; }
+  .home .home-bar { padding: 13px 16px; gap: 8px; flex-wrap: wrap; }
+  .home .home-top-left { gap: 12px; flex: 0 0 100%; justify-content: space-between; }
   .home .home-brand > small, .home .home-status { display: none; }
   .home .home-mark { font-size: 20px; }
-  .home .home-actions { gap: 5px; }
+  .home .home-actions { gap: 5px; flex: 0 0 100%; flex-wrap: wrap; justify-content: flex-start; }
   .home .home-chip, .home .home-gear { padding: 7px 9px; font-size: 11px; }
   .home .home-gear > svg { display: none; }
   .home .home-dock { padding-inline: 16px; }
@@ -99,3 +99,13 @@
 @media (prefers-reduced-motion: reduce) {
   .home .composer-spinner { animation: none !important; border-style: dotted; }
 }
+
+/* Local workspace disclosure and isolated recovery state. */
+.home-data-disclosure { margin-top: 12px; min-width: 0; }
+.home-data-disclosure > summary { cursor: pointer; padding: 10px 2px; font-size: 13px; color: var(--muted, #b9afd0); }
+.home-data-disclosure > summary:focus-visible { outline: 2px solid #ae8aff; outline-offset: 3px; }
+.recovery-banner { margin: 12px 20px; padding: 16px; border: 1px solid #d4a95d; border-radius: 12px; background: #352910; color: #f6e3b6; font-size: 13px; overflow-wrap: anywhere; }
+.recovery-banner p { margin: 8px 0; line-height: 1.5; }
+.recovery-banner button { cursor: pointer; margin-top: 6px; padding: 7px 10px; border: 1px solid #d4a95d; border-radius: 6px; background: transparent; color: inherit; max-width: 100%; white-space: normal; }
+.recovery-banner button:focus-visible { outline: 2px solid #ffe2a8; outline-offset: 3px; }
+.recovery-banner button:disabled { opacity: .65; cursor: wait; }

@@ -1,5 +1,5 @@
-import './userDataPath'
-import { app, dialog, globalShortcut, Menu, nativeImage, Tray } from 'electron'
+import { recoveryMode } from './userDataPath'
+import { app, dialog, globalShortcut, Menu, nativeImage, session, Tray } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { initLogging } from './logging'
 import { startDiagnosticMonitor, stopDiagnosticMonitor } from './providers/diagnosticMonitor'
@@ -107,6 +107,7 @@ function buildTray(): void {
         label: 'James stilllegen',
         type: 'checkbox',
         checked: isPaused(),
+        enabled: !recoveryMode,
         // Nur den Zustand setzen: Der Kristall erfährt es über den Melder
         // weiter unten, genau wie beim Hotkey und beim Ablauf einer Frist.
         click: (item) => setPaused(item.checked)
@@ -325,8 +326,8 @@ let companionPort: number | null = null
  *
  * Beide Wege enden in derselben Form, weil den Server nicht interessiert, wer
  * unterschrieben hat — nur, dass etwas Gültiges vorliegt. Kommt nichts zurück,
- * läuft er im Klartext weiter: Anzeige und Tippfeld gehen, die Sprechtaste
- * nicht. Das ist wenig, aber mehr als ein Server, der gar nicht erst startet.
+ * läuft ausschließlich eine lokale Diagnose auf 127.0.0.1 weiter. Es gibt
+ * keinen unverschlüsselten Fernzugriff und kein telefonfähiges QR-Ziel.
  */
 async function companionTls(source: 'local' | 'tailscale'): Promise<TlsMaterial | null> {
   if (source === 'tailscale') {
@@ -360,14 +361,13 @@ async function applyCompanionSettingNow(): Promise<void> {
 
   await stopCompanion()
   try {
-    // Ohne Zertifikat startet er trotzdem — nur eben ohne Mikrofon auf dem
-    // Telefon. Das Warten darauf blockiert den Start nicht länger als das
-    // Ausstellen dauert, und bei einem gültigen ist beides sofort zurück.
+    // Ohne Zertifikat wird nur ein Loopback-Diagnoseserver geöffnet. Telefon,
+    // Marke und Audio werden nie im Klartext im Heimnetz angeboten.
     const cert = await companionTls(companion.certSource)
     await startCompanion(companion.port, cert)
     companionPort = companion.port
     if (!cert) {
-      console.info('[companion] kein Zertifikat — die Sprechtaste am Telefon bleibt gesperrt')
+      console.info('[companion] kein Zertifikat — nur lokale Loopback-Diagnose, kein Telefonzugriff')
     }
   } catch (err) {
     companionPort = null
@@ -436,6 +436,21 @@ app.whenReady().then(async () => {
     return
   }
   registerAllTools()
+  if (recoveryMode) {
+    // An isolated import is for inspection, not permission to replay schedules,
+    // start providers/phone services or download assets. IPC is allowlisted too.
+    session.defaultSession.setPermissionRequestHandler((_contents, _permission, callback) => callback(false))
+    session.defaultSession.setPermissionCheckHandler(() => false)
+    session.defaultSession.webRequest.onBeforeRequest(
+      { urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] },
+      (_request, callback) => callback({ cancel: true })
+    )
+    setPaused(true)
+    registerIpcHandlers(VERSION)
+    createCrystalWindow()
+    buildTray()
+    return
+  }
   startAutoUpdate()
   registerAllRemedies({
     restartCompanion: async () => {
@@ -598,7 +613,7 @@ app.on('will-quit', (event) => {
     closeDb()
     // Ein geladenes Update jetzt einspielen. Der eigene Weg von
     // electron-updater wartet auf `quit`, und das feuert bei `app.exit` nicht.
-    installPendingUpdate()
+    if (!recoveryMode) installPendingUpdate()
     app.exit(0)
   })
 })

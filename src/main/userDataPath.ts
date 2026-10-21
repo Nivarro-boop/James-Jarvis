@@ -1,5 +1,6 @@
 import { app } from 'electron'
 import { join } from 'node:path'
+import { resolveRecoveryProfile } from './store/recoveryProfile'
 
 /**
  * Der Datenordner bleibt, wo er war.
@@ -11,4 +12,6 @@ import { join } from 'node:path'
  * `npm run dev`. Muss vor jedem anderen Modul laufen, das den Pfad liest —
  * deshalb der erste Import in `index.ts`.
  */
-app.setPath('userData', join(app.getPath('appData'), app.isPackaged ? 'Void Jarvis' : 'void-jarvis'))
+const recoveryProfile = resolveRecoveryProfile(app.getPath('appData'), process.argv)
+export const recoveryMode = recoveryProfile !== null
+app.setPath('userData', recoveryProfile?.directory ?? join(app.getPath('appData'), app.isPackaged ? 'Void Jarvis' : 'void-jarvis'))

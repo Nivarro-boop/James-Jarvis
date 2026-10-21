@@ -5145,7 +5145,7 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
   }
 
   const pairingUrl =
-    status?.urls[0] && status.token ? `${status.urls[0]}#host=${status.urls[0].replace(/^https?:\/\//, '').replace(/\/$/, '')}&token=${status.token}` : null
+    status?.secure && status.urls[0] && status.token ? `${status.urls[0]}#host=${status.urls[0].replace(/^https?:\/\//, '').replace(/\/$/, '')}&token=${status.token}` : null
 
   return (
     <>
@@ -5253,7 +5253,15 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
           </>
         )}
 
-      {settings.companion.enabled && status?.running && setup?.ready && (
+      {settings.companion.enabled && status?.running && !status.secure && (
+        <p className="hint" role="alert">
+          <strong>Kein sicherer Telefonzugriff.</strong> Ohne gültiges TLS-Zertifikat läuft nur eine
+          lokale Diagnose auf diesem Rechner. Die Loopback-Adresse ist vom Telefon nicht erreichbar;
+          es werden keine Marke und kein Kopplungs-QR-Code für HTTP angeboten. Richte zuerst das
+          lokale Zertifikat oder Tailscale ein.
+        </p>
+      )}
+      {settings.companion.enabled && status?.running && status.secure && setup?.ready && (
         <>
           <h3>Koppeln</h3>
           {/*

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent, type JSX } from 'react'
 
 /** Keep the draft until the controller has actually accepted it. */
-export function TextBar({ disabled }: { disabled: boolean }): JSX.Element {
+export function TextBar({ disabled, disabledReason }: { disabled: boolean; disabledReason?: string }): JSX.Element {
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [failed, setFailed] = useState(false)
@@ -65,7 +65,7 @@ export function TextBar({ disabled }: { disabled: boolean }): JSX.Element {
               if (!event.repeat) event.currentTarget.form?.requestSubmit()
             }
           }}
-          placeholder={disabled ? 'James wird gestartet…' : 'Frag James oder beschreibe eine Aufgabe…'}
+          placeholder={disabled ? disabledReason || 'James wird gestartet…' : 'Frag James oder beschreibe eine Aufgabe…'}
           aria-label="Nachricht an James"
           aria-describedby="composer-help composer-status"
           aria-keyshortcuts="Control+L Meta+L"

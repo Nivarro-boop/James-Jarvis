@@ -78,6 +78,7 @@ interface CrystalStore {
    * ist. Die Zeile auf der Startseite soll das nicht durcheinanderbringen.
    */
   paused: boolean
+  recoveryMode: boolean
   /**
    * Wann er von selbst zurückkommt. Nur gesetzt, wenn die Pause befristet ist
    * — also aus "sei die nächste Stunde ruhig". Klick, Hotkey und Tray legen
@@ -100,6 +101,7 @@ interface CrystalStore {
   setWish: (source: StateSource, state: CrystalState | null) => void
   setHovered: (v: boolean) => void
   setPaused: (v: boolean, until?: number | null) => void
+  setRecoveryMode: (v: boolean) => void
   setConfirmation: (c: ConfirmationRequest | null) => void
   setSettings: (s: Settings) => void
   setError: (message: string | null) => void
@@ -127,6 +129,7 @@ export const useCrystal = create<CrystalStore>((set, get) => ({
   state: 'idle',
   hovered: false,
   paused: false,
+  recoveryMode: false,
   pauseUntil: null,
   confirmation: null,
   settings: null,
@@ -134,6 +137,7 @@ export const useCrystal = create<CrystalStore>((set, get) => ({
   companions: 0,
   wakeAvailable: null,
   engineLabel: null,
+  setRecoveryMode: (recoveryMode) => set({ recoveryMode }),
   setWakeAvailable: (wakeAvailable) => set({ wakeAvailable }),
   setEngineLabel: (engineLabel) => set({ engineLabel }),
   captions: [],
