@@ -113,7 +113,7 @@ function sanitizeSettings(source: Record<string, any>): Record<string, any> {
       if (Object.hasOwn(input, key)) settings[group][key] = input[key]
     }
   }
-  for (const key of ['language', 'persona']) {
+  for (const key of ['language', 'persona', 'assistantRole']) {
     if (Object.hasOwn(source, key)) settings[key] = source[key]
   }
   for (const group of Object.keys(scalarKeys)) copyGroup(group)

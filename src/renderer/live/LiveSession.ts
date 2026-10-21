@@ -633,6 +633,7 @@ export class LiveSession implements VoiceEngine {
       settings.liveModel !== this.settings.liveModel ||
       settings.voice !== this.settings.voice ||
       settings.language !== this.settings.language ||
+      settings.assistantRole !== this.settings.assistantRole ||
       JSON.stringify(settings.vad) !== JSON.stringify(this.settings.vad)
 
     const halfDuplexChanged = settings.audio.halfDuplex !== this.settings.audio.halfDuplex

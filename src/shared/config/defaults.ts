@@ -2,6 +2,7 @@ import { COMPANION_DEFAULT_PORT } from '../companion'
 import type { Settings } from '../types'
 
 export const DEFAULT_SETTINGS: Settings = {
+  assistantRole: 'personal',
   language: 'de-DE',
   homeLocation: '',
   diagnosticReporting: { enabled: false, automatic: false, capabilityGaps: false, url: 'https://fastidious-pastelito-1f1564.netlify.app/api/error-report' },

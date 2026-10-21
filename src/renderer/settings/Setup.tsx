@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type JSX } from 'react'
 import type { Settings } from '@shared/types'
 import { listAudioDevices } from '../audio/capture'
 import { ChatGptConnection } from './ChatGptConnection'
+import { AssistantRoleStep } from './AssistantRoleChoice'
+import { assistantRoleInfo } from '@shared/assistantRole'
 
 /**
  * Die Einrichtung beim ersten Start.
@@ -19,7 +21,7 @@ import { ChatGptConnection } from './ChatGptConnection'
  * die Kugel beim ersten Ansprechen wortlos wieder ausgeht.
  */
 
-const STEPS = ['Willkommen', 'Schlüssel', 'Mikrofon', 'Für wen', 'Fertig'] as const
+const STEPS = ['Willkommen', 'Aufgabe', 'Zugang', 'Mikrofon', 'Für wen', 'Fertig'] as const
 
 /**
  * Tagesgrenze für den vorsichtigen Fall.
@@ -73,24 +75,25 @@ export function Setup({ settings, patch, hasKey, onSkip }: Props): JSX.Element {
         </ol>
 
         {step === 0 && <Welcome onNext={() => setStep(1)} />}
-        {step === 1 && (
+        {step === 1 && <AssistantRoleStep settings={settings} patch={patch} onNext={() => setStep(2)} onBack={() => setStep(0)} />}
+        {step === 2 && (
           <KeyStep
             settings={settings}
             patch={patch}
             hasKey={keyOk}
             onDone={() => {
               setKeyOk(true)
-              setStep(2)
+              setStep(3)
             }}
           />
         )}
-        {step === 2 && (
-          <MicStep settings={settings} patch={patch} onNext={() => setStep(3)} />
-        )}
         {step === 3 && (
-          <OwnerStep settings={settings} patch={patch} onNext={() => setStep(4)} />
+          <MicStep settings={settings} patch={patch} onNext={() => setStep(4)} />
         )}
-        {step === 4 && <DoneStep settings={settings} patch={patch} onFinish={() => { void finish() }} busy={finishing} />}
+        {step === 4 && (
+          <OwnerStep settings={settings} patch={patch} onNext={() => setStep(5)} />
+        )}
+        {step === 5 && <DoneStep settings={settings} patch={patch} onFinish={() => { void finish() }} busy={finishing} />}
         {finishError && <p className="setup-note err">{finishError}</p>}
 
         <button className="setup-escape" onClick={onSkip}>
@@ -108,12 +111,12 @@ function Welcome({ onNext }: { onNext: () => void }): JSX.Element {
     <>
       <h1>Willkommen bei James</h1>
       <p className="setup-lede">
-        James ist ein Assistent, mit dem man spricht statt tippt. Es gibt kein Chatfenster — nur
-        eine leuchtende Kugel auf dem Bildschirm. Du sprichst ihn an, er antwortet laut.
+        James unterstützt dich per Sprache und Text. Du kannst Fragen stellen, deinen Tag
+        überblicken oder Aufgaben Schritt für Schritt angehen.
       </p>
       <p className="setup-lede">
-        Wähle zuerst deinen Zugang: Gemini, OpenAI API oder dein ChatGPT-Abo mit lokalen
-        Ohren und lokaler Stimme. Danach folgen Mikrofon und Bedienung.
+        Wähle zuerst, wofür James vor allem da sein soll. Danach richten wir deinen
+        KI-Zugang, Mikrofon und Bedienung ein.
       </p>
       <div className="setup-actions">
         <button className="primary setup-go" onClick={onNext}>
@@ -539,8 +542,9 @@ function DoneStep({
       </div>
 
       <p className="setup-foot">
-        Die Einstellungen erreichst du jederzeit über das Zahnrad oben rechts im Fenster oder
-        einen Rechtsklick auf das Symbol neben der Uhr.
+        Schwerpunkt: {assistantRoleInfo(settings.assistantRole).label}. Ändern kannst du ihn
+        unter Mehr-Menü → Einstellungen → Stimme. Die übrigen Einstellungen erreichst du
+        dort ebenfalls oder über einen Rechtsklick auf das Symbol neben der Uhr.
       </p>
     </>
   )

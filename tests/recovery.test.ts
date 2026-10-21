@@ -32,6 +32,7 @@ it('previews and restores only into a separate safe profile; digest confirmation
   exported.settings.language = 'en-US'
   exported.settings.audio.outputGain = 1.7
   exported.settings.audio.outputDeviceId = 'do-not-import-device'
+  exported.settings.assistantRole = 'calendar'
   exported.settings.brainProvider = 'gemini'
   exported.settings.speech.hearProvider = 'gemini'
   exported.settings.speech.pythonPath = 'C:\\hostile\\python.exe'
@@ -64,6 +65,7 @@ it('previews and restores only into a separate safe profile; digest confirmation
   assert.equal(recoveredSettings.automaticBackups, false)
   assert.equal(recoveredSettings.launchOnStartup, false)
   assert.equal(recoveredSettings.language, 'en-US')
+  assert.equal(recoveredSettings.assistantRole, 'calendar')
   assert.equal(recoveredSettings.audio.outputGain, 1.7)
   assert.equal(recoveredSettings.audio.outputDeviceId, null)
   assert.equal(recoveredSettings.brainProvider, 'ollama')

@@ -13,6 +13,7 @@
     "prebuild": "node scripts/fetch-wakeword.mjs",
     "build": "electron-vite build",
     "dist": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac --arm64 --publish never",
     "//release": "Baut den Installer und lädt ihn als Release nach github.com/Nivarro-boop/James-Jarvis hoch. Normalerweise macht das die GitHub-Action bei jedem Push auf main und setzt die letzte Stelle der Version auf ihre Laufnummer; von Hand vorher die Version erhöhen. Braucht GH_TOKEN, z. B. $env:GH_TOKEN = (gh auth token).",
     "release": "npm run build && node scripts/release.mjs",
     "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",

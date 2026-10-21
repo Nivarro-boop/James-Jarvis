@@ -60,6 +60,7 @@ export function validateSettingsPatch(patch: unknown): void {
   visit(patch, DEFAULT_SETTINGS, '')
   const p = patch as Record<string, unknown>
   const enums: Record<string, string[]> = {
+    assistantRole: ['personal', 'calendar', 'focus'],
     brainProvider: ['gemini', 'ollama', 'openrouter', 'openai', 'anthropic', 'chatgpt', 'lmstudio'],
     'speech.provider': ['gemini', 'elevenlabs', 'piper', 'vibevoice', 'openai'],
     'speech.thinkProvider': ['gemini', 'ollama', 'chatgpt', 'hermes'],

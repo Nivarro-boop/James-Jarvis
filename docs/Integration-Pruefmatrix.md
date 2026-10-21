@@ -7,6 +7,7 @@ Das neue Tages-Board, deklarative Feature-Packs und die isolierte Wiederherstell
 | Bereich | Nachweis | Grenze |
 |---|---|---|
 | App-Start, Preload, IPC | Echter Electron-Lauf mit isolierten Einstellungen | Kein installierter Release/Installer |
+| Einrichtungsrolle | Auswahl vor KI-Zugang; explizites Speichern über echte UI/IPC; Rollenwert auf Platte und Systemprompt prüfen | Die Rolle erteilt keine Kalenderrechte, verbindet keine Konten und startet keine Hintergrundabfragen |
 | IPC-Vertrauensgrenze | Fremdes Electron-Fenster mit echter Preload-Brücke wird abgewiesen | Ergänzt die bestehende Hauptframe- und Navigationsprüfung |
 | Erinnerungen | Erstellen und Erledigen über echte IPC und Datenbank | Kein fälliges Erinnerungsaudio über einen physischen Lautsprecher |
 | Aufgaben | Über echte UI anlegen und abhaken; lokale Datei prüfen | Keine Synchronisierung zu einem externen Aufgabenanbieter |
@@ -20,7 +21,9 @@ Das neue Tages-Board, deklarative Feature-Packs und die isolierte Wiederherstell
 | Companion | Lokale HTTP-/TLS-Protokolltests: HTTP nur Loopback, keine Tokens/QR-Verbindung ohne TLS, HTTPS-Transport | Kein physisches Telefon mit vertrauenswürdig installiertem Zertifikat |
 | Datentransparenz | Einstellungsabhängige lokale/externe Datenwege einschließlich Fallbacks geprüft | Konfigurationsübersicht, kein Mitschnitt des tatsächlichen Netzwerkverkehrs |
 
-Der lokale Linux-Lauf ist erfolgreich. Die PR-Prüfung führt Regressionen, Typecheck, App-Build und den echten Electron-Lauf zusätzlich auf **Windows und macOS** aus. Maßgeblich ist das Ergebnis des jeweiligen Betriebssystem-Jobs in [PR #1](https://github.com/Nivarro-boop/James-Jarvis/pull/1/checks); ein Betriebssystem-Runner beweist keine reale Audiohardware, Telefonverbindung oder Anmeldung.
+Der lokale Linux-Lauf ist erfolgreich. Die PR-Prüfung führt Regressionen, Typecheck, App-Build und den echten Electron-Lauf zusätzlich auf **Windows und M‑Macs (ARM64)** aus. macOS verwendet `macos-15` mit verpflichtender Architekturprüfung; Intel gehört nicht mehr zur Zielmatrix. Maßgeblich ist das Ergebnis des jeweiligen Betriebssystem-Jobs in [PR #1](https://github.com/Nivarro-boop/James-Jarvis/pull/1/checks); ein Betriebssystem-Runner beweist keine reale Audiohardware, Telefonverbindung oder Anmeldung. Bei fehlender Runner-Kapazität bleibt der M‑Mac-Nachweis offen, statt durch einen Intel-Job ersetzt zu werden.
+
+`npm run dist:mac` ist als ausschließliches ARM64-DMG-Ziel mit `--publish never` vorbereitet. Dieser Befehl wurde hier nicht ausgeführt; weder ein fertiges Mac-DMG noch Signierung, Notarisierung oder die Installation auf einem physischen M‑Mac sind damit nachgewiesen. Die vorhandenen Windows-/PowerShell-Funktionen werden dadurch nicht automatisch zu macOS-Funktionen.
 
 ## Ehrlich als nicht verfügbar gekennzeichnet
 
@@ -46,4 +49,4 @@ npx --no-install electron-vite build
 node scripts/check-workspace-integration.cjs
 ```
 
-Auf headless Linux: `xvfb-run -a node scripts/check-workspace-integration.cjs`. Befund und Testbilder stehen unter `out/audit/workspace-integration*`. Der Integrationslauf baut keinen Installer, veröffentlicht kein Release und benötigt keine persönlichen Schlüssel.
+Auf headless Linux: `xvfb-run -a node scripts/check-workspace-integration.cjs`. Befund und Testbilder stehen unter `out/audit/workspace-integration*`, `out/audit/home-clean*` und `out/audit/assistant-role*`. Der Integrationslauf baut keinen Installer, veröffentlicht kein Release und benötigt keine persönlichen Schlüssel.

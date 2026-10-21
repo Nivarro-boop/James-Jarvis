@@ -1,4 +1,5 @@
 import { WebsiteAccounts } from './WebsiteAccounts'
+import { AssistantRoleSettings } from './AssistantRoleChoice'
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type {
   SipStatus,
@@ -2346,6 +2347,8 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
         Wähle eine Stimme und verbinde den passenden Anbieter. Die Einrichtung findest du direkt darunter.
       </p>
 
+      <AssistantRoleSettings settings={settings} patch={patch} />
+      <hr className="section-divider" />
       <PersonaPicker settings={settings} patch={patch} />
       <PersonalityControls settings={settings} patch={patch} />
       <hr className="section-divider" />

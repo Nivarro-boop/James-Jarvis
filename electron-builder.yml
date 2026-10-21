@@ -79,6 +79,16 @@ win:
   # Kern, Kante und Schein. Erzeugt von scripts/make-icon.mjs.
   icon: resources/icon.ico
 
+mac:
+  # Zuerst nur Apple Silicon. Kein Intel- oder Universal-Paket.
+  target:
+    - target: dmg
+      arch: [arm64]
+  category: public.app-category.productivity
+  extendInfo:
+    NSMicrophoneUsageDescription: James verwendet das Mikrofon für Sprachaufträge, wenn du es aktivierst.
+    NSCameraUsageDescription: James verwendet die Kamera nur für von dir aktivierte Bildfunktionen.
+
 nsis:
   # One-Click: Der Installer liest den bisherigen Installationsort aus der
   # Registry. Ist James schon da, wird dort still aktualisiert (Daten bleiben),

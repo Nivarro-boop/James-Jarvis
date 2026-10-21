@@ -4,7 +4,7 @@ import { existsSync, lstatSync, mkdirSync, readFileSync, rmSync, symlinkSync, wr
 import { mkdtempSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createWorkspaceStore, DEFAULT_WORKSPACE_LAYOUT, validateTask, validateWorkspaceLayout } from '../src/main/workspace/store'
+import { createWorkspaceStore, DEFAULT_WORKSPACE_LAYOUT, normalizeDarwinSystemAliasPath, validateTask, validateWorkspaceLayout } from '../src/main/workspace/store'
 import { invalidateWorkspaceCalendarReads, localTodayBounds, readWorkspaceCalendar, workspaceCalendarReadIsCurrent } from '../src/main/workspace/calendar'
 import { WORKSPACE_WIDGET_IDS, type WorkspaceTask } from '../src/shared/workspace'
 
@@ -175,6 +175,22 @@ describe('Workspace storage and layout validation', () => {
     assert.throws(() => linkedStore.get(), /symbolischen Links/)
     assert.throws(() => createWorkspaceStore('relative.json'), /ungültig/)
     assert.throws(() => createWorkspaceStore(join(dir, 'same.json'), join(dir, 'same.json')), /ungültig/)
+  })
+  it('normalizes only verified Darwin /var and /tmp aliases and fails closed otherwise', () => {
+    const resolvedAliases: string[] = []
+    const canonicalize = (path: string): string => {
+      resolvedAliases.push(path)
+      if (path === '/var') return '/private/var'
+      if (path === '/tmp') return '/private/tmp'
+      throw new Error('unexpected alias')
+    }
+    assert.equal(normalizeDarwinSystemAliasPath('/var/folders/user/data.json', 'darwin', canonicalize), '/private/var/folders/user/data.json')
+    assert.equal(normalizeDarwinSystemAliasPath('/tmp/workspace/data.json', 'darwin', canonicalize), '/private/tmp/workspace/data.json')
+    assert.deepEqual(resolvedAliases, ['/var', '/tmp'])
+    assert.equal(normalizeDarwinSystemAliasPath('/var/folders/user/data.json', 'linux', () => { throw new Error('must not resolve') }), '/var/folders/user/data.json')
+    assert.equal(normalizeDarwinSystemAliasPath('/various/data.json', 'darwin', () => { throw new Error('must not resolve') }), '/various/data.json')
+    assert.throws(() => normalizeDarwinSystemAliasPath('/var/folders/user/data.json', 'darwin', () => { throw new Error('missing') }), /kann nicht sicher aufgelöst werden/)
+    assert.throws(() => normalizeDarwinSystemAliasPath('/tmp/workspace/data.json', 'darwin', () => '/unexpected/tmp'), /zeigt nicht auf das erwartete Ziel/)
   })
   it('does not touch a valid board when a task-file write is rejected by a symlink', () => {
     const { dir, board, tasks, store } = fixture()

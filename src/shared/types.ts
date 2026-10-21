@@ -51,6 +51,8 @@ export type ResearchAgentId =
   | 'deep-research-preview-04-2026'
   | 'deep-research-max-preview-04-2026'
 
+export type AssistantRole = 'personal' | 'calendar' | 'focus'
+
 /** Die 30 HD-Stimmen der Live API. Sortiert: klare/sonore zuerst. */
 export const VOICES = [
   { name: 'Charon', trait: 'Informativ', hint: 'Ruhig, sonor — klingt nach Ansage' },
@@ -571,6 +573,8 @@ export interface Personality {
 }
 
 export interface Settings {
+  /** Schwerpunkt der Assistenz; ändert weder Berechtigungen noch Dienste. */
+  assistantRole: AssistantRole
   language: 'de-DE' | 'en-US'
   homeLocation: string
   diagnosticReporting: { enabled: boolean; automatic: boolean; url: string; capabilityGaps: boolean }

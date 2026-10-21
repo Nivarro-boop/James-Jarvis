@@ -367,3 +367,24 @@ it('löst einen hängenden Realtime-Zugriff auf den Schlüssel sofort beim Stop'
   assert.equal(h.sockets.length, 0)
   assert.equal(h.errors.length, 0)
 })
+
+
+it('aktualisiert bei geändertem Schwerpunkt die aktive Realtime-Konfiguration einmalig', async () => {
+  const h = await harness()
+  await h.session.start()
+  h.sockets[0].onopen?.()
+  await settle()
+  h.sockets[0].event({ type: 'session.updated' })
+  const updates = () => h.sockets[0].sent.filter((item: any) => item.type === 'session.update')
+  const before = updates().length
+  const settings = structuredClone(DEFAULT_SETTINGS)
+  settings.assistantRole = 'calendar'
+  h.session.updateSettings(settings)
+  await settle()
+  assert.equal(updates().length, before + 1)
+  h.session.updateSettings(structuredClone(settings))
+  await settle()
+  assert.equal(updates().length, before + 1)
+  assert.deepEqual(h.errors, [])
+  await h.session.dispose()
+})

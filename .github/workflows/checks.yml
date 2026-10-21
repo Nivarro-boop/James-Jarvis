@@ -17,7 +17,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-15-intel]
+        # macos-15 is GitHub's standard Apple Silicon (arm64) runner label.
+        os: [ubuntu-latest, windows-latest, macos-15]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -26,6 +27,12 @@ jobs:
         with:
           node-version: 26
           cache: npm
+      # Fail loudly rather than silently running macOS checks on an Intel host or under Rosetta.
+      - name: Apple-Silicon-Architektur bestätigen
+        if: runner.os == 'macOS'
+        run: |
+          test "$(uname -m)" = "arm64"
+          test "$(node -p 'process.arch')" = "arm64"
       # Die Regressionstests verwenden den Electron-Ersatz. Der getrennte
       # Integrationslauf unten startet danach tatsächlich Electron, ohne Installer.
       - name: Abhängigkeiten ohne Installationsskripte
@@ -53,6 +60,7 @@ jobs:
           path: |
             out/audit/workspace-integration*
             out/audit/home-clean*
+            out/audit/assistant-role*
           if-no-files-found: ignore
           retention-days: 7
 

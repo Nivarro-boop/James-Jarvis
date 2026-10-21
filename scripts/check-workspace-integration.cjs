@@ -3,7 +3,7 @@
 const { _electron } = require('playwright-core')
 const assert = require('node:assert/strict')
 const { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } = require('node:fs')
-const { tmpdir, platform } = require('node:os')
+const { tmpdir, platform, arch } = require('node:os')
 const { join, resolve } = require('node:path')
 
 async function main() {
@@ -12,7 +12,7 @@ async function main() {
   const output = resolve('out/audit')
   mkdirSync(userData, { recursive: true }); mkdirSync(output, { recursive: true })
   const wrapper = join(root, 'workspace-wrapper.cjs')
-  const report = { platform: platform(), engine: 'real-electron', checks: [], deviceTests: [] }
+  const report = { platform: platform(), architecture: arch(), engine: 'real-electron', checks: [], deviceTests: [] }
   const mark = (name, detail) => report.checks.push({ name, result: 'passed', ...(detail ? { detail } : {}) })
   let application
   let recoveryApplication
@@ -132,6 +132,35 @@ require(${JSON.stringify(resolve('out/main/index.js'))});\n`)
     assert.equal(await page.locator('.home-menu[open]').count(), 0, 'Escape closes the secondary menu')
     assert.equal(await more.evaluate(element => document.activeElement === element), true)
     mark('real-clean-home-default-no-board-and-overview-tabs-focus-return-and-reload')
+
+    // The role is selected before any provider account or calendar is connected.
+    await invoke('settings:set', { setupDone: false })
+    await more.click()
+    await destinations.getByRole('button', { name: 'Einstellungen', exact: true }).click()
+    let setupPage
+    for (let attempt = 0; attempt < 100 && !setupPage; attempt++) {
+      setupPage = application.windows().find(window => window.url().includes('settings.html'))
+      if (!setupPage) await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    assert.ok(setupPage, 'Real setup window must load')
+    setupPage.on('pageerror', error => errors.push(error.message))
+    await setupPage.getByRole('button', { name: 'Los geht’s', exact: true }).click()
+    await setupPage.getByRole('heading', { name: 'Wofür soll James da sein?', exact: true }).waitFor()
+    assert.equal(await setupPage.getByRole('radio').count(), 3)
+    await setupPage.getByRole('radio', { name: /Kalender-Assistent/ }).check()
+    assert.equal((await invoke('settings:get')).assistantRole, 'personal', 'Selection alone does not persist or activate anything')
+    assert.equal((await invoke('workspace:get', {})).calendarEnabled, false)
+    await setupPage.screenshot({ path: join(output, 'assistant-role-setup.png') })
+    await setupPage.getByRole('button', { name: 'Speichern und weiter', exact: true }).click()
+    await setupPage.getByRole('heading', { name: 'Der Zugang bei Google', exact: true }).waitFor()
+    assert.equal((await invoke('settings:get')).assistantRole, 'calendar')
+    assert.match(await invoke('agent:systemPrompt'), /Schwerpunkt: Kalender-Assistent/)
+    assert.equal(JSON.parse(readFileSync(join(userData, 'settings.json'), 'utf8')).assistantRole, 'calendar')
+    assert.equal((await invoke('workspace:get', {})).calendarEnabled, false, 'Role never silently grants calendar access')
+    await setupPage.close()
+    await invoke('settings:set', { setupDone: true, assistantRole: 'personal' })
+    await assertCleanHome()
+    mark('real-setup-role-choice-before-provider-persistence-prompt-and-no-calendar-permission')
 
     // Workspace interactions below are deliberately performed only after opening Übersicht.
     await overviewButton.click()

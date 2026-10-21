@@ -7,6 +7,7 @@ import { baselineMemories } from './memory'
 import { getSettings } from '../store/settings'
 import { skillIndexForPrompt } from './skills'
 import { lazyToolsEnabled } from './tokenSaver'
+import { assistantRoleInstructions } from '@shared/assistantRole'
 
 /**
  * Wie James längere Aufgaben angeht — Plan, Fertigkeiten, Unteragenten.
@@ -101,6 +102,7 @@ export function buildSystemPrompt(options: { lazyTools?: boolean; query?: string
   const settings = getSettings()
   const lazy = (options.lazyTools ?? true) && lazyToolsEnabled()
   const parts = [systemPromptDe(settings.persona, lazy, settings.personality)]
+  parts.push(assistantRoleInstructions(settings.assistantRole))
   parts.push(settings.confirmActions
     ? 'Bestätigungsprofil: Beachte Rückfragen, die ein Werkzeug verlangt.'
     : 'Autonomes Profil: Der Nutzer möchte keine Bestätigungsfragen. Führe seine Aufträge direkt mit den erlaubten Werkzeugen aus, ohne „Soll ich?“ oder eine zweite Freigabe. Gesperrte Werkzeuge bleiben gesperrt. Frage nur nach sachlich fehlenden Angaben, die sich nicht sinnvoll aus dem Kontext ableiten lassen. Behaupte Erfolg erst nach erfolgreichem Werkzeugergebnis.')
