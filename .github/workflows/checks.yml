@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        os: [ubuntu-latest, windows-latest, macos-15-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     steps:
@@ -50,7 +50,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: workspace-integration-${{ matrix.os }}
-          path: out/audit/workspace-integration*
+          path: |
+            out/audit/workspace-integration*
+            out/audit/home-clean*
           if-no-files-found: ignore
           retention-days: 7
 
