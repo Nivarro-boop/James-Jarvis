@@ -91,9 +91,11 @@ async function nativeSmoke(appDirectory, output, expectedVersion) {
   assert.equal(process.env.RUNNER_ENVIRONMENT, 'github-hosted', 'Do not execute the original installer app on a personal/self-hosted device')
   const { _electron } = require('playwright-core')
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'james-original-release-'))
-  const appData = path.join(root, 'appdata')
+  const appData = path.join(root, 'AppData', 'Roaming')
+  const localAppData = path.join(root, 'AppData', 'Local')
   const profile = path.join(appData, 'Void Jarvis')
   fs.mkdirSync(profile, { recursive: true })
+  fs.mkdirSync(localAppData, { recursive: true })
   fs.writeFileSync(path.join(profile, 'settings.json'), JSON.stringify({
     setupDone: false, gamingMode: true, automaticBackups: false, launchOnStartup: false, learnSkills: false,
     brainProvider: 'ollama', wake: { enabled: false, clap: false, pushToTalkHotkey: '', pauseHotkey: '' },
@@ -103,8 +105,13 @@ async function nativeSmoke(appDirectory, output, expectedVersion) {
     diagnosticReporting: { enabled: false, automatic: false, capabilityGaps: false }
   }))
   const env = {}
-  for (const key of ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG']) if (process.env[key]) env[key] = process.env[key]
-  Object.assign(env, { HOME: root, USERPROFILE: root, APPDATA: appData, LOCALAPPDATA: path.join(root, 'local'), TEMP: root, TMP: root, ELECTRON_ENABLE_LOGGING: '1' })
+  // env replaces, rather than extends, the child's environment. Preserve the
+  // ordinary Windows OS/runtime variables, case-insensitively, but never copy
+  // arbitrary provider credentials, GitHub tokens or runner command-file paths.
+  const allowed = new Set(['allusersprofile', 'commonprogramfiles', 'commonprogramfiles(x86)', 'commonprogramw6432', 'computername', 'comspec', 'driverdata', 'lang', 'logonserver', 'number_of_processors', 'os', 'path', 'pathext', 'processor_architecture', 'processor_identifier', 'processor_level', 'processor_revision', 'programdata', 'programfiles', 'programfiles(x86)', 'programw6432', 'psmodulepath', 'public', 'systemdrive', 'systemroot', 'userdomain', 'userdomain_roamingprofile', 'username', 'windir'])
+  for (const [key, value] of Object.entries(process.env)) if (allowed.has(key.toLowerCase()) && value) env[key] = value
+  const homeDrive = path.parse(root).root.replace(/[\\/]$/, '')
+  Object.assign(env, { HOME: root, HOMEDRIVE: homeDrive, HOMEPATH: root.slice(homeDrive.length), USERPROFILE: root, APPDATA: appData, LOCALAPPDATA: localAppData, TEMP: root, TMP: root, ELECTRON_ENABLE_LOGGING: '1' })
   let application
   try {
     // Explicit stderr logging keeps the DevTools endpoint observable for
@@ -174,6 +181,7 @@ async function main() {
     execFileSync('7z', ['x', '-y', path.join(unpacked, '$PLUGINSDIR', 'app-64.7z'), `-o${app}`], { stdio: 'pipe' })
     report.payload = verifyPayload(app, metadata.version)
     if (process.argv.includes('--native-smoke')) {
+      report.nativeSmoke = { result: 'failed', originalBinary: true, version: metadata.version }
       report.nativeSmoke = await nativeSmoke(app, output, metadata.version)
       report.payload.nativeExecution = 'passed'
     }
