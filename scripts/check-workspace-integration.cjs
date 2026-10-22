@@ -233,8 +233,12 @@ require(${JSON.stringify(resolve('out/main/index.js'))});\n`)
     assert.equal(recovery.integrity, 'ok')
     const activeBefore = readFileSync(join(userData, 'settings.json'), 'utf8')
     const recovered = await invoke('recovery:createProfile', { fileName, digest: recovery.digest, confirmed: true })
-    assert.ok(existsSync(join(recovered.directory, 'settings.json')))
+    // The normal app's self-heal monitor runs a health check after 20 seconds.
+    // Do not leave its renderer/controllers writing the source profile while
+    // the recovered profile is being booted and checked below.
+    await application.close(); application = null
     assert.equal(readFileSync(join(userData, 'settings.json'), 'utf8'), activeBefore)
+    assert.ok(existsSync(join(recovered.directory, 'settings.json')))
     assert.ok(!existsSync(join(recovered.directory, 'secure', 'secrets.bin')))
     mark('real-backup-validation-and-isolated-recovery')
 
@@ -262,6 +266,16 @@ require(${JSON.stringify(resolve('out/main/index.js'))});\n`)
     await recoveryApplication.close(); recoveryApplication = null
     assert.equal(readFileSync(join(userData, 'settings.json'), 'utf8'), activeBefore)
     mark('real-recovery-boot-isolation-pause-and-execution-denial')
+
+    application = await _electron.launch({ executablePath: require('electron'), args: [wrapper], env: environment, timeout: 30_000 })
+    await application.firstWindow()
+    page = null
+    for (let attempt = 0; attempt < 100 && !page; attempt++) {
+      page = application.windows().find(window => window.url().includes('crystal.html'))
+      if (!page) await new Promise(resolve => setTimeout(resolve, 100))
+    }
+    assert.ok(page, 'Original profile must reopen after isolated recovery validation')
+    page.on('pageerror', error => errors.push(error.message))
 
     // No --use-fake-device-for-media-stream. Unavailable hardware is NOT a pass.
     const microphone = await page.evaluate(async () => {

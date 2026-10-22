@@ -92,6 +92,7 @@ jobs:
           path: |
             out/audit/release-package.json
             out/audit/release-original-home.png
+            out/audit/release-original-startup.json
           if-no-files-found: ignore
           retention-days: 7
 

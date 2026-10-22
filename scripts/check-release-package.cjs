@@ -104,10 +104,12 @@ async function nativeSmoke(appDirectory, output, expectedVersion) {
   }))
   const env = {}
   for (const key of ['PATH', 'Path', 'SystemRoot', 'SYSTEMROOT', 'WINDIR', 'COMSPEC', 'PATHEXT', 'LANG']) if (process.env[key]) env[key] = process.env[key]
-  Object.assign(env, { HOME: root, USERPROFILE: root, APPDATA: appData, LOCALAPPDATA: path.join(root, 'local'), TEMP: root, TMP: root })
+  Object.assign(env, { HOME: root, USERPROFILE: root, APPDATA: appData, LOCALAPPDATA: path.join(root, 'local'), TEMP: root, TMP: root, ELECTRON_ENABLE_LOGGING: '1' })
   let application
   try {
-    application = await _electron.launch({ executablePath: path.join(appDirectory, 'James-Jarvis.exe'), env, timeout: 45000 })
+    // Explicit stderr logging keeps the DevTools endpoint observable for
+    // Playwright when starting a packaged Windows GUI executable.
+    application = await _electron.launch({ executablePath: path.join(appDirectory, 'James-Jarvis.exe'), cwd: appDirectory, args: ['--enable-logging=stderr', '--no-error-dialogs'], env, timeout: 45000 })
     const actual = await application.evaluate(({ app }) => ({ profile: app.getPath('userData'), version: app.getVersion(), packaged: app.isPackaged }))
     assert.equal(path.resolve(actual.profile).toLowerCase(), path.resolve(profile).toLowerCase(), 'Original app must use the disposable profile')
     assert.equal(actual.version, expectedVersion)
@@ -131,6 +133,23 @@ async function nativeSmoke(appDirectory, output, expectedVersion) {
     assert.ok(await page.locator('.orb').count(), 'Original release home must render')
     await page.screenshot({ path: path.join(output, 'release-original-home.png') })
     return { result: 'passed', platform: 'win32', originalBinary: true, version: actual.version, disposableProfile: true, accountAndHardwareTests: 'not-run' }
+  } catch (error) {
+    // Keep only logs from our fresh profile, never settings or another profile.
+    const logs = []
+    const collect = (directory, depth = 0) => {
+      if (depth > 3 || logs.length >= 8 || !fs.existsSync(directory)) return
+      for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
+        if (logs.length >= 8 || entry.isSymbolicLink()) continue
+        const filename = path.join(directory, entry.name)
+        if (entry.isDirectory()) collect(filename, depth + 1)
+        else if (entry.isFile() && entry.name.endsWith('.log')) logs.push({ file: path.relative(root, filename), tail: fs.readFileSync(filename, 'utf8').slice(-65536) })
+      }
+    }
+    try {
+      collect(profile)
+      fs.writeFileSync(path.join(output, 'release-original-startup.json'), JSON.stringify({ error: String(error), logs }, null, 2) + '\n')
+    } catch (diagnosticError) { console.error('Could not preserve original-release startup diagnostics:', diagnosticError.message) }
+    throw error
   } finally {
     if (application) { await application.evaluate(({ app }) => app.exit(0)).catch(() => {}); await application.close().catch(() => {}) }
     fs.rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 300 })

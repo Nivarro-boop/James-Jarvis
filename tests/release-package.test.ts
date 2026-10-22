@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict'
 import { it } from 'node:test'
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
-
+import { finished } from 'node:stream/promises'
+import { runInNewContext } from 'node:vm'
 const { verifyReleaseMetadata, localReference, verifyPayload } = require(resolve('scripts/check-release-package.cjs'))
 function fixture(run: (directory: string, manifest: any, installer: Buffer) => void): void {
   const directory = mkdtempSync(join(tmpdir(), 'james-release-metadata-'))
@@ -91,10 +92,46 @@ it('reads actual nested ASAR files using host-native paths, including CSS and fo
     const pe = Buffer.alloc(0x80)
     pe.write('MZ'); pe.writeUInt32LE(0x40, 0x3c); pe.writeUInt32LE(0x00004550, 0x40); pe.writeUInt16LE(0x8664, 0x44)
     put(join(app, 'James-Jarvis.exe'), pe) // Header-only fixture; this is not an executable and is never launched.
-    await require('@electron/asar').createPackage(source, join(app, 'resources/app.asar'))
+    // ASAR 3 resolves with the output stream before its final writes are flushed.
+    // Reading immediately can yield NUL-filled payloads, especially on Windows.
+    const archive = await require('@electron/asar').createPackage(source, join(app, 'resources/app.asar'))
+    await finished(archive)
     const actual = verifyPayload(app, '1.3.9')
     assert.equal(actual.version, '1.3.9')
     assert.ok(actual.checkedRendererReferences > 0)
     assert.equal(actual.nativeExecution, 'not-run')
+  } finally { rmSync(root, { recursive: true, force: true }) }
+})
+
+it('keeps a native launch failure strict, preserves only disposable logs and never inherits provider credentials', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'james-release-launch-fixture-'))
+  const output = join(root, 'audit'), app = join(root, 'app')
+  mkdirSync(output)
+  const sandboxModule = { exports: {} as any }
+  try {
+    const mockedRequire = (id: string): any => {
+      if (id === 'node:os') return { ...require(id), tmpdir: () => root }
+      if (id === 'playwright-core') return { _electron: { launch: async (options: any) => {
+        assert.equal(options.executablePath, join(app, 'James-Jarvis.exe'))
+        assert.equal(options.cwd, app)
+        assert.ok(options.args.includes('--enable-logging=stderr'))
+        assert.equal(options.env.ELECTRON_ENABLE_LOGGING, '1')
+        assert.equal(options.env.OPENAI_API_KEY, undefined)
+        assert.equal(options.env.GH_TOKEN, undefined)
+        const logs = join(options.env.APPDATA, 'Void Jarvis', 'logs')
+        mkdirSync(logs, { recursive: true })
+        writeFileSync(join(logs, 'main.log'), 'fixture startup failure')
+        throw new Error('simulated native launch timeout')
+      } } }
+      return require(id)
+    }
+    const source = readFileSync(resolve('scripts/check-release-package.cjs'), 'utf8')
+    runInNewContext(source + '\nmodule.exports.nativeSmoke = nativeSmoke', { module: sandboxModule, require: mockedRequire, process: { platform: 'win32', env: { GITHUB_ACTIONS: 'true', RUNNER_ENVIRONMENT: 'github-hosted', OPENAI_API_KEY: 'must-not-inherit', GH_TOKEN: 'must-not-inherit' } }, console, Buffer, URL })
+    await assert.rejects(sandboxModule.exports.nativeSmoke(app, output, '1.3.9'), /simulated native launch timeout/)
+    const report = JSON.parse(readFileSync(join(output, 'release-original-startup.json'), 'utf8'))
+    assert.equal(report.logs.length, 1)
+    assert.equal(report.logs[0].tail, 'fixture startup failure')
+    assert.ok(!JSON.stringify(report).includes('must-not-inherit'))
+    assert.deepEqual(readdirSync(root), ['audit'], 'Disposable profile must be removed even after launch failure')
   } finally { rmSync(root, { recursive: true, force: true }) }
 })
