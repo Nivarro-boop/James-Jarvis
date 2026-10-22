@@ -129,7 +129,12 @@ export interface AlexaEnvelope {
   version?: string
   session?: { application?: { applicationId?: string } }
   context?: { System?: { application?: { applicationId?: string } } }
-  request?: { type?: string; timestamp?: string; intent?: { name?: string; slots?: Record<string, { value?: string }> } }
+  request?: {
+    type?: string
+    timestamp?: string
+    requestId?: string
+    intent?: { name?: string; slots?: Record<string, { value?: string }> }
+  }
 }
 
 /**

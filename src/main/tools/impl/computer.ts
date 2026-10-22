@@ -507,7 +507,16 @@ const computerTask = defineTool({
           })
         }
       } catch (err) {
+        if (ctx.signal.aborted) {
+          return { abgebrochen: true, grund: 'Vom Nutzer gestoppt.', schritte: step }
+        }
         throw new Error(useChatGpt ? (err instanceof Error ? err.message : String(err)) : friendlyGeminiError(err))
+      }
+
+      // Der Provider kann trotz Abort ein verspätetes Ergebnis liefern. Dieses
+      // darf nicht als neuer Aktionsplan interpretiert werden.
+      if (ctx.signal.aborted) {
+        return { abgebrochen: true, grund: 'Vom Nutzer gestoppt.', schritte: step }
       }
 
       // Derselbe Zug wandert in den Verlauf, nur ohne die Bilder: Es soll

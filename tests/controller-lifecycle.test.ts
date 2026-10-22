@@ -13,6 +13,7 @@ function deferred() {
 
 async function harness() {
   const engines: any[] = []
+  const wakeHandles: any[] = []
   const errors: (string | null)[] = []
   const wishes: any[] = []
   const captions: any[] = []
@@ -38,9 +39,21 @@ async function harness() {
     updateSettings() {}
     async refreshConfig() {}
   }
+  let makeWakeWordImpl: (options: any) => Promise<any> = async (options) => {
+    const handle: any = {
+      available: false,
+      enabled: options.enabled,
+      threshold: options.threshold,
+      setEnabled(value: boolean) { this.enabled = value },
+      setThreshold(value: number) { this.threshold = value },
+      destroy() { this.destroyed = true }
+    }
+    wakeHandles.push(handle)
+    return handle
+  }
   const fixtures: Record<string, string> = {
     '../audio/capture': 'export const startCapture=async()=>({stop:async()=>{}})',
-    '../wake/wakeword': 'export const createWakeWord=async()=>({available:false,setEnabled(){},setThreshold(){},destroy(){}})',
+    '../wake/wakeword': 'export const createWakeWord=(...args)=>makeWakeWord(...args)',
     './LiveSession': 'export const LiveSession=Engine',
     './CascadeSession': 'export const CascadeSession=Engine',
     './RealtimeSession': 'export const RealtimeSession=Engine',
@@ -63,12 +76,14 @@ async function harness() {
     removeEventListener: (name: string, callback: () => void) => listeners.get(name)?.delete(callback)
   }
   runInNewContext(bundle.outputFiles[0].text, { module, exports: module.exports, console, Engine, state,
+    makeWakeWord: (options: any) => makeWakeWordImpl(options),
     window, navigator: { onLine: true, mediaDevices: { addEventListener() {}, removeEventListener() {} } },
     setTimeout, clearTimeout })
   const settings = structuredClone(DEFAULT_SETTINGS)
   settings.speech.provider = 'gemini'
   const controller = new module.exports.JarvisController(settings)
-  return { controller, engines, errors, wishes, captions, settings, listeners }
+  return { controller, engines, wakeHandles, errors, wishes, captions, settings, listeners,
+    setMakeWakeWord: (factory: (options: any) => Promise<any>) => { makeWakeWordImpl = factory } }
 }
 
 it('wartet bei gleichzeitigen Texteingaben auf denselben Verbindungsaufbau', async () => {
@@ -211,4 +226,36 @@ it('lässt den Abschluss eines alten Schlafbefehls den neuen Verbindungszustand 
   closing.resolve()
   await sleeping
   assert.equal(h.wishes.at(-1)[1], 'listening')
+})
+
+it('wendet nach einem verzögerten Wake-Word-Neuaufbau die aktuellen Einstellungen an', async () => {
+  const h = await harness()
+  await h.controller.init()
+  let finishBuild!: (handle: any) => void
+  h.setMakeWakeWord(() => new Promise(resolve => { finishBuild = resolve }))
+
+  const changedModel = structuredClone(h.settings)
+  changedModel.wake.modelName = 'hey_new.onnx'
+  h.controller.updateSettings(changedModel)
+
+  const latest = structuredClone(changedModel)
+  latest.wake.enabled = false
+  latest.wake.threshold = 0.73
+  h.controller.updateSettings(latest)
+
+  const rebuilt: any = {
+    available: true,
+    enabled: true,
+    threshold: 0,
+    setEnabled(value: boolean) { this.enabled = value },
+    setThreshold(value: number) { this.threshold = value },
+    destroy() { this.destroyed = true }
+  }
+  finishBuild(rebuilt)
+  await new Promise(resolve => setImmediate(resolve))
+
+  assert.equal(rebuilt.enabled, false)
+  assert.equal(rebuilt.threshold, 0.73)
+  assert.equal(h.wakeHandles[0].destroyed, true)
+  await h.controller.dispose()
 })

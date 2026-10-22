@@ -2,6 +2,9 @@ import type { WebsiteAccountInfo, WebsiteAccountInput } from './websiteAccounts'
 import type { WorkingContext } from './workingContext'
 import type { SkillProposal } from './skillProposal'
 import type { BrainGraph, Widget } from './brain'
+import type { FeaturePackIpcMap } from './featurePacks'
+import type { RecoveryIpcMap } from './recovery'
+import type { WorkspaceIpcMap } from './workspace'
 /**
  * Typisierter IPC-Vertrag.
  *
@@ -67,7 +70,7 @@ import type {
 } from './types'
 
 /** Renderer → Main, mit Antwort. */
-export interface IpcInvokeMap {
+export interface IpcInvokeMap extends FeaturePackIpcMap, RecoveryIpcMap, WorkspaceIpcMap {
   'settings:get': { req: void; res: Settings }
   'brain:graph': { req: void; res: BrainGraph }
   'brain:note': { req: { file: string }; res: string | null }
@@ -215,6 +218,7 @@ export interface IpcInvokeMap {
   'hermes:run': { req: { requestId: string; sessionId: string; input: string }; res: { ok: boolean; text?: string; error?: string } }
   'hermes:cancel': { req: { requestId: string }; res: void }
   'reminder:create': { req: { text: string; at?: string; inMinutes?: number; repeat?: ReminderEntry['repeat'] }; res: ReminderEntry }
+  'reminder:update': { req: { id: number; text?: string; at?: string; inMinutes?: number; repeat?: ReminderEntry['repeat'] }; res: ReminderEntry }
   'reminder:done': { req: { id: number }; res: void }
   'reminder:snooze': { req: { id: number; minutes: number }; res: void }
   'schedule:upsert': { req: Partial<ScheduleEntry> & { cron: string; prompt: string }; res: ScheduleEntry }
@@ -241,6 +245,8 @@ export interface IpcInvokeMap {
   'speech:status': { req: { start?: boolean } | void; res: VoiceServiceStatus }
   'speech:stop': { req: void; res: VoiceServiceStatus }
 
+  /** Passive Statusabfrage; startet weder Telefonie noch Tunnel. */
+  'control:status': { req: void; res: { telephony: TelephonyStatus; phoneConfigured: boolean; conversationEnabled: boolean; incomingEnabled: boolean; computer: { name: string; grund?: string } } }
   /** Tunnel und Telefondienst hochfahren, ohne zu telefonieren. */
   'telephony:test': { req: void; res: TelephonyStatus }
   'telephony:stop': { req: void; res: TelephonyStatus }
@@ -575,6 +581,25 @@ export const IPC_INVOKE_CHANNELS = [
   'backup:list',
   'backup:create',
   'backup:openFolder',
+  'recovery:status',
+  'recovery:preview',
+  'recovery:createProfile',
+  'recovery:activateProfile',
+  'recovery:returnToDefault',
+  'packs:preview',
+  'packs:install',
+  'packs:list',
+  'packs:setEnabled',
+  'packs:remove',
+  'packs:widgets',
+  'packs:toggle',
+  'workspace:get',
+  'workspace:task-create',
+  'workspace:task-set-done',
+  'workspace:task-delete',
+  'workspace:layout-set',
+  'workspace:calendar-enabled',
+  'workspace:calendar-read',
   'settings:set',
   'settings:reset',
   'secrets:status',
@@ -618,6 +643,7 @@ export const IPC_INVOKE_CHANNELS = [
   'hermes:run',
   'hermes:cancel',
   'reminder:create',
+  'reminder:update',
   'reminder:done',
   'reminder:snooze',
   'schedule:upsert',
@@ -636,6 +662,7 @@ export const IPC_INVOKE_CHANNELS = [
   'speech:stop',
   'telephony:test',
   'telephony:stop',
+  'control:status',
   'telephony:incoming',
   'connect:status',
   'connect:login',

@@ -83,6 +83,7 @@ const newLog = () => ({ info: [] as unknown[][], warn: [] as unknown[][], error:
 /** Fenster, das auf `wake:status`/`wake:asset` antwortet und jede Quelle der Sitzungen festhält. */
 function fakeWindow(status: object, opts: { failOn?: string; run?: (path: string) => Promise<unknown> } = {}) {
   const created: Array<{ kind: 'url' | 'bytes'; name: string }> = []
+  const released: string[] = []
   const assetCalls: string[] = []
   const window = {
     ortEnv: { wasm: {} as any },
@@ -103,7 +104,7 @@ function fakeWindow(status: object, opts: { failOn?: string; run?: (path: string
       return {
         inputNames: ['input'],
         outputNames: ['output'],
-        release: async () => {},
+        release: async () => { released.push(name) },
         run: async () => {
           if (opts.run) return opts.run(name)
           return { output: { data: new Float32Array(256) } }
@@ -111,7 +112,7 @@ function fakeWindow(status: object, opts: { failOn?: string; run?: (path: string
       }
     }
   }
-  return { window, created, assetCalls }
+  return { window, created, released, assetCalls }
 }
 
 describe('Weckwort: Dateien lesen (Hauptprozess)', () => {
@@ -214,7 +215,7 @@ describe('Weckwort: Fehlschläge sind leise genug', () => {
 
   it('Laden scheitert: eine Warnung mit Dateiname und Fehlertyp, nicht eine je Aufbau', async () => {
     const log = newLog()
-    const { window } = fakeWindow({ installed: true, missing: [], model: 'jarvis.onnx' }, { failOn: 'embedding_model' })
+    const { window, released } = fakeWindow({ installed: true, missing: [], model: 'jarvis.onnx' }, { failOn: 'embedding_model' })
     const wake = await loadWakeModule(window, log)
     const first = await wake.createWakeWord({ threshold: 0.5, enabled: true, onDetected() {} })
     await wake.createWakeWord({ threshold: 0.5, enabled: true, onDetected() {} })
@@ -222,12 +223,13 @@ describe('Weckwort: Fehlschläge sind leise genug', () => {
     assert.equal(log.warn.length, 1)
     assert.match(String(log.warn[0]), /Modelle nicht geladen/)
     assert.match(String(log.warn[0]), /embedding_model\.onnx: TypeError: Failed to fetch/)
+    assert.equal(released.length, 4, 'beide erfolgreich geladenen Sitzungen je Versuch freigegeben')
   })
 
   it('Erkennung scheitert wiederholt: ein Fehlerprotokoll, dann gibt sie auf', async () => {
     const log = newLog()
     let runs = 0
-    const { window } = fakeWindow(
+    const { window, released } = fakeWindow(
       { installed: true, missing: [], model: 'jarvis.onnx' },
       { run: async () => { runs++; throw new Error('boom') } }
     )
@@ -241,6 +243,11 @@ describe('Weckwort: Fehlschläge sind leise genug', () => {
     assert.equal(log.error.length, 1)
     assert.match(String(log.error[0]), /Erkennung fehlgeschlagen:.*boom/)
     assert.equal(runs, 5, 'nach fünf Fehlern am Stück wird nicht weiter gerechnet')
+    for (let j = 0; j < 10; j++) await Promise.resolve()
+    assert.equal(released.length, 3, 'beim endgültigen Fehler alle Sitzungen freigegeben')
+    handle.destroy()
+    for (let j = 0; j < 10; j++) await Promise.resolve()
+    assert.equal(released.length, 3, 'destroy gibt bereits freigegebene Sitzungen nicht erneut frei')
   })
 })
 

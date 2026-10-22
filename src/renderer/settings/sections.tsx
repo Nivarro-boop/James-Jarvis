@@ -1,4 +1,5 @@
 import { WebsiteAccounts } from './WebsiteAccounts'
+import { AssistantRoleSettings } from './AssistantRoleChoice'
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type {
   SipStatus,
@@ -108,6 +109,8 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
   const [status, setStatus] = useState<SecretStatus[]>([])
   const [values, setValues] = useState<Partial<Record<SecretKey, string>>>({})
   const [saving, setSaving] = useState<SecretKey | null>(null)
+  const [busyAction, setBusyAction] = useState<'save' | 'clear' | null>(null)
+  const keyOperationBusy = useRef(false)
   /** Ergebnis der Gemini-Prüfung, bis der nächste Tastendruck es verwirft. */
   const [keyNote, setKeyNote] = useState<{ key: SecretKey; ok: boolean; text: string } | null>(null)
   /** Der Empfänger, wie er beim Betreten des Feldes galt — er entscheidet, ob die Zusage noch gilt. */
@@ -134,8 +137,10 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
    */
   const save = async (key: SecretKey): Promise<void> => {
     const value = values[key]
-    if (!value) return
+    if (!value || keyOperationBusy.current) return
+    keyOperationBusy.current = true
     setSaving(key)
+    setBusyAction('save')
     try {
       if (key === 'gemini') {
         setKeyNote(null)
@@ -172,13 +177,24 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
     } catch (error) {
       setKeyNote({ key, ok: false, text: error instanceof Error ? error.message : 'Der Schlüssel konnte nicht gespeichert werden.' })
     } finally {
+      keyOperationBusy.current = false
       setSaving(null)
+      setBusyAction(null)
     }
   }
 
   const clear = async (key: SecretKey): Promise<void> => {
+    if (keyOperationBusy.current) return
+    keyOperationBusy.current = true
+    setSaving(key)
+    setBusyAction('clear')
     try { setStatus(await window.jarvis.invoke('secrets:clear', { key })) }
     catch (e) { setKeyNote({ key, ok: false, text: e instanceof Error ? e.message : 'Löschen fehlgeschlagen.' }) }
+    finally {
+      keyOperationBusy.current = false
+      setSaving(null)
+      setBusyAction(null)
+    }
   }
 
   const renderFields = (fields: typeof SECRET_FIELDS): JSX.Element => (<>
@@ -216,16 +232,18 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
             />
             <button
               className="primary"
-              disabled={!values[field.key] || saving === field.key}
+              disabled={!values[field.key] || saving !== null}
               onClick={() => void save(field.key)}
             >
               {field.key !== 'gemini' && field.key !== 'elevenlabs' && field.key !== 'openai'
                 ? 'Speichern'
                 : saving === field.key
-                  ? 'Wird geprüft…'
+                  ? busyAction === 'clear' ? 'Wird gelöscht…' : 'Wird geprüft…'
                   : 'Prüfen und speichern'}
             </button>
-            {present(field.key) && <button onClick={() => void clear(field.key)}>Löschen</button>}
+            {present(field.key) && <button disabled={saving !== null} onClick={() => void clear(field.key)}>
+              {saving === field.key && busyAction === 'clear' ? 'Wird gelöscht…' : 'Löschen'}
+            </button>}
           </div>
           {keyNote?.key === field.key && (
             <div className={keyNote.ok ? 'hint ok' : 'hint err'} role="status">{keyNote.text}</div>
@@ -2329,6 +2347,8 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
         Wähle eine Stimme und verbinde den passenden Anbieter. Die Einrichtung findest du direkt darunter.
       </p>
 
+      <AssistantRoleSettings settings={settings} patch={patch} />
+      <hr className="section-divider" />
       <PersonaPicker settings={settings} patch={patch} />
       <PersonalityControls settings={settings} patch={patch} />
       <hr className="section-divider" />
@@ -5128,7 +5148,7 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
   }
 
   const pairingUrl =
-    status?.urls[0] && status.token ? `${status.urls[0]}#host=${status.urls[0].replace(/^https?:\/\//, '').replace(/\/$/, '')}&token=${status.token}` : null
+    status?.secure && status.urls[0] && status.token ? `${status.urls[0]}#host=${status.urls[0].replace(/^https?:\/\//, '').replace(/\/$/, '')}&token=${status.token}` : null
 
   return (
     <>
@@ -5236,7 +5256,15 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
           </>
         )}
 
-      {settings.companion.enabled && status?.running && setup?.ready && (
+      {settings.companion.enabled && status?.running && !status.secure && (
+        <p className="hint" role="alert">
+          <strong>Kein sicherer Telefonzugriff.</strong> Ohne gültiges TLS-Zertifikat läuft nur eine
+          lokale Diagnose auf diesem Rechner. Die Loopback-Adresse ist vom Telefon nicht erreichbar;
+          es werden keine Marke und kein Kopplungs-QR-Code für HTTP angeboten. Richte zuerst das
+          lokale Zertifikat oder Tailscale ein.
+        </p>
+      )}
+      {settings.companion.enabled && status?.running && status.secure && setup?.ready && (
         <>
           <h3>Koppeln</h3>
           {/*

@@ -71,6 +71,7 @@ function cloneLook(look: Look): Look {
 
 export function PixelOrb(): JSX.Element {
   const state = useCrystal((s) => s.state)
+  const recoveryMode = useCrystal((s) => s.recoveryMode)
   const setHovered = useCrystal((s) => s.setHovered)
   const canvas = useRef<HTMLCanvasElement | null>(null)
   const stateRef = useRef(state)
@@ -290,7 +291,7 @@ export function PixelOrb(): JSX.Element {
   }
 
   const onPointerDown = (e: React.PointerEvent): void => {
-    if (e.button !== 0) return
+    if (recoveryMode || e.button !== 0) return
     pressStart.current = { x: e.clientX, y: e.clientY, t: Date.now() }
     e.currentTarget.setPointerCapture?.(e.pointerId)
   }
@@ -298,7 +299,7 @@ export function PixelOrb(): JSX.Element {
   const onPointerUp = (e: React.PointerEvent): void => {
     const start = pressStart.current
     pressStart.current = null
-    if (!start) return
+    if (recoveryMode || !start) return
     try {
       e.currentTarget.releasePointerCapture(e.pointerId)
     } catch {
@@ -311,6 +312,7 @@ export function PixelOrb(): JSX.Element {
   }
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
+    if (recoveryMode) return
     if (e.key !== 'Enter' && e.key !== ' ') return
     e.preventDefault()
     if (e.repeat) return
@@ -319,7 +321,7 @@ export function PixelOrb(): JSX.Element {
 
   const look = ORB_LOOKS[state] ?? ORB_LOOKS.idle
   const label =
-    state === 'paused'
+    recoveryMode ? 'Recovery-Prüfmodus – Mikrofon und KI gesperrt' : state === 'paused'
       ? 'Stillgelegt — drücken weckt ihn wieder'
       : 'Klick: ansprechen · nochmal: stilllegen · lange drücken: stilllegen'
 
@@ -327,7 +329,8 @@ export function PixelOrb(): JSX.Element {
     <div
       className="orb"
       role="button"
-      tabIndex={0}
+      tabIndex={recoveryMode ? -1 : 0}
+      aria-disabled={recoveryMode || undefined}
       aria-label={label}
       title={label}
       data-state={state}

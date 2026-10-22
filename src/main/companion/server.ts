@@ -235,6 +235,13 @@ export async function startCompanion(
   tls: TlsMaterial | null = null
 ): Promise<void> {
   if (publicServer) return
+  const encrypted = Boolean(tls?.pem || tls?.pfx)
+  if (tls && (!encrypted || Boolean(tls.pem) === Boolean(tls.pfx))) {
+    throw new Error('Companion-TLS-Material unvollständig oder mehrdeutig; der Server wurde nicht gestartet.')
+  }
+  if (encrypted && !tls?.hostname.trim()) {
+    throw new Error('Für Companion-TLS fehlt der Zertifikatsname; der Server wurde nicht gestartet.')
+  }
   token = loadToken()
   port = desiredPort
 
@@ -253,7 +260,13 @@ export async function startCompanion(
       : createServer(handler)
 
   outward.on('upgrade', (req, socket, head) => {
-    const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+    let url: URL
+    try {
+      url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
+    } catch {
+      socket.end('HTTP/1.1 400 Bad Request\r\n\r\n')
+      return
+    }
     const address = req.socket.remoteAddress ?? 'unbekannt'
 
     if (url.pathname !== COMPANION_PATH.phone) {
@@ -261,6 +274,14 @@ export async function startCompanion(
       // an dieser Stelle schlicht nicht.
       socket.end('HTTP/1.1 404 Not Found\r\n\r\n')
       return
+    }
+    const origin = req.headers.origin
+    if (typeof origin === 'string') {
+      const expectedOrigin = `${encrypted ? 'https' : 'http'}://${encrypted ? tls!.hostname : '127.0.0.1'}:${port}`
+      if (origin !== expectedOrigin) {
+        socket.end('HTTP/1.1 403 Forbidden\r\n\r\n')
+        return
+      }
     }
     if (lockedOut(address)) {
       socket.end('HTTP/1.1 429 Too Many Requests\r\n\r\n')
@@ -276,7 +297,9 @@ export async function startCompanion(
     if (ws) attachPhone(ws)
   })
 
-  await listen(outward, port, '0.0.0.0')
+  // Without TLS, page content, pairing token and microphone frames must not
+  // leave this computer. Local HTTP remains available for diagnostics only.
+  await listen(outward, port, encrypted ? '0.0.0.0' : '127.0.0.1')
 
   // ── Der innere Zuhörer: nur der Kristall ────────────────
   const inward = createServer((_req, res) => res.writeHead(404).end())
@@ -326,10 +349,10 @@ export async function startCompanion(
   publicServer = outward
   bridgeServer = inward
   caServer = caListener
-  publicOrigin = tls ? `https://${tls.hostname}:${port}/` : null
+  publicOrigin = encrypted ? `https://${tls!.hostname}:${port}/` : null
 
   console.info(
-    `[companion] öffentlich auf ${port}${tls ? ` (TLS für ${tls.hostname})` : ' (ohne TLS)'}, ` +
+    `[companion] ${encrypted ? `TLS auf ${port} für ${tls!.hostname}` : `ohne TLS nur auf Loopback 127.0.0.1:${port}`}, ` +
       `Kristall auf ${bridgePort(port)}${caListener ? `, Stelle auf ${caPort(port)}` : ''}`
   )
 }
@@ -627,7 +650,7 @@ export function companionStatus(): CompanionStatus {
   const urls: string[] = []
   if (publicServer) {
     if (publicOrigin) urls.push(publicOrigin)
-    if (target) urls.push(`http://${target.address}:${port}/`)
+    else urls.push(`http://127.0.0.1:${port}/`)
   }
 
   return {

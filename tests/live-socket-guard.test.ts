@@ -477,3 +477,23 @@ it('räumt beim vorgezogenen Live-Verbindungswechsel alte Werkzeuge auf, ohne ne
   assert.match(h.errors.at(-1)!, /keine Antwort/)
   await h.session.dispose()
 })
+
+
+it('übernimmt geänderte Rollen in einer aktiven Gemini-Sitzung und startet dafür keine inaktive Sitzung', async () => {
+  const { session } = await loadLiveSession()
+  const reconnects: unknown[] = []
+  session.conn = fakeConnection(1).conn
+  session.resumptionHandle = 'role-resume-fixture'
+  session.connect = async (handle: unknown) => { reconnects.push(handle) }
+  const settings = structuredClone(DEFAULT_SETTINGS)
+  settings.assistantRole = 'calendar'
+  session.updateSettings(settings)
+  assert.deepEqual(reconnects, ['role-resume-fixture'])
+  assert.equal(session.settings.assistantRole, 'calendar')
+  session.updateSettings(structuredClone(settings))
+  assert.equal(reconnects.length, 1, 'Unchanged roles do not reconnect')
+  session.conn = null
+  settings.assistantRole = 'focus'
+  session.updateSettings(settings)
+  assert.equal(reconnects.length, 1, 'A role preference must not activate an idle provider')
+})

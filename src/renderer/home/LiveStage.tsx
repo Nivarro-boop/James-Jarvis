@@ -18,6 +18,7 @@ export function LiveStage({ snapshot }: { snapshot: ActivitySnapshot }): JSX.Ele
   const captions = useCrystal((s) => s.captions)
   const state = useCrystal((s) => s.state)
   const paused = useCrystal((s) => s.paused)
+  const recoveryMode = useCrystal((s) => s.recoveryMode)
   const engineLabel = useCrystal((s) => s.engineLabel)
   const [now, setNow] = useState(Date.now())
   const busy = ['thinking', 'speaking', 'confirm', 'research', 'tool'].includes(state) || snapshot.items.some(i => i.status === 'running' || i.status === 'waiting')
@@ -33,7 +34,8 @@ export function LiveStage({ snapshot }: { snapshot: ActivitySnapshot }): JSX.Ele
   const lines = latest && (busy || now - latest.at < FADE_MS) ? [latest] : []
 
   const current = snapshot.items.find(s => s.source !== 'learning' && (s.status === 'running' || s.status === 'waiting'))
-  const phase = paused ? 'Pausiert – klicke auf die Kugel, wenn du mich brauchst'
+  const phase = recoveryMode ? 'Recovery-Prüfmodus – Mikrofon und KI bleiben gesperrt'
+    : paused ? 'Pausiert – klicke auf die Kugel, wenn du mich brauchst'
     : current ? (current.thought || current.label)
     : state === 'thinking' ? 'Auftrag wird bearbeitet'
     : state === 'speaking' ? 'Antwort wird gesprochen'

@@ -1,0 +1,42 @@
+.map-view .map-controls {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  gap: 4px;
+}
+
+.map-view .map-controls button,
+.map-view .map-retry {
+  border: 1px solid #686b78;
+  border-radius: 4px;
+  padding: 4px 7px;
+  background: #191c29dd;
+  color: #eee;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.map-view .map-controls button:focus-visible,
+.map-view .map-retry:focus-visible {
+  outline: 2px solid #15d8eb;
+  outline-offset: 2px;
+}
+
+.map-view .map-keyboard-help {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  padding: 3px 5px;
+  background: #191c29dd;
+  color: #eee;
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.map-view .map-retry {
+  position: absolute;
+  top: 34px;
+  left: 8px;
+}

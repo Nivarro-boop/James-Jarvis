@@ -358,6 +358,15 @@ function connect() {
   reconnectTimer = null
   discard()
 
+  const loopback =
+    location.hostname === 'localhost' ||
+    location.hostname === '::1' ||
+    /^127\./.test(location.hostname)
+  if (location.protocol !== 'https:' && !loopback) {
+    setStatus('Unsicheres HTTP: Marke und Mikrofon werden nicht gesendet. Öffne die HTTPS-Adresse aus den Companion-Einstellungen.', 'error')
+    return
+  }
+
   // Das Schema folgt der Seite, nicht der Einstellung: Eine über https
   // ausgelieferte Seite darf keinen ws://-Sockel aufmachen, der Browser wertet
   // das als gemischten Inhalt und blockt ihn wortlos.

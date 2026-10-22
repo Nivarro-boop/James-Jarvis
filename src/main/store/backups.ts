@@ -18,7 +18,13 @@ let pending: Promise<void> = Promise.resolve()
 
 function directory(): string {
   const dir = join(app.getPath('userData'), 'backups')
-  mkdirSync(dir, { recursive: true })
+  try {
+    const stat = lstatSync(dir)
+    if (!stat.isDirectory() || stat.isSymbolicLink()) throw new Error('Der Sicherungsordner ist kein sicherer lokaler Ordner.')
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+    mkdirSync(dir, { recursive: true })
+  }
   return dir
 }
 
@@ -27,7 +33,7 @@ export function listBackups(): BackupInfo[] {
   return readdirSync(dir).filter(name => BACKUP_FILE.test(name)).flatMap(name => {
     const file = join(dir, name)
     const stat = lstatSync(file)
-    return stat.isFile() ? [{ file, createdAt: stat.mtimeMs, bytes: stat.size, automatic: name.startsWith('automatic-') }] : []
+    return stat.isFile() && !stat.isSymbolicLink() ? [{ file, createdAt: stat.mtimeMs, bytes: stat.size, automatic: name.startsWith('automatic-') }] : []
   }).sort((a, b) => b.createdAt - a.createdAt)
 }
 
@@ -58,12 +64,13 @@ async function snapshot(automatic: boolean, now: number): Promise<BackupInfo> {
     if (existsSync(source) && lstatSync(source).size > MAX_DATABASE_BYTES) throw new Error('Datenbank größer als 64 MB; bitte manuell extern sichern.')
     snapshotDb(databaseFile)
     const settings = structuredClone(getSettings())
-    // MCP environment values may contain credentials; omit their values.
-    for (const server of settings.mcpServers) server.env = {}
+    // Commands and arguments can contain secrets too; omit the entire MCP
+    // configuration rather than trying to recognize every credential format.
+    settings.mcpServers = []
     const payload = { format: 'void-james-backup', version: 1, createdAt: now,
       appVersion: app.getVersion(), settings, skills: listSkills(),
       database: { encoding: 'base64', sqlite: readFileSync(databaseFile).toString('base64') },
-      excluded: ['Keystore', 'OAuth-Tokens', 'MCP-Umgebungswerte', 'Hermes-Profil', 'Sprachmodelle', 'Protokolldateien'] }
+      excluded: ['Keystore', 'OAuth-Tokens', 'MCP-Server einschließlich Befehlen, Argumenten, Headern und Umgebungswerten', 'Hermes-Profil', 'Sprachmodelle', 'Protokolldateien', 'Arbeitskontext, Board, Aufgaben und Feature-Packs'] }
     const compressed = await compress(JSON.stringify(payload))
     writeFileSync(staging, compressed, { flag: 'wx', flush: true })
     renameSync(staging, file)
@@ -97,3 +104,5 @@ export function stopBackups(): void {
 }
 export function revealBackups(): void { void shell.openPath(directory()) }
 export function flushBackups(): Promise<void> { return pending }
+
+export { previewRecovery, createRecoveryProfile, activateRecoveryProfile } from './recovery'

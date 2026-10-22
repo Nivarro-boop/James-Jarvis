@@ -1,0 +1,24 @@
+.workspace-overlay { position: fixed; inset: 0; z-index: 80; display: flex; align-items: center; justify-content: center; padding: 24px; background: #080e0cc9; }
+.workspace-panel { width: min(1080px, 100%); max-height: calc(100dvh - 48px); display: flex; flex-direction: column; min-width: 0; border: 1px solid #3a5145; border-radius: 20px; background: #131e19; color: #e1eae5; box-shadow: 0 28px 96px #0007; overflow: hidden; }
+.workspace-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 24px 26px 18px; }
+.workspace-panel-eyebrow { margin: 0 0 6px; color: #91a99b; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+.workspace-panel-header h2 { margin: 0; font-size: 26px; font-weight: 550; letter-spacing: -.7px; }
+.workspace-panel-close { width: 38px; height: 38px; flex: none; border: 1px solid #3a5145; border-radius: 50%; background: transparent; color: #dce8e0; cursor: pointer; font-size: 24px; }
+.workspace-panel-tabs { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; padding: 0 26px 16px; border-bottom: 1px solid #2c3d32; }
+.workspace-panel-tabs button { padding: 9px 13px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: #a7baae; cursor: pointer; font: inherit; font-size: 13px; }
+.workspace-panel-tabs button[aria-selected='true'] { border-color: #405d49; color: #e3f0e8; background: #263c2e; }
+.workspace-panel-tabs button:hover { background: #263c2e; }
+.workspace-panel-content { flex: 1; min-height: 0; min-width: 0; padding: 24px 26px; overflow: auto; overscroll-behavior: contain; overflow-wrap: anywhere; }
+.workspace-panel-note { color: #a7baae; font-size: 13px; line-height: 1.6; }
+.workspace-panel-content .workspace-board { margin: 0; max-width: none; }
+.workspace-panel-content > .context-manage { margin-block: 0; }
+.workspace-panel :focus-visible { outline: 2px solid #b8dac7; outline-offset: 3px; }
+.workspace-panel-content:focus-visible { outline-offset: -4px; }
+@media (max-width: 600px) {
+  .workspace-overlay { padding: 10px; }
+  .workspace-panel { max-height: calc(100dvh - 20px); border-radius: 14px; }
+  .workspace-panel-header { padding: 18px 16px 14px; }
+  .workspace-panel-tabs { padding: 0 16px 14px; gap: 3px; }
+  .workspace-panel-tabs button { padding: 8px 9px; font-size: 12px; }
+  .workspace-panel-content { padding: 16px; }
+}

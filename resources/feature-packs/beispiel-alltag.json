@@ -1,0 +1,25 @@
+{
+  "format": "jarvis-feature-pack",
+  "schemaVersion": 1,
+  "id": "beispiel-alltag",
+  "name": "Alltag – Beispiel",
+  "version": "1.0.0",
+  "permissions": ["local-widget-state"],
+  "widgets": [
+    {
+      "id": "kurznotiz",
+      "type": "note",
+      "title": "Kleine Erinnerung",
+      "text": "Ein Feature-Pack enthält ausschließlich lokale, deklarative Widgets."
+    },
+    {
+      "id": "start-checkliste",
+      "type": "checklist",
+      "title": "Tagesstart",
+      "items": [
+        { "id": "wasser", "text": "Ein Glas Wasser trinken" },
+        { "id": "plan", "text": "Die drei wichtigsten Aufgaben notieren" }
+      ]
+    }
+  ]
+}

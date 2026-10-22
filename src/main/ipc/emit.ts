@@ -20,9 +20,15 @@ export function sendToCrystal<C extends keyof IpcEventMap>(
   payload: IpcEventMap[C]
 ): boolean {
   const win = getCrystalWindow()
-  if (!win || win.isDestroyed()) return false
-  win.webContents.send(channel as string, payload)
-  return true
+  try {
+    if (!win || win.isDestroyed()) return false
+    win.webContents.send(channel as string, payload)
+    return true
+  } catch {
+    // Das Fenster kann zwischen Prüfung und Zustellung zerstört werden.
+    // Timer/Erinnerungen dürfen dann später erneut zustellen, nicht abstürzen.
+    return false
+  }
 }
 
 /**
@@ -33,8 +39,12 @@ export function sendToCrystal<C extends keyof IpcEventMap>(
  */
 export function crystalVisible(): boolean {
   const win = getCrystalWindow()
-  if (!win || win.isDestroyed()) return false
-  return win.isVisible() && !win.isMinimized()
+  try {
+    if (!win || win.isDestroyed()) return false
+    return win.isVisible() && !win.isMinimized()
+  } catch {
+    return false
+  }
 }
 
 /** Main → Einstellungsfenster (nur wenn offen). */
@@ -43,9 +53,13 @@ export function sendToSettings<C extends keyof IpcEventMap>(
   payload: IpcEventMap[C]
 ): boolean {
   const win = getSettingsWindow()
-  if (!win || win.isDestroyed()) return false
-  win.webContents.send(channel as string, payload)
-  return true
+  try {
+    if (!win || win.isDestroyed()) return false
+    win.webContents.send(channel as string, payload)
+    return true
+  } catch {
+    return false
+  }
 }
 
 export function broadcast<C extends keyof IpcEventMap>(channel: C, payload: IpcEventMap[C]): void {

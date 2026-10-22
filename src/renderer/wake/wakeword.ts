@@ -134,6 +134,15 @@ export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHan
   let embedModel: OrtNS.InferenceSession | null = null
   let wakeModel: OrtNS.InferenceSession | null = null
   let available = false
+  let modelsReleased = false
+  async function releaseModels(): Promise<void> {
+    if (modelsReleased) return
+    modelsReleased = true
+    await Promise.all([melModel, embedModel, wakeModel].map(async (model) => {
+      if (!model) return
+      try { await model.release() } catch { /* Ressourcenfreigabe darf den eigentlichen Fehler nicht verdecken. */ }
+    }))
+  }
 
   try {
     // Hier wird onnxruntime tatsächlich geholt — ein eigenes Bündel, das
@@ -177,14 +186,25 @@ export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHan
       }
     }
 
-    ;[melModel, embedModel, wakeModel] = await Promise.all([
+    const loaded = await Promise.allSettled([
       load('melspectrogram.onnx'),
       load('embedding_model.onnx'),
       // Models must be supplied locally; no third-party classifier is downloaded here.
       load(assets.model || opts.modelName || 'hey_james.onnx')
     ])
+    const failed = loaded.find((result): result is PromiseRejectedResult => result.status === 'rejected')
+    if (failed) {
+      await Promise.all(loaded.map(async (result) => {
+        if (result.status !== 'fulfilled') return
+        try { await result.value.release() } catch { /* Den Ladefehler beibehalten. */ }
+      }))
+      throw failed.reason
+    }
+    ;[melModel, embedModel, wakeModel] = loaded.map((result) => (result as PromiseFulfilledResult<OrtNS.InferenceSession>).value)
     available = true
   } catch (err) {
+    await releaseModels()
+    available = false
     // Einmal und laut: So steht im Protokoll, *welche* Datei woran scheiterte —
     // und die Selbstheilung bekommt einen Anlass, nicht fünf. Bei
     // ausgeschaltetem Weckwort nur leise: Es fehlt dann niemandem.
@@ -301,6 +321,7 @@ export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHan
       if (++failures >= MAX_FAILURES) {
         available = false
         pending.length = 0
+        void releaseModels()
       }
     } finally {
       busy = false
@@ -338,9 +359,7 @@ export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHan
     destroy() {
       destroyed = true
       pending.length = 0
-      void melModel?.release()
-      void embedModel?.release()
-      void wakeModel?.release()
+      void releaseModels()
     }
   }
 }

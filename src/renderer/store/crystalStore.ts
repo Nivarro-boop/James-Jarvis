@@ -57,7 +57,8 @@ export const amplitude: AmplitudeRef = { input: 0, output: 0 }
  */
 const CONFIRM_TTL_MS = 3 * 60 * 1000
 let confirmTimer: number | null = null
-
+let errorTimer: number | null = null
+let errorGeneration = 0
 export interface Caption {
   id: number
   who: 'user' | 'james'
@@ -77,6 +78,7 @@ interface CrystalStore {
    * ist. Die Zeile auf der Startseite soll das nicht durcheinanderbringen.
    */
   paused: boolean
+  recoveryMode: boolean
   /**
    * Wann er von selbst zurückkommt. Nur gesetzt, wenn die Pause befristet ist
    * — also aus "sei die nächste Stunde ruhig". Klick, Hotkey und Tray legen
@@ -99,6 +101,7 @@ interface CrystalStore {
   setWish: (source: StateSource, state: CrystalState | null) => void
   setHovered: (v: boolean) => void
   setPaused: (v: boolean, until?: number | null) => void
+  setRecoveryMode: (v: boolean) => void
   setConfirmation: (c: ConfirmationRequest | null) => void
   setSettings: (s: Settings) => void
   setError: (message: string | null) => void
@@ -126,6 +129,7 @@ export const useCrystal = create<CrystalStore>((set, get) => ({
   state: 'idle',
   hovered: false,
   paused: false,
+  recoveryMode: false,
   pauseUntil: null,
   confirmation: null,
   settings: null,
@@ -133,6 +137,7 @@ export const useCrystal = create<CrystalStore>((set, get) => ({
   companions: 0,
   wakeAvailable: null,
   engineLabel: null,
+  setRecoveryMode: (recoveryMode) => set({ recoveryMode }),
   setWakeAvailable: (wakeAvailable) => set({ wakeAvailable }),
   setEngineLabel: (engineLabel) => set({ engineLabel }),
   captions: [],
@@ -198,17 +203,20 @@ export const useCrystal = create<CrystalStore>((set, get) => ({
   },
 
   setError: (message) => {
+    const generation = ++errorGeneration
+    if (errorTimer !== null) window.clearTimeout(errorTimer)
+    errorTimer = null
     set({ lastError: message })
     if (!message) get().setWish('local', null)
     if (message) {
       get().setWish('local', 'error')
       // Fehlerzustand nach ein paar Sekunden auflösen, sonst bleibt der
       // Kristall rot stehen und man weiß nicht, ob es noch aktuell ist.
-      setTimeout(() => {
-        if (get().lastError === message) {
-          set({ lastError: null })
-          get().setWish('local', null)
-        }
+      errorTimer = window.setTimeout(() => {
+        if (generation !== errorGeneration) return
+        errorTimer = null
+        set({ lastError: null })
+        get().setWish('local', null)
       }, 6000)
     }
   }

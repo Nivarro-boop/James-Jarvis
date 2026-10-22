@@ -134,8 +134,8 @@ export function findSkill(nameOrSlug: string): Skill | null {
   const slug = skillSlug(nameOrSlug)
   const all = listSkills()
   return (
-    all.find((s) => s.slug === slug) ??
     all.find((s) => s.name.toLowerCase() === nameOrSlug.toLowerCase()) ??
+    all.find((s) => s.slug === slug) ??
     null
   )
 }
@@ -163,12 +163,26 @@ export function saveSkill(input: {
   if (!steps) throw new Error('Eine Fertigkeit ohne Schritte hilft beim nächsten Mal nicht.')
   if (steps.length > MAX_BODY) throw new Error(`Zu lang — höchstens ${MAX_BODY} Zeichen.`)
 
-  const existing = findSkill(name)
-  if (!existing && listSkills().length >= MAX_SKILLS) {
+  const all = listSkills()
+  // Slugs are lossy (e.g. punctuation and spaces both become '-'). Match an
+  // existing skill by its actual name before choosing a filename, otherwise a
+  // different skill with the same slug would silently be overwritten.
+  const existing = all.find((skill) => skill.name.toLowerCase() === name.toLowerCase())
+  if (!existing && all.length >= MAX_SKILLS) {
     throw new Error('Es sind schon zweihundert Fertigkeiten gespeichert. Erst eine alte löschen.')
   }
+  let slug = existing?.slug ?? skillSlug(name)
+  if (!existing) {
+    const occupied = new Set(all.map((skill) => skill.slug))
+    const base = slug
+    let suffix = 2
+    while (occupied.has(slug) || existsSync(join(dir(), `${slug}.md`))) {
+      const tail = `-${suffix++}`
+      slug = `${base.slice(0, 60 - tail.length).replace(/-+$/g, '')}${tail}`
+    }
+  }
   const skill: Skill = {
-    slug: existing?.slug ?? skillSlug(name),
+    slug,
     name,
     description,
     steps,

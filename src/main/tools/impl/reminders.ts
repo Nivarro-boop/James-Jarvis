@@ -1,7 +1,7 @@
 import { z } from 'zod'
 import { defineTool, type ToolDefinition } from '../registry'
 import { listReminders } from '../../db'
-import { completeReminder, createReminder, snoozeReminder } from '../../scheduler/reminders'
+import { completeReminder, createReminder, editReminder, snoozeReminder } from '../../scheduler/reminders'
 
 export const reminderTools: ToolDefinition[] = [
   defineTool({ name: 'reminder_set', group: 'timer',
@@ -11,6 +11,13 @@ export const reminderTools: ToolDefinition[] = [
     async execute(input) { return createReminder(input) } }),
   defineTool({ name: 'reminder_list', group: 'timer', description: 'Zeigt ausstehende und bereits gemeldete Erinnerungen.',
     schema: z.object({}), async execute() { return listReminders() } }),
+  defineTool({ name: 'reminder_update', group: 'timer', description: 'Bearbeitet Text, Zeitpunkt oder Wiederholung einer aktiven Erinnerung.',
+    schema: z.object({ id: z.number().int().positive(), text: z.string().optional(),
+      at: z.string().optional().describe('ISO-Datum mit Uhrzeit und Zeitzone'),
+      inMinutes: z.number().positive().optional(), repeat: z.enum(['none', 'daily', 'weekly']).optional() })
+      .refine(input => input.text !== undefined || input.at !== undefined || input.inMinutes !== undefined || input.repeat !== undefined,
+        { message: 'Mindestens eine Änderung angeben.' }),
+    async execute(input) { return editReminder(input) } }),
   defineTool({ name: 'reminder_snooze', group: 'timer', description: 'Verschiebt eine Erinnerung, etwa erinnere mich in zehn Minuten noch einmal.',
     schema: z.object({ id: z.number().int().positive(), minutes: z.number().positive() }),
     async execute({ id, minutes }) { snoozeReminder(id, minutes); return { verschoben: true, id, minutes } } }),

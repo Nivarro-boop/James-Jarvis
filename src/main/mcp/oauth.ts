@@ -33,6 +33,26 @@ interface Stored {
   tokens?: OAuthTokens
 }
 
+/** Nur absolute HTTP(S)-Issuer-URLs dürfen gespeicherte Credentials binden. */
+function hasValidIssuer(value: unknown): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const issuer = (value as { issuer?: unknown }).issuer
+  if (typeof issuer !== 'string' || !issuer || issuer.trim() !== issuer) return false
+  try {
+    const url = new URL(issuer)
+    return (
+      (url.protocol === 'https:' || url.protocol === 'http:') &&
+      Boolean(url.hostname) &&
+      !url.username &&
+      !url.password &&
+      !url.search &&
+      !url.hash
+    )
+  } catch {
+    return false
+  }
+}
+
 /** Wird geworfen, wenn ein Server eine Anmeldung braucht, aber niemand gefragt hat. */
 export class LoginRequiredError extends Error {
   constructor(name: string) {
@@ -83,7 +103,8 @@ export class JarvisOAuthProvider implements OAuthClientProvider {
   }
 
   clientInformation(): OAuthClientInformationMixed | undefined {
-    return this.read().client
+    const client = this.read().client
+    return hasValidIssuer(client) ? client : undefined
   }
 
   saveClientInformation(client: OAuthClientInformationMixed): void {
@@ -91,7 +112,8 @@ export class JarvisOAuthProvider implements OAuthClientProvider {
   }
 
   tokens(): OAuthTokens | undefined {
-    return this.read().tokens
+    const tokens = this.read().tokens
+    return hasValidIssuer(tokens) ? tokens : undefined
   }
 
   saveTokens(tokens: OAuthTokens): void {
@@ -123,7 +145,8 @@ export class JarvisOAuthProvider implements OAuthClientProvider {
 }
 
 export function hasMcpLogin(serverId: string): boolean {
-  return Boolean(getMcpOAuth<Stored>(serverId)?.tokens?.access_token)
+  const tokens = getMcpOAuth<Stored>(serverId)?.tokens
+  return Boolean(tokens?.access_token && hasValidIssuer(tokens))
 }
 
 export function forgetMcpLogin(serverId: string): void {
@@ -155,6 +178,13 @@ export function waitForCallback(expectedState: string): { code: Promise<string>;
       const error = url.searchParams.get('error')
       const value = url.searchParams.get('code')
       const state = url.searchParams.get('state')
+      // Nur die gestartete Anmeldung darf den Listener verbrauchen. Fremde
+      // Webseiten oder lokale Prozesse dürfen sie nicht mit einem falschen
+      // state vor der echten Weiterleitung abbrechen.
+      if (state !== expectedState) {
+        res.writeHead(400).end()
+        return
+      }
       const ok = !error && value && state === expectedState
       res.writeHead(ok ? 200 : 400, { 'Content-Type': 'text/html; charset=utf-8' })
       res.end(

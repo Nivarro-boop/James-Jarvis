@@ -44,6 +44,8 @@
     "src/preload/**/*",
     "src/shared/**/*",
     "tests/**/*",
+    "src/renderer/home/todaySummary.ts",
+    "src/renderer/home/workflowPresets.ts",
     "electron.vite.config.ts"
   ]
 }

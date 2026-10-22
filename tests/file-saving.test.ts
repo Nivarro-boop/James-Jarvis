@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { it, type TestContext } from 'node:test'
 import { app } from 'electron'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, lstatSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { saveOfficeFile } from '@main/office/save'
@@ -65,3 +65,34 @@ it('still supports explicitly requested text replacement and appending', async t
   await fileWrite.execute({ name: 'Notiz.txt', content: 'addition', mode: 'anhängen' }, context)
   assert.equal(readFileSync(target, 'utf8'), 'replacement\naddition')
 })
+
+for (const mode of ['überschreiben', 'anhängen'] as const) {
+  for (const dangling of [false, true]) {
+    it(`refuses ${mode} through ${dangling ? 'a dangling' : 'an existing'} symlink`, async t => {
+      const root = isolatedFolder(t)
+      const externalRoot = mkdtempSync(join(tmpdir(), 'james-file-outside-'))
+      t.after(() => rmSync(externalRoot, { recursive: true, force: true }))
+
+      const external = join(externalRoot, 'outside.txt')
+      if (!dangling) writeFileSync(external, 'outside remains intact')
+      const link = join(root, 'Notiz.txt')
+      try {
+        symlinkSync(external, link, 'file')
+      } catch (error) {
+        // File symlink creation may require an elevated privilege on Windows.
+        t.skip(`Symlinks are unavailable here: ${String(error)}`)
+        return
+      }
+
+      await assert.rejects(
+        fileWrite.execute({ name: 'Notiz.txt', content: 'attacker data', mode }, context)
+      )
+      assert.equal(lstatSync(link).isSymbolicLink(), true)
+      if (dangling) {
+        assert.equal(existsSync(external), false)
+      } else {
+        assert.equal(readFileSync(external, 'utf8'), 'outside remains intact')
+      }
+    })
+  }
+}

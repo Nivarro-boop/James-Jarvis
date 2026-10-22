@@ -1,6 +1,6 @@
 import { app, shell } from 'electron'
-import { readdir, readFile, realpath, stat, writeFile, appendFile } from 'node:fs/promises'
-import { existsSync } from 'node:fs'
+import { readdir, readFile, realpath, stat, lstat, open, writeFile } from 'node:fs/promises'
+import { constants, existsSync } from 'node:fs'
 import { basename, extname, join, resolve } from 'node:path'
 import { z } from 'zod'
 import { defineTool, type ToolDefinition } from '../registry'
@@ -310,24 +310,47 @@ const writeTextFile = defineTool({
       throw new Error(`${extension} ist keine Textendung. Ich schreibe nur Textdateien.`)
     }
 
-    const dir = folderPath((folder ?? 'dokumente') as FolderName)
+    // Resolve the allowed folder first so the write is anchored at its
+    // canonical location (including when the user folder is a junction).
+    const dir = localPath(await realpath(folderPath((folder ?? 'dokumente') as FolderName)))
     const target = join(dir, extension ? clean : `${clean}.txt`)
     const how = mode ?? 'neu'
 
-    if (how === 'anhängen') {
-      await appendFile(target, `\n${content}`, 'utf-8')
-    } else {
+    if (how === 'neu') {
       try {
         // Exclusive creation protects existing files even if another request
         // creates the same name while this call is waiting for filesystem I/O.
-        await writeFile(target, content, { encoding: 'utf-8', flag: how === 'neu' ? 'wx' : 'w' })
+        await writeFile(target, content, { encoding: 'utf-8', flag: 'wx' })
       } catch (error) {
-        if (how === 'neu' && (error as NodeJS.ErrnoException).code === 'EEXIST') {
+        if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
           throw new Error(
             `${basename(target)} gibt es schon. Frag den Nutzer, ob überschrieben oder angehängt werden soll.`
           )
         }
         throw error
+      }
+    } else {
+      // lstat (not stat) detects links themselves, including dangling links.
+      // O_NOFOLLOW closes the final-component race on platforms that support
+      // it; Windows does not provide the same race-free guarantee.
+      try {
+        const existing = await lstat(target)
+        if (existing.isSymbolicLink()) {
+          throw new Error('Ich schreibe nicht über eine symbolische Verknüpfung.')
+        }
+      } catch (error) {
+        if ((error as NodeJS.ErrnoException).code !== 'ENOENT') throw error
+      }
+
+      const noFollow = constants.O_NOFOLLOW ?? 0
+      const flags = constants.O_WRONLY | constants.O_CREAT | noFollow |
+        (how === 'anhängen' ? constants.O_APPEND : 0)
+      const file = await open(target, flags, 0o666)
+      try {
+        if (how === 'überschreiben') await file.truncate(0)
+        await file.writeFile(how === 'anhängen' ? `\n${content}` : content, 'utf-8')
+      } finally {
+        await file.close()
       }
     }
 

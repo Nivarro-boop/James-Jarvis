@@ -3,6 +3,7 @@ import { websiteAccounts, saveWebsiteAccount, removeWebsiteAccount } from '../se
 import { listSkills } from '../agent/skills'
 import { clearPlan } from '../agent/activity'
 import { workingContext, clearWorkingContext } from '../agent/workingContext'
+import { controlStatus } from '../control/status'
 import { appendTranscript, clearTranscript } from '../db'
 import { skillProposals, decideSkill } from '../agent/skillProposals'
 import { realtimeAccess } from '../providers/realtimeAccess'
@@ -14,8 +15,13 @@ import { revealLog } from '../logging'
 import { resourceFile } from '../resources'
 import { readWakeAsset, wakeStatus } from '../providers/wakeStatus'
 import { isValidTile, readTile } from '../maps/tiles'
+import { recoveryMode } from '../userDataPath'
+import { isRecoveryIpcAllowed } from '@shared/recoverySafety'
 import { getSettings, resetSettings, setSettings } from '../store/settings'
 import { createBackup, listBackups, revealBackups } from '../store/backups'
+import { previewRecovery, createRecoveryProfile, activateRecoveryProfile } from '../store/recovery'
+import { createFeaturePackHandlers } from '../packs/ipc'
+import { registerWorkspaceHandlers } from '../workspace'
 import {
   clearMcpSecrets,
   clearSecret,
@@ -74,7 +80,7 @@ import { forgetMcpLogin } from '../mcp/oauth'
 import { activitySnapshot } from '../agent/activity'
 import { reloadSchedules } from '../scheduler/cron'
 import { listReminders } from '../db'
-import { completeReminder, createReminder, snoozeReminder } from '../scheduler/reminders'
+import { completeReminder, createReminder, editReminder, snoozeReminder } from '../scheduler/reminders'
 import { hermesHealth, hermesRun } from '../providers/hermes'
 import { startHermesGateway } from '../providers/hermesService'
 import { cancelChatGptSignIn, chatGptStatus, connectChatGpt, disconnectChatGpt } from '../providers/chatgptAuth'
@@ -145,7 +151,9 @@ function trustedSender(event: IpcMainInvokeEvent): boolean {
   // zugesagt — und wenn nicht, stünde hier jeder Kanal still.
   const main = event.sender.mainFrame
   if (!frame || frame.processId !== main.processId || frame.routingId !== main.routingId) return false
-  return BrowserWindow.fromWebContents(event.sender) !== null
+  const owner = BrowserWindow.fromWebContents(event.sender)
+  if (!owner) return false
+  return owner.id === getCrystalWindow()?.id || owner.id === getSettingsWindow()?.id
 }
 
 function handle<C extends keyof IpcInvokeMap>(channel: C, fn: Handler<C>): void {
@@ -153,6 +161,9 @@ function handle<C extends keyof IpcInvokeMap>(channel: C, fn: Handler<C>): void 
     if (!trustedSender(event)) {
       console.warn(`[ipc] Aufruf von ${channel} aus fremder Quelle abgewiesen.`)
       throw new Error('IPC-Aufruf nicht erlaubt.')
+    }
+    if (recoveryMode && !isRecoveryIpcAllowed(channel, payload)) {
+      throw new Error('Recovery-Prüfmodus: Ausführung und externe Dienste sind gesperrt. Kehre dafür zum Originalprofil zurück.')
     }
     return fn(payload)
   })
@@ -206,6 +217,25 @@ export function registerIpcHandlers(version: string): void {
   handle('backup:list', () => listBackups())
   handle('backup:create', () => createBackup())
   handle('backup:openFolder', () => revealBackups())
+  handle('recovery:status', () => ({ active: recoveryMode }))
+  handle('recovery:preview', (payload) => previewRecovery(payload?.fileName))
+  handle('recovery:createProfile', (payload) => createRecoveryProfile(payload?.fileName, payload?.digest, payload?.confirmed))
+  handle('recovery:activateProfile', (payload) => activateRecoveryProfile(payload?.profileId, payload?.confirmed))
+  handle('recovery:returnToDefault', (payload) => {
+    if (!recoveryMode || payload?.confirmed !== true) throw new Error('Rückkehr zum Originalprofil nicht bestätigt.')
+    const args = process.argv.slice(1).filter(argument => !argument.startsWith('--james-recovery-profile=') && !argument.startsWith('--user-data-dir'))
+    app.relaunch({ args })
+    app.quit()
+  })
+  const packs = createFeaturePackHandlers(app.getPath('userData'))
+  handle('packs:preview', packs['packs:preview'])
+  handle('packs:install', packs['packs:install'])
+  handle('packs:list', packs['packs:list'])
+  handle('packs:setEnabled', packs['packs:setEnabled'])
+  handle('packs:remove', packs['packs:remove'])
+  handle('packs:widgets', packs['packs:widgets'])
+  handle('packs:toggle', packs['packs:toggle'])
+  registerWorkspaceHandlers(handle)
   handle('settings:set', (patch) => {
     const before = getSettings()
     const next = setSettings(patch)
@@ -238,7 +268,7 @@ export function registerIpcHandlers(version: string): void {
   // Und einmal beim Start, nicht erst wenn jemand die Einstellungen anfasst:
   // Wer Ollama eingestellt hat, soll die halbe Minute Ladezeit nicht beim
   // ersten Satz des Tages bezahlen.
-  keepLocalModelWarm(getSettings())
+  if (!recoveryMode) keepLocalModelWarm(getSettings())
 
   // ── Secrets ────────────────────────────────────────────────
   //
@@ -372,19 +402,19 @@ export function registerIpcHandlers(version: string): void {
   // zu schwaches Kriterium.
   ipcMain.handle('secrets:getGeminiForLive', (event) => {
     const crystal = getCrystalWindow()
-    if (!crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return null
+    if (recoveryMode || !crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return null
     return getSecret('gemini')
   })
   ipcMain.handle('secrets:getElevenForLive', (event) => {
     const crystal = getCrystalWindow()
-    if (!crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return null
+    if (recoveryMode || !crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return null
     return getSecret('elevenlabs')
   })
   // OpenAI Realtime: Der Schlüssel verlässt den Hauptprozess nicht. Der
   // Renderer bekommt ein kurzlebiges Token, das nur den Verbindungsaufbau trägt.
   ipcMain.handle('openai:realtimeSecret', async (event) => {
     const crystal = getCrystalWindow()
-    if (!crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) {
+    if (recoveryMode || !crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) {
       return { ok: false, error: 'Nicht erlaubt.' }
     }
     return realtimeAccess(getSecret('openai'), getSettings().speech.realtimeModel)
@@ -394,7 +424,7 @@ export function registerIpcHandlers(version: string): void {
   // entscheidet der Sammler selbst — der Renderer hat dabei nichts zu sagen.
   ipcMain.handle('gaps:turn', (event, payload) => {
     const crystal = getCrystalWindow()
-    if (!crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return
+    if (recoveryMode || !crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return
     const text = (value: unknown, max: number): string | null =>
       typeof value === 'string' ? value.slice(0, max) : null
     const request = text(payload?.request, 4000)
@@ -511,6 +541,7 @@ export function registerIpcHandlers(version: string): void {
     finally { hermesRequests.delete(requestId) }
   })
   handle('reminder:create', (input) => createReminder(input))
+  handle('reminder:update', (input) => editReminder(input))
   handle('reminder:done', ({ id }) => completeReminder(id))
   handle('reminder:snooze', ({ id, minutes }) => snoozeReminder(id, minutes))
   handle('schedule:upsert', (entry) => {
@@ -605,6 +636,7 @@ export function registerIpcHandlers(version: string): void {
   })
 
   // ── Telefongespräch ────────────────────────────────────────
+  handle('control:status', async () => controlStatus())
   handle('telephony:test', async () => testTelephonySetup())
   handle('telephony:stop', async () => {
     // Vom Nutzer ausgelöst — hier wird die Adresse bei Twilio mit ausgetragen.
@@ -737,7 +769,7 @@ export function registerIpcHandlers(version: string): void {
   handle('context:clear', () => { clearPlan(); clearWorkingContext(); clearTranscript(); sendToCrystal('session:forceReconnect', undefined) })
   ipcMain.handle('context:turn', (event, payload) => {
     const crystal = getCrystalWindow()
-    if (!crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return
+    if (recoveryMode || !crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return
     if (typeof payload?.request !== 'string' || typeof payload?.answer !== 'string') return
     const request = payload.request.trim().slice(0, 4000)
     const answer = payload.answer.trim().slice(0, 4000)
@@ -767,14 +799,14 @@ export function registerIpcHandlers(version: string): void {
   handle('accounts:list', () => websiteAccounts())
   ipcMain.handle('accounts:save', (event, input) => {
     const settingsWindow = getSettingsWindow()
-    if (!settingsWindow || !trustedSender(event) || event.sender.id !== settingsWindow.webContents.id) throw new Error('Website-Konten nur in den Einstellungen speichern.')
+    if (recoveryMode || !settingsWindow || !trustedSender(event) || event.sender.id !== settingsWindow.webContents.id) throw new Error('Website-Konten nur im Originalprofil in den Einstellungen speichern.')
     if (!input || typeof input.loginUrl !== 'string') throw new Error('Ungültige Kontodaten.')
     saveWebsiteAccount(input)
     return websiteAccounts()
   })
   ipcMain.handle('accounts:remove', (event, input) => {
     const settingsWindow = getSettingsWindow()
-    if (!settingsWindow || !trustedSender(event) || event.sender.id !== settingsWindow.webContents.id) throw new Error('Website-Konten nur in den Einstellungen entfernen.')
+    if (recoveryMode || !settingsWindow || !trustedSender(event) || event.sender.id !== settingsWindow.webContents.id) throw new Error('Website-Konten nur im Originalprofil in den Einstellungen entfernen.')
     if (!input || typeof input.origin !== 'string') throw new Error('Ungültiges Konto.')
     removeWebsiteAccount(input.origin)
     return websiteAccounts()

@@ -31,6 +31,7 @@ export function nextReminderDue(dueAt: number, repeat: 'daily' | 'weekly', now: 
 }
 
 export function createReminder(input: { text: string; at?: string; inMinutes?: number; repeat?: ReminderEntry['repeat'] }): ReminderEntry {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Ungültige Erinnerungsdaten.')
   const text = typeof input.text === 'string' ? input.text.trim() : ''
   if (!text || text.length > 2000) throw new Error('Erinnerungstext muss 1 bis 2000 Zeichen haben.')
   if (!['none', 'daily', 'weekly'].includes(input.repeat ?? 'none')) throw new Error('Ungültige Wiederholung.')
@@ -39,12 +40,44 @@ export function createReminder(input: { text: string; at?: string; inMinutes?: n
   return reminder
 }
 
+/** Bearbeitet nur vorhandene, nicht erledigte Einträge; eine Zeitänderung reaktiviert bereits gemeldete Erinnerungen. */
+export function editReminder(input: unknown): ReminderEntry {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Ungültige Erinnerungsdaten.')
+  const value = input as { id?: unknown; text?: unknown; at?: unknown; inMinutes?: unknown; repeat?: unknown }
+  if (typeof value.id !== 'number' || !Number.isSafeInteger(value.id) || value.id <= 0) throw new Error('Ungültige Erinnerungskennung.')
+  const hasText = value.text !== undefined
+  const hasAt = value.at !== undefined
+  const hasMinutes = value.inMinutes !== undefined
+  const hasRepeat = value.repeat !== undefined
+  if (!hasText && !hasAt && !hasMinutes && !hasRepeat) throw new Error('Mindestens eine Änderung angeben.')
+  const text = hasText ? (typeof value.text === 'string' ? value.text.trim() : '') : undefined
+  if (hasText && (!text || text.length > 2000)) throw new Error('Erinnerungstext muss 1 bis 2000 Zeichen haben.')
+  if (hasRepeat && !['none', 'daily', 'weekly'].includes(value.repeat as string)) throw new Error('Ungültige Wiederholung.')
+  if (hasAt && hasMinutes) throw new Error('Genau eine Zeitangabe verwenden: at oder inMinutes.')
+  const dueAt = hasAt || hasMinutes
+    ? reminderDueAt(hasAt ? { at: value.at as string } : { inMinutes: value.inMinutes as number })
+    : undefined
+  const existing = listReminders().find(reminder => reminder.id === value.id)
+  if (!existing) throw new Error('Diese aktive Erinnerung existiert nicht.')
+  updateReminder(value.id, {
+    ...(text !== undefined ? { text } : {}),
+    ...(dueAt !== undefined ? { dueAt, state: 'pending' as const } : {}),
+    ...(hasRepeat ? { repeat: value.repeat as ReminderEntry['repeat'] } : {})
+  })
+  const updated = listReminders().find(reminder => reminder.id === value.id)
+  if (!updated) throw new Error('Diese aktive Erinnerung existiert nicht.')
+  broadcast('reminder:changed', undefined)
+  return updated
+}
+
 export function completeReminder(id: number): void {
+  if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) throw new Error('Ungültige Erinnerungskennung.')
   updateReminder(id, { state: 'done' })
   broadcast('reminder:changed', undefined)
 }
 
 export function snoozeReminder(id: number, minutes: number): void {
+  if (typeof id !== 'number' || !Number.isSafeInteger(id) || id <= 0) throw new Error('Ungültige Erinnerungskennung.')
   const reminder = listReminders().find(r => r.id === id)
   if (!reminder) throw new Error('Diese aktive Erinnerung existiert nicht.')
   updateReminder(id, { dueAt: reminderDueAt({ inMinutes: minutes }), state: 'pending' })

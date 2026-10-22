@@ -311,6 +311,7 @@ export class RealtimeSession implements VoiceEngine {
       settings.tokenSaver.enabled !== this.settings.tokenSaver.enabled ||
       settings.speech.realtimeVoice !== this.settings.speech.realtimeVoice ||
       settings.language !== this.settings.language ||
+      settings.assistantRole !== this.settings.assistantRole ||
       JSON.stringify(settings.vad) !== JSON.stringify(this.settings.vad)
     const halfDuplexChanged = settings.audio.halfDuplex !== this.settings.audio.halfDuplex
     this.settings = settings

@@ -1,8 +1,10 @@
 import type { IncomingMessage, ServerResponse } from 'node:http'
+import { app } from 'electron'
 import { getSecret } from '../secrets/keystore'
-import { speak } from '../ipc/emit'
 import { runAlexaTurn } from './turn'
 import { verifyAlexaRequest, type AlexaEnvelope } from './verify'
+import { createRequestDeduper, RequestDeduperFullError } from './idempotency'
+import { createRequestJournal, ReplayAfterRestartError, RequestJournalError } from './requestJournal'
 
 /**
  * Der Endpunkt, den Amazon anruft.
@@ -29,6 +31,18 @@ import { verifyAlexaRequest, type AlexaEnvelope } from './verify'
 
 /** Mehr als das schickt Amazon nie. Alles darüber ist ein Angriff oder ein Fehler. */
 const MAX_BODY_BYTES = 128 * 1024
+let requestJournal: ReturnType<typeof createRequestJournal> | undefined
+function journalForAuthenticatedRequest(): ReturnType<typeof createRequestJournal> {
+  // Constructing the handle is cheap; its first disk access is claim(), which
+  // only runs after signature, timestamp, skill ID and requestId validation.
+  requestJournal ??= createRequestJournal(app.getPath('userData'))
+  return requestJournal
+}
+const requestDeduper = createRequestDeduper({
+  maxEntries: 512,
+  ttlMs: 10 * 60_000,
+  claim: (requestId) => journalForAuthenticatedRequest().claim(requestId)
+})
 
 function speech(text: string, endSession: boolean): string {
   return JSON.stringify({
@@ -121,65 +135,78 @@ async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> 
   }
 
   const envelope = JSON.parse(raw.toString('utf8')) as AlexaEnvelope
+  const requestId = envelope.request?.requestId
+  if (typeof requestId !== 'string' || requestId.length < 1 || requestId.length > 512) {
+    // Alexa IDs are part of the signed payload. Without one an action cannot
+    // be safely shared or replayed, so do not dispatch the request to tools.
+    send(200, speech('Diese Anfrage hat keine gültige Kennung. Ich habe nichts ausgeführt.', true))
+    return
+  }
+
+  try {
+    const body = await requestDeduper.run(requestId, async () => {
+      try {
+        return await responseFor(envelope)
+      } catch (err) {
+        // Preserve a terminal answer for this ID even if execution became
+        // ambiguous; Alexa retries must not launch the same work a second time.
+        console.error('[alexa] Anfrage fehlgeschlagen:', err)
+        return speech('Der Ausgang ist unklar. Ich wiederhole die Aktion nicht automatisch.', true)
+      }
+    })
+    send(200, body)
+  } catch (err) {
+    if (err instanceof RequestDeduperFullError) {
+      send(503, JSON.stringify({ error: 'Vorübergehend ausgelastet; es wurde nichts gestartet.' }))
+      return
+    }
+    if (err instanceof ReplayAfterRestartError) {
+      send(200, speech('Diese Anfrage wurde bereits verarbeitet oder ihr Ausgang ist unklar. Ich wiederhole die Aktion nicht.', true))
+      return
+    }
+    if (err instanceof RequestJournalError) {
+      console.error('[alexa] Anfragejournal nicht verfügbar:', err)
+      send(503, JSON.stringify({ error: 'Die Aktion konnte nicht sicher vorbereitet werden; es wurde nichts gestartet.' }))
+      return
+    }
+    throw err
+  }
+}
+
+async function responseFor(envelope: AlexaEnvelope): Promise<string> {
   const type = envelope.request?.type ?? ''
   const intent = envelope.request?.intent?.name ?? ''
 
   // „Alexa, öffne James" ohne Frage dahinter.
   if (type === 'LaunchRequest') {
-    send(200, speech('Ich bin da. Was brauchst du?', false))
-    return
+    return speech('Ich bin da. Was brauchst du?', false)
   }
 
   if (type === 'SessionEndedRequest') {
-    send(200, speech('', true))
-    return
+    return speech('', true)
   }
 
   if (intent === 'AMAZON.StopIntent' || intent === 'AMAZON.CancelIntent') {
-    send(200, speech('Bis dann.', true))
-    return
+    return speech('Bis dann.', true)
   }
 
   if (intent === 'AMAZON.HelpIntent') {
-    send(
-      200,
-      speech(
-        'Sag einfach, was du wissen willst. Zum Beispiel: frag James, was heute ansteht. ' +
-          'Oder: sag James, er soll Musik anmachen.',
-        false
-      )
+    return speech(
+      'Sag einfach, was du wissen willst. Zum Beispiel: frag James, was heute ansteht. ' +
+        'Oder: sag James, er soll Musik anmachen.',
+      false
     )
-    return
   }
 
   const question = questionOf(envelope)
   if (!question) {
-    send(200, speech('Das habe ich nicht verstanden. Sag es nochmal in einem Satz.', false))
-    return
+    return speech('Das habe ich nicht verstanden. Sag es nochmal in einem Satz.', false)
   }
 
   const answer = await runAlexaTurn(question)
-
-  /*
-   * Bei Überlauf am Rechner weitermachen.
-   *
-   * Der Echo hat seine Antwort schon bekommen — „das dauert länger". Was
-   * bleibt, ist das Versprechen, und das hält der Kristall ein: Er spricht das
-   * Ergebnis aus, wenn es da ist. Ohne diese Zeile wäre der Satz eine
-   * Ausrede gewesen.
-   */
-  if (answer.overran) {
-    void (async () => {
-      const full = await runAlexaTurn(question)
-      speak(
-        `Das ist die Antwort auf die Frage, die der Nutzer vorhin über den Echo gestellt hat. ` +
-          `Sag sie ihm: ${full.text}`,
-        false
-      )
-    })()
-  }
-
-  send(200, speech(answer.text, false))
+  // Never restart a timed-out/over-budget turn: the first attempt may already
+  // have completed an external action, and its outcome can be uncertain.
+  return speech(answer.text, false)
 }
 
 /**

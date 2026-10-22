@@ -1,5 +1,25 @@
 # James-Jarvis
 
+## Tages-Cockpit und Alltagsvorlagen
+
+**Heute** zeigt lokale Erinnerungen für den aktuellen Tag, überfällige offene Einträge und laufende Timer. Kalendertermine sind hier nicht enthalten. Die Übersicht liest nur vorhandene lokale Daten; sie startet keine Dienste und ändert keine Erinnerungen. Bei Ladefehlern lassen sich die Daten erneut abrufen.
+
+Unter **Steuerzentrale → Alltag** stehen sechs editierbare Auftragsvorlagen bereit: Tagesüberblick, Wochenprioritäten, Gespräch nachbereiten, Antwortentwurf, Projektstatus und Fokusplan. Die Auswahl befüllt nur einen Entwurf. Erst **Entwurf an James übergeben** übergibt ihn an den normalen Assistenten. Verbundene Zugänge und die bestehenden Rechte/Freigaben bleiben erforderlich; eine Vorlage ersetzt keine Integration. Antwortentwürfe werden nicht automatisch versendet.
+
+Die allgemeine Idee eines Tages-Cockpits und wiederverwendbarer Alltagsabläufe ist von Packstart inspiriert. Die Umsetzung ist eigenständig; aus dem proprietären Installer wurden weder Code noch Dateien übernommen.
+
+## Steuerzentrale: Telefon, Computer und Alltag
+
+Auf der Startseite öffnet **Steuerzentrale** eine gemeinsame Oberfläche mit drei Bereichen:
+
+- **Telefon:** Telefonnummer oder Kontaktname und Gesprächsauftrag eingeben, mit **Auftrag prüfen** kontrollieren und erst danach **Anruf beauftragen** wählen. Telefonate können Kosten verursachen. Fehlende Zugänge werden angezeigt; die Einrichtung bleibt unter den vorhandenen Einstellungen. Eine Statusabfrage startet weder Telefonserver noch Tunnel und ruft niemanden an.
+- **Computer:** einen Auftrag formulieren oder **Systemstatus**, **Bildschirm ansehen**, **Fenster anordnen** beziehungsweise **Browser öffnen** verwenden. Fensteraktionen benötigen den gewünschten Fenstertitel. Auch diese Aufträge laufen über den normalen Assistenten mit unveränderten Rechten und Freigaben.
+- **Alltag:** einen vorbereiteten Ablauf wählen, den Auftragsentwurf bearbeiten und bewusst übergeben.
+
+„Auftrag an James übergeben“ bestätigt nur die Übergabe, nicht ein erfolgreiches Telefonat oder eine ausgeführte Computeraktion. Der weitere Verlauf und eventuelle Rückfragen erscheinen in der normalen Unterhaltung. Die Steuerzentrale lässt sich per Tastatur bedienen und mit Escape schließen.
+
+Zusätzlich abgesichert: 20-Sekunden-Grenze beim Aufbau eines Live-Telefongesprächs, Aufräumen verspäteter Verbindungen und Stopp-Prüfung vor der Ausführung verspätet gelieferter Computerpläne. Echte Anbieter-, Telefon- und Windows-Integrationstests sind weiterhin erforderlich.
+
 Lokale Verbesserungen **16.10.2026**: aufgeräumte Startseite, mehrzeilige
 Texteingabe mit sicherem Entwurf, besserer Gesprächsverlauf und durchsuchbare
 Einstellungen. Abbruch und paralleles Dateispeichern sind zusätzlich abgesichert.
@@ -59,6 +79,67 @@ Messgerät; das hier soll atmen.
 
 ## Schnellstart
 
+### Arbeitsbereich, Packs und Datentransparenz
+
+Die Startseite hat ein lokales **Heute-Board**: offene Erinnerungen und Timer,
+eigene Aufgaben mit Erledigt-Status, nächste Schritte aus dem Arbeitskontext
+und optionale Kalendertermine. Widgets lassen sich ziehen, mit **Hoch/Runter**
+per Tastatur verschieben, ausblenden und wiederherstellen. Anordnung und Aufgaben
+bleiben nach dem Neustart gespeichert. Kalender werden erst nach **Kalenderzugriff
+aktivieren & heute einmal laden** aus verbundenen Google-/iCal-Quellen gelesen;
+weitere Abrufe erfolgen auf Knopfdruck, ohne Anmeldung oder Kalenderänderungen.
+Quellenfehler werden getrennt angezeigt. Das Board allein sendet keine Termine
+oder Aufgaben an eine KI.
+
+**Feature-Packs** sind versionierte, rein deklarative JSON-Dateien mit lokalen
+Notiz- und Checklisten-Widgets, keine ausführbaren Plugins. Ein Beispiel liegt
+unter [`resources/feature-packs/beispiel-alltag.json`](resources/feature-packs/beispiel-alltag.json).
+Vor Installation oder Update zeigt die App Inhalt, Version und Berechtigungen;
+Vertrauen und jede angeforderte Berechtigung müssen für die geprüfte Version
+bestätigt werden. `local-widget-state` erlaubt ausschließlich das Speichern
+lokaler Häkchen. Kein Pack bekommt Netzwerk, Kamera, Mikrofon, Programme oder
+Shell-Zugriff. Downgrades werden abgelehnt; Packs lassen sich deaktivieren oder
+entfernen. Das Format ist eine eigenständige Implementierung und importiert
+keine Packstart-Programme oder proprietären Dateien.
+
+Unter **Daten & KI** zeigt eine einstellungsabhängige Übersicht lokale Ablagen,
+Text-/Sprachanbieter, mögliche Fallbacks, Gemini-Spezialfunktionen, Kalender,
+Alexa, Companion, Telefonie und Diagnose-Opt-ins. Eine lokale Stimme bedeutet
+nicht automatisch lokale KI-Verarbeitung. Relevante Erinnerungen, Arbeitsstand
+und Werkzeug-Ergebnisse können Teil einer Modellanfrage werden. Die Übersicht
+ist kein Live-Netzwerkprotokoll.
+
+**Einstellungen → Datensicherung** bietet eine Integritätsvorschau und die
+bestätigte Wiederherstellung in ein neues, getrenntes **Recovery-Prüfprofil**.
+Das Originalprofil wird nicht überschrieben. Recovery startet ohne KI-Controller,
+Mikrofon, Fernzugriff, Zeitpläne, Downloads oder automatische Updates; externe
+IPC-Funktionen bleiben gesperrt. Eine eigene Bestätigung führt per Neustart zum
+Originalprofil zurück. Das aktuelle Backupformat enthält Datenbank, Einstellungen
+und Fertigkeiten; Fertigkeiten werden nur als passives Archiv zurückgelegt.
+**Arbeitskontext, Board, separate Aufgaben und Feature-Packs sind derzeit nicht
+im Backup enthalten**, ebenso wenig Schlüssel, OAuth-Tokens oder MCP-Konfigurationen.
+Die Vorschau nennt diesen Umfang ausdrücklich. Kein automatischer Austausch
+eines laufenden Profils und keine automatische Reaktivierung von Diensten.
+
+Ohne gültiges TLS-Zertifikat ist Companion nur als lokale Loopback-Diagnose
+erreichbar; ein Telefon-QR-Code oder Klartext-Fernzugriff wird nicht angeboten.
+Alexa dedupliziert authentifizierte Aufträge und führt unklare Tool-Timeouts
+nicht automatisch erneut aus. Ein begrenztes lokales Journal verhindert
+Neuausführung derselben Kennung auch nach einem Prozessneustart.
+
+### Integration prüfen
+
+`npm test` prüft die Regressionen; nach `npx --no-install electron-vite build`
+startet `node scripts/check-workspace-integration.cjs` eine **echte Electron-App**
+mit einem Wegwerfprofil, ohne geerbte API-Schlüssel und mit gesperrten externen
+Testanfragen. Auf einem headless Linux-Rechner gegebenenfalls `xvfb-run -a`
+voranstellen. Das Skript schreibt einen Befund und Testansichten nach `out/audit/`.
+Die PR-Prüfung führt Tests, Typprüfung, Build und diesen Electron-Lauf auf Linux,
+Windows und macOS aus, ohne Installer oder Release. Physisches Mikrofon, echte
+Anbieter-Konten, Kalenderkonten, Echo-Geräte und Telefonnetz werden dadurch
+**nicht** als getestet behauptet; fehlende Geräte/Zugänge sind als nicht verfügbar
+gekennzeichnet. Details: [Integrations-Prüfmatrix](docs/Integration-Pruefmatrix.md).
+
 ### ChatGPT-Abo oder direkte Live-Sprache
 
 Im Einrichtungsassistenten **ChatGPT-Abo → Continue with ChatGPT** wählen,
@@ -102,7 +183,7 @@ Während ein Spiel läuft, lassen sich die Tests mit `npm test -- --low-resource
 einzeln und mit niedriger Prozesspriorität ausführen. Der Modus begrenzt auch
 die Parallelität des Test-Builds.
 
-### Unterbrechen, Erinnerungen und Hermes
+### Unterbrechen und Erinnerungen
 
 **Stopp** auf der Startseite oder **einmal Escape** unterbricht die aktuelle
 Antwort und fordert den Abbruch ihrer laufenden Werkzeuge an. Mit aktivem
@@ -121,6 +202,37 @@ und meldet fällige Termine per Sprache und Windows-Benachrichtigung. Erstellen,
 Erledigen und Verschieben funktionieren über Sprache oder die Texteingabe.
 James muss für die Zustellung laufen; verpasste Termine werden beim nächsten
 Start nachgeholt. Eine pausierte Stimme verhindert die Windows-Benachrichtigung nicht.
+
+Unter **Gedächtnis → Erinnerungen** lassen sich bestehende Erinnerungen jetzt
+bearbeiten: Text, Zeitpunkt und Wiederholung können geändert werden, ohne den
+Eintrag neu anzulegen. **Abbrechen** verwirft den Entwurf. Zum Verschieben stehen
+10, 30 und 60 Minuten zur Wahl. Auch per Sprache kann James mit
+`reminder_update` eine über `reminder_list` gefundene Erinnerung ändern;
+erledigte Einträge werden dabei nicht wieder aktiviert.
+
+### Finden und bedienen
+
+Die **Gehirn-Ansicht** bietet eine Suche nach Titel und Dateiname sowie Filter
+für Projekte und Notizen. Die Trefferliste öffnet Einträge auch per Tastatur;
+die Kugel und die freiwillige Handsteuerung bleiben erhalten. Über
+**Aktualisieren** werden neue Einträge geladen. Ladefehler werden mit einem
+erneuten Versuch angezeigt, statt dauerhaft „Lädt …“ stehenzulassen.
+
+Im **Aktionslog** lassen sich Aktionen nach Text und Status filtern. Die Suche
+berücksichtigt auch Unteragenten-Schritte und deren Werkzeugnamen; der
+übergeordnete Auftrag bleibt als Zusammenhang sichtbar. Alle Einträge des
+aktuellen Verlaufs werden berücksichtigt, nicht nur die ersten 14 Aktionen.
+Die Filter können zurückgesetzt werden; der aktuelle Plan bleibt unabhängig
+davon sichtbar.
+
+Interaktive **Karten** haben Knöpfe zum Vergrößern, Verkleinern und
+Zurücksetzen. Nach dem Fokussieren verschieben die Pfeiltasten die Karte,
+**+ / −** ändern den Zoom und **Pos1** stellt den ursprünglichen Ausschnitt
+wieder her. Benannte Orte sind zusätzlich als Text erreichbar. Bei fehlender
+Kartengrundlage ist ein erneuter Ladeversuch möglich; beim Wechsel von Ort,
+Route oder Zoom erscheint wieder der passende Ladezustand.
+
+### Hermes als lokaler Motor
 
 Unter **Stimme → Denken → Hermes** arbeitet der vollständige Hermes-Agent
 aus dem bereitgestellten ZIP als zusätzlicher lokaler Motor. James übernimmt
