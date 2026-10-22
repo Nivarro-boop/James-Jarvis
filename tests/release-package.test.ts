@@ -1,0 +1,74 @@
+import assert from 'node:assert/strict'
+import { it } from 'node:test'
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join, resolve } from 'node:path'
+import { createHash } from 'node:crypto'
+import { gzipSync } from 'node:zlib'
+
+const { verifyReleaseMetadata, localReference } = require(resolve('scripts/check-release-package.cjs'))
+function fixture(run: (directory: string, manifest: any, installer: Buffer) => void): void {
+  const directory = mkdtempSync(join(tmpdir(), 'james-release-metadata-'))
+  const installer = Buffer.from('small deterministic installer fixture')
+  const name = 'James-Jarvis-Setup-1.3.9.exe'
+  const sha512 = createHash('sha512').update(installer).digest('base64')
+  const files: Record<string, Buffer> = {
+    [name]: installer,
+    [`${name}.blockmap`]: gzipSync(JSON.stringify({ version: '2', files: [{ name: 'file', offset: 0, sizes: [installer.length], checksums: ['fixture-checksum'] }] })),
+    'latest.yml': Buffer.from(`version: 1.3.9\npath: ${name}\nsha512: ${sha512}\nfiles:\n  - url: ${name}\n    size: ${installer.length}\n    sha512: ${sha512}\n`)
+  }
+  const manifest = { tagName: 'v1.3.9', assets: Object.entries(files).map(([name, bytes]) => ({ name, size: bytes.length, digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}` })) }
+  for (const [name, bytes] of Object.entries(files)) writeFileSync(join(directory, name), bytes)
+  try { run(directory, manifest, installer) }
+  finally { rmSync(directory, { recursive: true, force: true }) }
+}
+
+it('checks published SHA-256, update SHA-512, exact file size and blockmap coverage together', () => {
+  fixture((directory, manifest, installer) => {
+    const actual = verifyReleaseMetadata(directory, manifest)
+    assert.equal(actual.version, '1.3.9')
+    assert.equal(actual.sha256, createHash('sha256').update(installer).digest('hex'))
+    assert.equal(actual.blocks, 1)
+  })
+})
+
+it('rejects a modified installer even when its byte length remains unchanged', () => {
+  fixture((directory, manifest, installer) => {
+    const changed = Buffer.from(installer); changed[0] ^= 1
+    writeFileSync(join(directory, 'James-Jarvis-Setup-1.3.9.exe'), changed)
+    assert.throws(() => verifyReleaseMetadata(directory, manifest), /SHA-256 mismatch/)
+  })
+})
+
+it('rejects inconsistent update SHA-512 independently of a matching asset digest', () => {
+  fixture((directory, manifest, installer) => {
+    const yaml = Buffer.from(`version: 1.3.9\npath: James-Jarvis-Setup-1.3.9.exe\nsha512: wrong\nfiles:\n  - url: James-Jarvis-Setup-1.3.9.exe\n    size: ${installer.length}\n    sha512: wrong\n`)
+    writeFileSync(join(directory, 'latest.yml'), yaml)
+    Object.assign(manifest.assets.find((asset: any) => asset.name === 'latest.yml'), { size: yaml.length, digest: `sha256:${createHash('sha256').update(yaml).digest('hex')}` })
+    assert.throws(() => verifyReleaseMetadata(directory, manifest), /SHA-512 mismatch/)
+  })
+})
+
+it('normalizes actual renderer links but rejects references outside the renderer output', () => {
+  assert.equal(localReference('./assets/a.js?v=1', 'out/renderer/crystal.html'), 'out/renderer/assets/a.js')
+  assert.equal(localReference('./font.woff2', 'out/renderer/assets/a.css'), 'out/renderer/assets/font.woff2')
+  assert.equal(localReference('data:image/png;base64,AA==', 'out/renderer/crystal.html'), null)
+  assert.equal(localReference('https://example.com/icon.png', 'out/renderer/crystal.html'), null)
+  assert.throws(() => localReference('../../private/file', 'out/renderer/crystal.html'), /escapes/)
+})
+
+
+it('rejects a blockmap that does not cover the installer even if its published digest matches', () => {
+  fixture((directory, manifest, installer) => {
+    const filename = 'James-Jarvis-Setup-1.3.9.exe.blockmap'
+    const bytes = gzipSync(JSON.stringify({ version: '2', files: [{ name: 'file', offset: 0, sizes: [installer.length + 1], checksums: ['fixture-checksum'] }] }))
+    writeFileSync(join(directory, filename), bytes)
+    Object.assign(manifest.assets.find((asset: any) => asset.name === filename), { size: bytes.length, digest: `sha256:${createHash('sha256').update(bytes).digest('hex')}` })
+    assert.throws(() => verifyReleaseMetadata(directory, manifest), /does not cover installer/)
+  })
+})
+
+it('rejects encoded slash and backslash escapes in renderer asset references', () => {
+  assert.throws(() => localReference('..%2f..%2fprivate', 'out/renderer/crystal.html'), /escapes/)
+  assert.throws(() => localReference('..%5c..%5cprivate', 'out/renderer/crystal.html'), /escapes/)
+})
