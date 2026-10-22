@@ -84,6 +84,9 @@ mac:
   target:
     - target: dmg
       arch: [arm64]
+    # Squirrel/electron-updater benötigt das ZIP; ein DMG allein reicht nicht.
+    - target: zip
+      arch: [arm64]
   category: public.app-category.productivity
   extendInfo:
     NSMicrophoneUsageDescription: James verwendet das Mikrofon für Sprachaufträge, wenn du es aktivierst.

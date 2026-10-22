@@ -7,6 +7,7 @@ it('targets only Apple Silicon for macOS and never publishes through dist:mac', 
   const mac = config.split(/^mac:\s*$/m)[1]?.split(/^\S[^\n]*:/m)[0]
   assert.ok(mac, 'An explicit macOS target is required')
   assert.match(mac, /target: dmg/)
+  assert.match(mac, /target: zip/, 'Squirrel auto-updates require a ZIP in addition to the DMG')
   assert.match(mac, /arch: \[arm64\]/)
   assert.doesNotMatch(mac, /\b(?:x64|universal)\b/)
   assert.match(mac, /NSMicrophoneUsageDescription:/)

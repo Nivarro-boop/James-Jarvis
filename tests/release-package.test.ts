@@ -1,12 +1,12 @@
 import assert from 'node:assert/strict'
 import { it } from 'node:test'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { createHash } from 'node:crypto'
 import { gzipSync } from 'node:zlib'
 
-const { verifyReleaseMetadata, localReference } = require(resolve('scripts/check-release-package.cjs'))
+const { verifyReleaseMetadata, localReference, verifyPayload } = require(resolve('scripts/check-release-package.cjs'))
 function fixture(run: (directory: string, manifest: any, installer: Buffer) => void): void {
   const directory = mkdtempSync(join(tmpdir(), 'james-release-metadata-'))
   const installer = Buffer.from('small deterministic installer fixture')
@@ -71,4 +71,30 @@ it('rejects a blockmap that does not cover the installer even if its published d
 it('rejects encoded slash and backslash escapes in renderer asset references', () => {
   assert.throws(() => localReference('..%2f..%2fprivate', 'out/renderer/crystal.html'), /escapes/)
   assert.throws(() => localReference('..%5c..%5cprivate', 'out/renderer/crystal.html'), /escapes/)
+})
+
+it('reads actual nested ASAR files using host-native paths, including CSS and font references', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'james-release-asar-'))
+  const source = join(root, 'source'), app = join(root, 'app')
+  const put = (filename: string, value: string | Buffer): void => { mkdirSync(dirname(filename), { recursive: true }); writeFileSync(filename, value) }
+  try {
+    put(join(source, 'package.json'), JSON.stringify({ name: 'release-fixture', version: '1.3.9', main: './out/main/index.js', dependencies: { example: '1.0.0' } }))
+    put(join(source, 'out/main/index.js'), '/* never executed */')
+    put(join(source, 'out/preload/index.js'), '/* never executed */')
+    put(join(source, 'node_modules/example/package.json'), '{"name":"example","version":"1.0.0"}')
+    put(join(source, 'out/renderer/crystal.html'), '<script src="./assets/app.js"></script><link href="./assets/style.css" rel="stylesheet">')
+    put(join(source, 'out/renderer/settings.html'), '<script src="./assets/app.js"></script>')
+    put(join(source, 'out/renderer/assets/app.js'), '/* never executed */')
+    put(join(source, 'out/renderer/assets/style.css'), '@font-face{src:url("./font.woff2")}')
+    put(join(source, 'out/renderer/assets/font.woff2'), 'fixture font')
+    for (const filename of ['windows-helper.ps1', 'input-server.ps1', 'uia-server.ps1', 'audio-devices.ps1', 'app-icons.ps1', 'piper-host.py', 'vibevoice-server.py', 'companion-cert.ps1', 'tray.png', 'kurzanleitung.html', 'THIRD_PARTY_NOTICES.md', 'app-update.yml', 'companion/index.html', 'companion/app.js', 'companion/mic-worklet.js', 'companion/sw.js']) put(join(app, 'resources', filename), 'fixture')
+    const pe = Buffer.alloc(0x80)
+    pe.write('MZ'); pe.writeUInt32LE(0x40, 0x3c); pe.writeUInt32LE(0x00004550, 0x40); pe.writeUInt16LE(0x8664, 0x44)
+    put(join(app, 'James-Jarvis.exe'), pe) // Header-only fixture; this is not an executable and is never launched.
+    await require('@electron/asar').createPackage(source, join(app, 'resources/app.asar'))
+    const actual = verifyPayload(app, '1.3.9')
+    assert.equal(actual.version, '1.3.9')
+    assert.ok(actual.checkedRendererReferences > 0)
+    assert.equal(actual.nativeExecution, 'not-run')
+  } finally { rmSync(root, { recursive: true, force: true }) }
 })

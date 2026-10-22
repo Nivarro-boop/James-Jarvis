@@ -613,7 +613,11 @@ app.on('will-quit', (event) => {
     closeDb()
     // Ein geladenes Update jetzt einspielen. Der eigene Weg von
     // electron-updater wartet auf `quit`, und das feuert bei `app.exit` nicht.
-    if (!recoveryMode) installPendingUpdate()
+    // MacUpdater startet Squirrel erst nach diesem Aufruf und stellt die ZIP
+    // über einen lokalen Server bereit. Diesen Prozess nicht sofort beenden:
+    // Squirrel löst nach dem Download selbst `app.quit` aus. Bei Fehlern
+    // beendet der Updater-Fehlerhandler den Prozess.
+    if (!recoveryMode && installPendingUpdate()) return
     app.exit(0)
   })
 })

@@ -55,7 +55,8 @@ function localReference(ref, baseFile) {
 function verifyPayload(appDirectory, version) {
   const archive = path.join(appDirectory, 'resources', 'app.asar')
   const entries = new Set(asar.listPackage(archive).map(name => name.replace(/^[/\\]+/, '').replaceAll('\\', '/')))
-  const read = name => asar.extractFile(archive, name).toString('utf8')
+  // ASAR's directory lookup uses host-native separators, unlike renderer URLs.
+  const read = name => asar.extractFile(archive, path.join(...name.split('/'))).toString('utf8')
   const pkg = JSON.parse(read('package.json'))
   assert.equal(pkg.version, version, 'Packaged version differs from release')
   assert.equal(pkg.main, './out/main/index.js')

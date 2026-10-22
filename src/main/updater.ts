@@ -1,5 +1,5 @@
 import { app } from 'electron'
-import electronUpdater, { type NsisUpdater } from 'electron-updater'
+import electronUpdater from 'electron-updater'
 import type { UpdateStatus } from '@shared/types'
 import { broadcast } from './ipc/emit'
 
@@ -108,19 +108,49 @@ export function postponeUpdate(): void {
   if (status.state === 'ready') publish({ postponed: true })
 }
 
+type PendingUpdateInstaller = {
+  quitAndInstall: () => void
+  install?: (isSilent?: boolean, isForceRunAfter?: boolean) => boolean
+}
+
+/** Leitet Windows still an NSIS weiter; macOS braucht den nativen Squirrel-Handoff. */
+export function installPendingUpdateForPlatform(
+  updater: PendingUpdateInstaller,
+  platform: NodeJS.Platform
+): void {
+  if (platform === 'win32') {
+    if (!updater.install) throw new Error('NSIS-Installer nicht verfügbar')
+    updater.install(true, false)
+    return
+  }
+  updater.quitAndInstall()
+}
+
 /**
  * Beim Beenden aufrufen, unmittelbar vor `app.exit`.
  *
- * Startet den Installer still und ohne die App danach wieder zu öffnen — wer
- * beendet, will sie zu haben. Der Installer wartet, bis der Prozess weg ist.
+ * Windows installiert still ohne Neustart. macOS übergibt an Squirrel; dessen
+ * quitAndInstall kann die App nach der Installation erneut starten.
  */
-export function installPendingUpdate(): void {
-  if (status.state !== 'ready') return
+export function installPendingUpdate(): boolean {
+  if (status.state !== 'ready') return false
+  const updater = electronUpdater.autoUpdater
+  const onMacHandoffError = (): void => app.exit(0)
+  if (process.platform === 'darwin') updater.once('error', onMacHandoffError)
   try {
     console.info(`[update] Spiele ${status.version} beim Beenden ein.`)
-    // Unter Windows ist der Updater ein NsisUpdater; nur dort gibt es `install`.
-    ;(electronUpdater.autoUpdater as NsisUpdater).install(true, false)
+    // NSIS hat eine stille `install`-Methode; der macOS-Updater muss über
+    // quitAndInstall an Squirrel übergeben werden. `install` gibt es dort nicht.
+    installPendingUpdateForPlatform(
+      updater as PendingUpdateInstaller,
+      process.platform
+    )
+    // MacUpdater kann erst nach dem nativen Download das Beenden anstoßen.
+    // Der Aufrufer darf app.exit deshalb nicht sofort ausführen.
+    return process.platform === 'darwin'
   } catch (err) {
+    if (process.platform === 'darwin') updater.removeListener('error', onMacHandoffError)
     console.warn('[update] Einspielen beim Beenden fehlgeschlagen:', err instanceof Error ? err.message : err)
+    return false
   }
 }
