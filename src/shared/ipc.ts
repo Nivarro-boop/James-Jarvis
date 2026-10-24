@@ -432,6 +432,8 @@ export interface IpcInvokeMap {
   'google:status': { req: void; res: { connected: boolean; calendar: boolean; workspace: boolean } }
   /** „Sign in with ChatGPT". `enabled` ist falsch, solange OpenAI James nicht freigegeben hat. */
   'chatgpt:connect': { req: void; res: { ok: boolean; email?: string; error?: string } }
+  'chatgpt:pendingSignIn': { req: void; res: { url: string; expiresAt: number; browserError?: string } | null }
+  'chatgpt:submitCallback': { req: { url: string }; res: void }
   'chatgpt:cancelSignIn': { req: void; res: void }
   'chatgpt:disconnect': { req: void; res: void }
   'chatgpt:status': { req: void; res: ChatGptStatus }
@@ -721,6 +723,8 @@ export const IPC_INVOKE_CHANNELS = [
   'google:disconnect',
   'google:status',
   'chatgpt:connect',
+  'chatgpt:pendingSignIn',
+  'chatgpt:submitCallback',
   'chatgpt:cancelSignIn',
   'chatgpt:disconnect',
   'chatgpt:status',

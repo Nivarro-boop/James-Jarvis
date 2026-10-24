@@ -16,7 +16,7 @@ const assert = require('node:assert/strict')
   app=await _electron.launch({executablePath:require('electron'),args:[wrapper,'--use-fake-device-for-media-stream','--use-fake-ui-for-media-stream']})
   await app.firstWindow();let page
   for(let i=0;i<100&&!page;i++){page=app.windows().find(p=>p.url().includes('crystal.html'));if(!page)await new Promise(r=>setTimeout(r,100))}
-  assert.ok(page);await page.locator('.home-mute').waitFor()
+  assert.ok(page);await page.getByRole('button',{name:'Menü',exact:true}).waitFor()
   // Schlanke Startseite: kein Arbeitsgedächtnis-Kasten mehr, der Stand lebt im Hintergrund weiter.
   assert.equal(await page.locator('.context-panel').count(),0)
   const errors=[];page.on('pageerror',e=>errors.push(e.message))

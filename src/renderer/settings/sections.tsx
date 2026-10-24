@@ -2171,12 +2171,12 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
     <>
       <h2>Stimme &amp; Modelle</h2>
       <p className="lede">
-        Drei Schritte: wie James sich gibt, wer spricht und wer denkt. Alles auf einer Seite.
+        Wähle deine Stimme und deinen Denkmotor. Weitere Optionen öffnest du bei Bedarf.
       </p>
 
       <h3 className="settings-step">1 · Persönlichkeit</h3>
       <PersonaPicker settings={settings} patch={patch} />
-      <PersonalityControls settings={settings} patch={patch} />
+      <details className="settings-fold"><summary>Persönlichkeit anpassen</summary><PersonalityControls settings={settings} patch={patch} /></details>
 
       <hr className="section-divider" />
       <h3 className="settings-step">2 · Wer spricht</h3>
@@ -2191,10 +2191,10 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
         openRouterPresent={present('openrouter')}
         present={present}
       />
-      <LocalFallback settings={settings} patch={patch} />
+      <details className="settings-fold"><summary>Lokaler Ersatz bei Verbindungsproblemen</summary><LocalFallback settings={settings} patch={patch} /></details>
 
       <hr className="section-divider" />
-      <h3 className="settings-step">Sprache und Feinheiten</h3>
+      <details className="settings-fold"><summary>Sprache und erweiterte Modelle</summary>
       <div className="field">
         <label>Gemini-Stimme</label>
         <select aria-label="Gemini-Stimme" value={settings.voice} onChange={(e) => patch({ voice: e.target.value as never })}>
@@ -2298,6 +2298,7 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
           <option value="en-US">Englisch</option>
         </select>
       </div>
+      </details>
     </>
   )
 }
@@ -4020,8 +4021,13 @@ export function ConnectionsSection(): JSX.Element {
   const load = async (startBrowser: boolean): Promise<void> => {
     setBusy(true)
     try {
-      setStatus(await window.jarvis.invoke('connect:status', { start: startBrowser }))
-      setTimers(await window.jarvis.invoke('timers:list'))
+      setNote(null)
+      const [connections, runningTimers] = await Promise.all([
+        window.jarvis.invoke('connect:status', { start: startBrowser }),
+        window.jarvis.invoke('timers:list')
+      ])
+      setStatus(connections)
+      setTimers(runningTimers)
     } catch (err) {
       setNote(err instanceof Error ? err.message : 'Die Verbindungsliste ließ sich nicht aufnehmen.')
     } finally {
@@ -4095,9 +4101,9 @@ export function ConnectionsSection(): JSX.Element {
               </td>
               <td style={{ width: 110 }}>
                 {s.ok ? (
-                  <span className="badge ok">geht</span>
+                  <span className="badge ok">Verbunden</span>
                 ) : (
-                  <span className="badge err">geht nicht</span>
+                  <span className="badge err">Nicht verbunden</span>
                 )}
               </td>
               <td className="hint">{s.ok ? '' : (s.fix ?? '')}</td>
@@ -4925,7 +4931,7 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
     setBusy(true)
     try {
       if (action === 'enable' || action === 'server-off') {
-        patch({ companion: { ...settings.companion, enabled: true } })
+        await patch({ companion: { ...settings.companion, enabled: true } })
         // Der Server startet über den Melder im Hauptprozess, also nicht sofort.
         await new Promise((r) => window.setTimeout(r, 400))
         setSetup(await window.jarvis.invoke('companion:setup'))
@@ -4985,23 +4991,11 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
 
   const pairingUrl =
     status?.urls[0] && status.token ? `${status.urls[0]}#host=${status.urls[0].replace(/^https?:\/\//, '').replace(/\/$/, '')}&token=${status.token}` : null
-  // Dieselbe Kopplung für die eigenständige iPhone-App (github.com/Nivarro-boop/jarvis-iphone).
-  // Die kommt über HTTPS und darf deshalb nur verschlüsselt verbinden.
-  const appPairingUrl =
-    status?.secure && status.urls[0] && status.token
-      ? `https://nivarro-boop.github.io/jarvis-iphone/#pc=${status.urls[0].replace(/^https?:\/\//, '').replace(/\/$/, '')}&token=${status.token}`
-      : null
 
   return (
     <>
-      <h2>Telefon</h2>
-      <p className="lede">
-        Das Telefon wird nicht zu einem zweiten James, sondern zu seiner Fernbedienung: Der Rechner
-        bleibt der Agent — dort sind Chrome, Dateien, Maus und Bildschirm —, das Telefon ist
-        Mikrofon, Lautsprecher und Anzeige. Ein Weckwort gibt es dort nicht; iOS lässt nichts
-        dauerhaft mithören. Stattdessen die Sprechtaste.
-      </p>
-
+      <h2>iPhone &amp; Apple Watch</h2>
+      <p className="lede">Rechner verbinden, QR-Code scannen, mit James sprechen. Die Apple Watch nutzt die gebaute iPhone-App als Verbindung zum Rechner.</p>
       {/*
         Die Einrichtung als Leiter statt als Formular: Es steht immer genau eine
         Sache da, und daneben der Knopf, der sie erledigt. Fällt sie weg, rückt
@@ -5038,13 +5032,14 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
         </div>
       )}
 
+      <details className="settings-fold"><summary>Netzwerk und Zertifikat</summary>
       <label>
         Port
         <input
           type="number"
           value={settings.companion.port}
           min={1024}
-          max={65535}
+          max={65533}
           onChange={(e) =>
             patch({
               companion: { ...settings.companion, port: Number(e.target.value) || 8788 }
@@ -5078,6 +5073,7 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
         </label>
       )}
 
+      </details>
       {/*
         Zuerst das Vertrauen, dann das Koppeln. Beide Schritte sind ein
         QR-Code, und genau deshalb dürfen sie nicht gleichzeitig dastehen —
@@ -5153,8 +5149,7 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
             </tbody>
           </table>
 
-          {pairingUrl && <PairingCode url={pairingUrl} />}
-          {appPairingUrl && <PairingCode url={appPairingUrl} label="Mit der James-App koppeln" />}
+          {pairingUrl && <PairingCode url={pairingUrl} label="QR-Code für iPhone & Watch erstellen" />}
 
           <div className="row">
             <button onClick={() => void rotate()} disabled={busy}>
@@ -5277,6 +5272,7 @@ function PairingCode({
         <p className="hint">Der Code ließ sich nicht erzeugen — nimm die Angaben aus der Tabelle.</p>
       )}
       <div className="row" style={{ marginTop: 8 }}>
+        <button onClick={() => { void navigator.clipboard.writeText(url) }}>Kopplungslink kopieren</button>
         <button onClick={() => setShown(false)}>Verbergen</button>
       </div>
     </div>

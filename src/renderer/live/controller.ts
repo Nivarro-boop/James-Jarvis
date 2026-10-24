@@ -107,6 +107,7 @@ export class JarvisController {
   private pauseRevision = 0
   /** Solange die Sprechtaste am Telefon gehalten wird. */
   private remoteMicOpen = false
+  private remoteMicGeneration = 0
   private remoteSeenAt = 0
   private remoteWatchdog: number | null = null
   /** Zeitpunkt des selbsttätigen Aufwachens; `null` heißt unbefristet. */
@@ -444,6 +445,8 @@ export class JarvisController {
    * ist ausdrücklich gemeint und geht ungefiltert hoch.
    */
   async setRemoteMic(on: boolean): Promise<void> {
+    const generation = ++this.remoteMicGeneration
+    if (this.disposed) return
     if (on) {
       if (this.paused) {
         // Ein Druck aufs Telefon holt ihn zurück. Sonst müsste man erst
@@ -454,6 +457,7 @@ export class JarvisController {
         // aus dem Funkloch fällt, darf ihn nicht aus der Stilllegung holen.
         await this.setPaused(false)
       }
+      if (generation !== this.remoteMicGeneration || this.disposed) return
       this.remoteMicOpen = true
       this.remoteSeenAt = Date.now()
       this.preroll.length = 0

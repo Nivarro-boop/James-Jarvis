@@ -53,13 +53,13 @@ import './refinement.css'
 const SECTIONS = [
   { id: 'overview', label: 'Übersicht', group: 'Start' },
   { id: 'voice', label: 'Stimme & Modelle', group: 'Sprechen' },
-  { id: 'local', label: 'Lokale KI', group: 'Sprechen' },
+  { id: 'local', label: 'Lokale KI', group: 'Sprechen', hidden: true },
   { id: 'audio', label: 'Mikrofon & Zuhören', group: 'Sprechen' },
-  { id: 'keys', label: 'Konten & Standort', group: 'Dienste' },
+  { id: 'keys', label: 'Konten & Standort', group: 'Dienste', hidden: true },
   { id: 'connections', label: 'Verbindungen', group: 'Dienste' },
-  { id: 'mcp', label: 'Erweiterungen', group: 'Dienste' },
+  { id: 'mcp', label: 'Erweiterungen', group: 'Dienste', hidden: true },
   { id: 'memory', label: 'Gedächtnis', group: 'Du & Sicherheit' },
-  { id: 'audit', label: 'Aktionslog', group: 'Du & Sicherheit' },
+  { id: 'audit', label: 'Aktionslog', group: 'Du & Sicherheit', hidden: true },
   { id: 'permissions', label: 'Erlaubnisse & Kosten', group: 'Du & Sicherheit' },
   { id: 'diagnose', label: 'Diagnose & Werkzeuge', group: 'App' },
   { id: 'about', label: 'Über', group: 'App' },
@@ -129,6 +129,7 @@ function App(): JSX.Element {
   const [saveError, setSaveError] = useState('')
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle')
   const [query, setQuery] = useState('')
+  const [connectionTab, setConnectionTab] = useState('accounts')
   const searchRef = useRef<HTMLInputElement>(null)
   const mainRef = useRef<HTMLElement>(null)
   const loadRevision = useRef(0)
@@ -365,16 +366,27 @@ function App(): JSX.Element {
             ] as const).map(([id, title, description]) => <button className="settings-tile" key={id} onClick={() => navigate(id)}><strong>{title}</strong><p>{description}</p><span>Öffnen ↗</span></button>)}
           </div>
         </>}
-        {active === 'connections' && <><ConnectionsSection /><hr className="section-divider" /><MusicSection settings={settings} patch={patch} /><hr className="section-divider" /><SmartHomeSection settings={settings} patch={patch} /><hr className="section-divider" /><AlexaSection settings={settings} patch={patch} /><hr className="section-divider" /><CompanionSection settings={settings} patch={patch} /><hr className="section-divider" /><ContactsSection /></>}
+        {active === 'connections' && <>
+          <h2>Deine Verbindungen</h2><p className="lede">Wähle einen Bereich. Nur die passenden Einstellungen werden angezeigt.</p>
+          <nav className="connection-tabs" aria-label="Verbindungsbereiche">{[
+            ['accounts', 'Konten'], ['phone', 'iPhone & Watch'], ['music', 'Musik'], ['home', 'Zuhause'], ['contacts', 'Kontakte'], ['extensions', 'Erweiterungen']
+          ].map(([id, label]) => <button key={id} aria-pressed={connectionTab === id} onClick={() => setConnectionTab(id)}>{label}</button>)}</nav>
+          {connectionTab === 'accounts' && <><ConnectionsSection /><details className="settings-fold"><summary>KI-Konten und API-Zugänge</summary><KeysSection settings={settings} patch={patch} /></details></>}
+          {connectionTab === 'phone' && <CompanionSection settings={settings} patch={patch} />}
+          {connectionTab === 'music' && <MusicSection settings={settings} patch={patch} />}
+          {connectionTab === 'home' && <><SmartHomeSection settings={settings} patch={patch} /><details className="settings-fold"><summary>Amazon Alexa</summary><AlexaSection settings={settings} patch={patch} /></details></>}
+          {connectionTab === 'contacts' && <ContactsSection />}
+          {connectionTab === 'extensions' && <McpSection settings={settings} patch={patch} onNavigate={navigate} />}
+        </>}
         {active === 'smarthome' && <SmartHomeSection settings={settings} patch={patch} />}
         {active === 'music' && <MusicSection settings={settings} patch={patch} />}
         {active === 'alexa' && <AlexaSection settings={settings} patch={patch} />}
         {active === 'keys' && <KeysSection settings={settings} patch={patch} />}
         {active === 'contacts' && <ContactsSection />}
         {active === 'companion' && <CompanionSection settings={settings} patch={patch} />}
-        {active === 'voice' && <VoiceSection settings={settings} patch={patch} />}
+        {active === 'voice' && <><VoiceSection settings={settings} patch={patch} /><details className="settings-fold"><summary>Lokale KI verwalten</summary><LocalSection settings={settings} patch={patch} /></details></>}
         {active === 'ears' && <EarsSection settings={settings} patch={patch} />}
-        {active === 'audio' && <><AudioSection settings={settings} patch={patch} /><hr className="section-divider" /><ListeningSection settings={settings} patch={patch} /><hr className="section-divider" /><EarsSection settings={settings} patch={patch} /></>}
+        {active === 'audio' && <><AudioSection settings={settings} patch={patch} /><details className="settings-fold"><summary>Zuhören, Weckwort und Erkennung</summary><ListeningSection settings={settings} patch={patch} /><EarsSection settings={settings} patch={patch} /></details></>}
         {active === 'listening' && <ListeningSection settings={settings} patch={patch} />}
         {active === 'saver' && <SaverSection settings={settings} patch={patch} />}
         {active === 'permissions' && <><PermissionsSection settings={settings} patch={patch} /><hr className="section-divider" /><SaverSection settings={settings} patch={patch} /></>}

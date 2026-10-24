@@ -381,7 +381,7 @@ const computerTask = defineTool({
     if (startApp) {
       const focused = await focusWindow(startApp).catch(() => null)
       display = displayForWindow(focused?.bounds) ?? display
-      await sleep(800)
+      await sleep(800, ctx.signal)
     }
 
     // Sperrliste gegen den aktuellen Fensterzustand prüfen, bevor überhaupt
@@ -424,7 +424,9 @@ const computerTask = defineTool({
     let expectedChange = false
     /** Wie viele Züge das Stapeln erspart hat, in Bildkosten gerechnet. */
     let savedTurns = 0
+    const held = { left: false }
 
+    try {
     const maxSteps = settings.tokenSaver.enabled ? 15 : MAX_STEPS
     for (let step = 0; step < maxSteps; step++) {
       if (ctx.signal.aborted) {
@@ -442,7 +444,7 @@ const computerTask = defineTool({
       let shot = await captureScreen({ maxTiles: tiles, target: display })
       let shotHash = createHash('sha1').update(shot.base64).digest('hex')
       if (expectedChange && shotHash === lastShotHash) {
-        await sleep(450)
+        await sleep(450, ctx.signal)
         ctx.signal.throwIfAborted()
         shot = await captureScreen({ maxTiles: tiles, target: display })
         shotHash = createHash('sha1').update(shot.base64).digest('hex')
@@ -600,7 +602,7 @@ const computerTask = defineTool({
       history.push(firstCallTurn(response, call))
       pending = call.name
 
-      const outcome = await runSteps(steps, display, tiles, ctx.signal)
+      const outcome = await runSteps(steps, display, tiles, ctx.signal, held)
       details = outcome.details
       expectedChange = outcome.changed
       lastResult = outcome.text
@@ -638,6 +640,9 @@ const computerTask = defineTool({
       abgebrochen: true,
       grund: `Nach ${maxSteps} Bildschritten war die Aufgabe nicht erledigt${settings.tokenSaver.enabled ? ' — Sparlimit erreicht' : ''}.`,
       gestapelt: savedTurns
+    }
+    } finally {
+      if (held.left) await mouseUp('left').catch(() => undefined)
     }
   }
 }) as ToolDefinition
@@ -705,7 +710,8 @@ async function runSteps(
   steps: ActionArgs[],
   display: DisplayTarget,
   tiles: number,
-  signal: AbortSignal
+  signal: AbortSignal,
+  held: { left: boolean }
 ): Promise<StepsOutcome> {
   const lines: string[] = []
   const details: { base64: string; mimeType: string }[] = []
@@ -737,12 +743,18 @@ async function runSteps(
         details.push({ base64: region.base64, mimeType: region.mimeType })
         lines.push(`${action}: Ausschnitt aufgenommen, ${region.width} mal ${region.height} Bildpunkte`)
       } else {
-        const note = await performAction(action, one, display)
+        if (action === 'left_mouse_down') held.left = true
+        const note = await performAction(action, one, display, signal)
+        if (action === 'left_mouse_up') held.left = false
         lines.push(`${action}: ${note}`)
       }
+      signal.throwIfAborted()
       ran++
       if (CHANGES_SCREEN.has(action)) changed = true
     } catch (err) {
+      if (signal.aborted) {
+        signal.throwIfAborted()
+      }
       const message = err instanceof Error ? err.message : String(err)
       // Fällt die Eingabesteuerung ganz aus, hat jeder weitere Schritt
       // denselben Fehler — dann lieber sofort abbrechen als fünfundzwanzig
@@ -761,15 +773,15 @@ async function runSteps(
     // gerade erst öffnet. Kürzer als die Pause am Zugende: hier wird kein
     // Foto gemacht, auf das etwas fertig sein müsste.
     if (action === 'wait') {
-      await sleep(Math.min(5000, Number(one.seconds ?? 2) * 1000))
+      await sleep(Math.min(5000, Math.max(0, Number(one.seconds ?? 2) * 1000)), signal)
     } else if (index < steps.length - 1 && CHANGES_SCREEN.has(action)) {
-      await sleep(160)
+      await sleep(160, signal)
     }
   }
 
   // Der Oberfläche Zeit zum Nachziehen geben — sonst fotografiert der nächste
   // Durchlauf noch den alten Zustand.
-  if (changed) await sleep(350)
+  if (changed) await sleep(350, signal)
 
   return { text: `Ergebnis: ${lines.join('; ')}.`, ran, ok: true, changed, details }
 }
@@ -853,6 +865,9 @@ async function checkWindows(): Promise<string | null> {
 }
 
 function blockedAction(a: ActionArgs): string | null {
+  for (const key of ['x', 'y', 'toX', 'toY', 'width', 'height', 'repeat', 'amount', 'seconds'] as const) {
+    if (a[key] !== undefined && !Number.isFinite(Number(a[key]))) return `Ungültiger Zahlenwert für ${key}. Schritt nicht ausgeführt.`
+  }
   const text = String(a.text ?? '')
   if (text && BLOCKED_INPUT.test(text)) {
     return 'Der Schritt wollte etwas eingeben, das nach Zugangs- oder Zahlungsdaten aussieht. Abgebrochen.'
@@ -900,8 +915,10 @@ function asModifiers(value: unknown): Modifier[] {
 async function performAction(
   action: string,
   a: ActionArgs,
-  display: DisplayTarget
+  display: DisplayTarget,
+  signal?: AbortSignal
 ): Promise<string> {
+  signal?.throwIfAborted()
   const at = (x: unknown, y: unknown): { x: number; y: number } =>
     displayPoint(display, Number(x ?? 0), Number(y ?? 0))
 
@@ -909,6 +926,7 @@ async function performAction(
   if (click_) {
     const point = at(a.x, a.y)
     await moveMouse(point.x, point.y)
+    signal?.throwIfAborted()
     await click(click_.button, click_.count, asModifiers(a.modifiers))
     return 'ausgeführt'
   }
@@ -944,13 +962,14 @@ async function performAction(
         await moveMouse(point.x, point.y)
         // Dreifachklick markiert die Zeile; das Getippte ersetzt sie dann.
         await click('left', a.clear ? 3 : 1)
-        await sleep(120)
+        await sleep(120, signal)
       } else if (a.clear) {
         // Ohne Zielpunkt bleibt nur der Weg über die Tastatur.
         await pressHotkey('strg+a')
-        await sleep(80)
+        await sleep(80, signal)
       }
       const text = String(a.text ?? '')
+      signal?.throwIfAborted()
       await typeText(text)
       return `${text.length} Zeichen getippt`
     }
@@ -1009,9 +1028,15 @@ async function performAction(
   }
 }
 
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms))
+export function computerDelay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const cancel = (): void => { clearTimeout(timer); reject(signal?.reason ?? new Error('Abgebrochen.')) }
+    if (signal?.aborted) { reject(signal.reason); return }
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', cancel); resolve() }, ms)
+    signal?.addEventListener('abort', cancel, { once: true })
+  })
 }
+const sleep = computerDelay
 
 const screenshotTool = defineTool({
   name: 'screenshot',

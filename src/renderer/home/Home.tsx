@@ -235,7 +235,12 @@ export function Home(): JSX.Element {
   const confirmation = useCrystal((s) => s.confirmation)
   const settings = useCrystal((s) => s.settings)
   const wakeAvailable = useCrystal((s) => s.wakeAvailable)
-  const hasConversation = useCrystal((s) => s.captions.length > 0)
+  const [composerOpen, setComposerOpen] = useState(false)
+  useEffect(() => {
+    const toggle = (): void => setComposerOpen(value => !value)
+    window.addEventListener('jarvis:conversation', toggle)
+    return () => window.removeEventListener('jarvis:conversation', toggle)
+  }, [])
   const [hasVoiceAccess, setHasVoiceAccess] = useState(true)
   const [wakePhrase, setWakePhrase] = useState('Hey James')
   const activity = useActivityPanel()
@@ -320,10 +325,10 @@ export function Home(): JSX.Element {
   const healthy = health.problems === 0
   const healthLine = health.loading ? 'Prüfe, ob alles läuft …'
     : healthy ? 'Keine Fehlermeldungen'
-    : health.problems === 1 ? '1 Fehler' : `${health.problems} Fehler`
+    : health.problems === 1 ? (state === 'error' ? '1 Fehler' : '1 Loghinweis') : `${health.problems} ${state === 'error' ? 'Fehler' : 'Loghinweise'}`
 
   return (
-    <div className="home james-ui" data-state={state} data-compact={hasConversation || hasCards} style={tone}>
+    <div className="home james-ui" data-state={state} data-compact={hasCards} data-writing={composerOpen} style={tone}>
       <header className="home-bar">
         <div className="home-top-left">
           <span className="home-brand"><span className="home-mark">James<span className="brand-dot">.</span></span><small>DEIN ASSISTENT</small></span>
@@ -336,12 +341,6 @@ export function Home(): JSX.Element {
         <div className="home-actions">
           <button className="home-health" data-ok={healthy} data-loading={health.loading} title={health.first || healthLine}
             onClick={() => openSettings('diagnose')}><i aria-hidden="true" />{healthLine}</button>
-          {!healthy && !health.loading && (
-            <button className="home-health-fix" disabled={health.fixing} title={health.first || undefined}
-              onClick={() => void health.fix()}>
-              {health.fixing ? 'Repariere …' : health.note || (health.reporting ? 'Beheben & senden' : 'Beheben')}
-            </button>
-          )}
           <ConnectionPill ready={hasVoiceAccess} />
           <Clock />
           <MainMenu onBrain={() => setBrainOpen(true)} />
@@ -358,30 +357,15 @@ export function Home(): JSX.Element {
               <span className="home-presence"><i aria-hidden="true" />{statusLabel}</span>
               <h1>{heading}</h1>
               <p className="home-hint" role={state === 'error' ? 'alert' : undefined}>{hint}</p>
-              <div className="home-voice-actions">
-              <button className="voice-start" onClick={() => window.dispatchEvent(new Event('jarvis:press'))}>
-                {state === 'listening' ? 'Zuhören beenden' : paused ? 'James aktivieren' : 'Mit James sprechen'}
-              </button>
-              <button className="home-mute" data-muted={paused} aria-pressed={paused}
-                aria-label={paused ? 'Stummschaltung aufheben' : 'Stumm schalten'}
-                onClick={() => window.dispatchEvent(new Event('jarvis:togglePause'))}>
-                {paused ? 'Mikrofon aktivieren' : 'Mikrofon pausieren'}
-              </button>
-              </div>
+
             </div>
           </main>
-          <nav className="home-shortcuts" aria-label="Schnellzugriff">
-            <button onClick={() => window.dispatchEvent(new Event('jarvis:learn'))}><span aria-hidden="true">01</span><strong>Lernen & Quiz</strong><small>Wissen festigen</small><i aria-hidden="true">↗</i></button>
-            <button onClick={() => setBrainOpen(true)}><span aria-hidden="true">02</span><strong>Gehirn & Projekte</strong><small>Gedanken weiterführen</small><i aria-hidden="true">↗</i></button>
-            <button onClick={() => openSettings('connections')}><span aria-hidden="true">03</span><strong>Verbindungen</strong><small>Deine Dienste verbinden</small><i aria-hidden="true">↗</i></button>
-          </nav>
           <FirstRun ready={hasVoiceAccess} />
           <QuizPanel />
           <SkillsPanel />
           <SkillProposalPanel />
           <WeatherCard />
           <WidgetTiles />
-          <ConversationHistory />
           <div className="home-context">
             {hasCards && (
               <div className="home-cards">
@@ -402,7 +386,9 @@ export function Home(): JSX.Element {
 
       </div>
 
-      <footer className="home-dock">
+      <footer className="home-dock" id="conversation-drawer" hidden={!composerOpen} aria-label="Schreiben und Gespräch">
+        <div className="drawer-heading"><strong>Dein Gespräch</strong><button onClick={() => setComposerOpen(false)} aria-label="Gespräch schließen">×</button></div>
+        <ConversationHistory />
         <LiveStage snapshot={activity.snapshot} />
         <CommandBar />
       </footer>

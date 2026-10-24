@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os'
 import { app, safeStorage, shell } from 'electron'
 import {
   cancelChatGptSignIn, chatGptAccessToken, chatGptHostId, chatGptStatus,
-  connectChatGpt, disconnectChatGpt
+  connectChatGpt, disconnectChatGpt, chatGptPendingSignIn, submitChatGptCallback
 } from '@main/providers/chatgptAuth'
 
 const realFetch = globalThis.fetch
@@ -209,4 +209,39 @@ it('speichert keine Anmeldung ohne ChatGPT-Plan-Freigabe', async t => {
     scope: 'openid email', id_token: idToken(h.urls.at(-1)!.searchParams.get('nonce')!) })))
   await assert.rejects(connectChatGpt(), /nicht erlaubt/)
   assert.equal(chatGptStatus().connected, false)
+})
+
+
+it('übernimmt eine geprüfte Rückleitung bei Remote Play ohne Verbindung zum Browser-Loopback', async t => {
+  const h = await fixture(t)
+  let opened!: () => void
+  const ready = new Promise<void>(resolve => { opened = resolve })
+  h.browser(async () => opened())
+  const login = connectChatGpt()
+  await ready
+  const pending = chatGptPendingSignIn()!
+  assert.ok(pending.url.startsWith(issuer))
+  assert.equal(new URL(pending.url).searchParams.has('id_token_hint'), false)
+  const callback = new URL(h.urls[0].searchParams.get('redirect_uri')!)
+  callback.search = new URLSearchParams({ code: 'remote-code', state: 'wrong', client_id: client }).toString()
+  assert.throws(() => submitChatGptCallback(callback.toString()), /gehört nicht/)
+  callback.searchParams.set('state', h.urls[0].searchParams.get('state')!)
+  const foreign = new URL(callback); foreign.hostname = 'example.invalid'
+  assert.throws(() => submitChatGptCallback(foreign.toString()), /gehört nicht/)
+  submitChatGptCallback(callback.toString())
+  await login
+  assert.equal(chatGptStatus().connected, true)
+  assert.equal(chatGptPendingSignIn(), null)
+  assert.throws(() => submitChatGptCallback(callback.toString()), /Keine Anmeldung/)
+})
+
+it('hält den manuellen Rückweg bei fehlgeschlagenem Browserstart offen', async t => {
+  const h = await fixture(t)
+  h.browser(async () => { throw new Error('Kein Browser') })
+  const login = connectChatGpt()
+  for (let i = 0; i < 100 && !chatGptPendingSignIn()?.browserError; i++) await new Promise(resolve => setTimeout(resolve, 5))
+  assert.match(chatGptPendingSignIn()!.browserError!, /kopieren/)
+  cancelChatGptSignIn()
+  await assert.rejects(login, /abgebrochen/)
+  assert.equal(chatGptPendingSignIn(), null)
 })

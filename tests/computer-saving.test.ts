@@ -9,7 +9,7 @@ import { tmpdir } from 'node:os'
 import { app } from 'electron'
 import { budgetConversation } from '@shared/conversationBudget'
 import { visionJsonSchema } from '@main/providers/chatgptVision'
-import { trimHistory } from '@main/tools/impl/computer'
+import { computerDelay, trimHistory } from '@main/tools/impl/computer'
 import { compactResult } from '@main/agent/tokenSaver'
 import { closeDb } from '@main/db'
 import { getSettings, setSettings } from '@main/store/settings'
@@ -184,4 +184,13 @@ it('gibt Abbruch und Sparlimit im Bild-Rückfall nicht als erfolgreichen Auftrag
   assert.equal(result.erledigt, false)
   assert.equal(result.zusammenfassung, 'Sparlimit erreicht')
   assert.equal(seen[0], signal)
+})
+
+
+it('unterbricht lange Computer-Wartezeiten sofort und verwirft bereits abgebrochene Warteaufträge', async () => {
+  const abort = new AbortController()
+  const waiting = computerDelay(5000, abort.signal)
+  abort.abort(new Error('Nutzer hat gestoppt'))
+  await assert.rejects(waiting, /Nutzer hat gestoppt/)
+  await assert.rejects(computerDelay(5000, abort.signal), /Nutzer hat gestoppt/)
 })

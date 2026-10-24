@@ -5,12 +5,10 @@
     <!--
       viewport-fit=cover plus die safe-area-Abstände im Stylesheet: Ohne das
       sitzt die Sprechtaste auf einem iPhone unter dem Homebalken.
-      user-scalable=no, weil ein Doppeltipp auf die Sprechtaste sonst
-      hineinzoomt statt zu senden.
     -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
     />
     <meta name="theme-color" content="#070a12" />
     <!-- Vom Startbildschirm aus ohne Safari-Leisten starten. -->
@@ -26,17 +24,21 @@
   <body>
     <!-- ── Koppeln ───────────────────────────────────────────── -->
     <section id="pairing" class="screen">
-      <h1>James koppeln</h1>
+      <div class="eyebrow">JAMES · DEIN ASSISTENT</div>
+      <h1>Dein Rechner.
+        In deiner Hand.</h1>
+      <p class="intro">Sprich mit James, schicke Aufgaben und höre seine Antworten direkt auf deinem iPhone.</p>
       <p class="hint">
-        Die Marke steht am Rechner unter <strong>Einstellungen, Telefon</strong>.
+        Adresse und Kopplungscode stehen am Rechner unter <strong>Einstellungen, Telefon</strong>.
       </p>
       <label for="host">Rechner</label>
       <input id="host" type="text" inputmode="url" autocapitalize="off" autocorrect="off"
              spellcheck="false" placeholder="192.168.1.20:8788" />
-      <label for="token">Marke</label>
-      <input id="token" type="text" autocapitalize="off" autocorrect="off" spellcheck="false"
+      <label for="token">Kopplungscode</label>
+      <input id="token" type="password" autocapitalize="off" autocorrect="off" spellcheck="false"
              placeholder="…" />
       <button id="pair" class="primary">Verbinden</button>
+      <button id="pair-back" class="ghost" hidden>Zurück zu James</button>
       <p id="pair-error" class="error" hidden></p>
     </section>
 
@@ -44,11 +46,13 @@
     <section id="main" class="screen" hidden>
       <header>
         <div id="dot" class="dot" data-state="offline" aria-hidden="true"></div>
-        <span id="status">nicht verbunden</span>
+        <div class="brand"><strong>James</strong><span id="status" role="status">nicht verbunden</span></div>
         <button id="settings" class="ghost" aria-label="Einstellungen">⋯</button>
       </header>
 
-      <div id="note" class="note"></div>
+      <div class="connection-tools"><span>DEIN ASSISTENT, ÜBERALL IM WLAN</span><button id="reconnect" class="ghost">Neu verbinden</button></div>
+      <div id="note" class="note" role="status" aria-live="polite"></div>
+      <div class="audio-panel"><div><strong>Antworten auf dem iPhone</strong><span id="audio-status" role="status">Ton einmal durch Antippen aktivieren</span></div><button id="audio-test" class="ghost">Ton prüfen</button></div>
 
       <!--
         Die Kugel ist hier bewusst nur ein Kreis und kein Three.js-Nachbau:
@@ -57,21 +61,23 @@
       -->
       <div class="stage">
         <div id="crystal" class="crystal" role="button" tabindex="0"
-             aria-label="James ansprechen oder stilllegen"></div>
+             aria-label="James ansprechen oder unterbrechen"></div>
+        <h2>Was kann ich für dich tun?</h2><p>Eine Frage. Eine Idee. Dein nächster Schritt.</p>
       </div>
 
-      <button id="talk" class="talk">
-        <span class="talk-label">Halten zum Sprechen</span>
+      <details class="conversation" aria-label="Gespräch"><summary>Gespräch ansehen</summary><div class="section-heading"><h2>Gespräch</h2><button id="clear-chat" class="ghost">Leeren</button></div><div id="messages" role="log" aria-live="polite"><p class="empty-chat">Hier erscheinen deine Nachrichten und James’ Antworten.</p></div></details>
+      <button id="talk" class="talk" aria-pressed="false">
+        <span class="talk-icon" aria-hidden="true">◉</span><span class="talk-label">Halten zum Sprechen</span><small>Loslassen, um zu senden</small>
       </button>
 
       <form id="say-form" class="say">
-        <input id="say" type="text" placeholder="oder tippen…" autocomplete="off" />
+        <label class="sr-only" for="say">Nachricht an James</label><textarea id="say" rows="2" maxlength="8000" placeholder="Schreib James eine Nachricht …"></textarea>
         <button type="submit" class="ghost" aria-label="Senden">↑</button>
       </form>
 
       <footer>
         <button id="wake" class="ghost">Rechner wecken</button>
-        <button id="pause" class="ghost">Stilllegen</button>
+        <button id="pause" class="ghost">Pausieren</button>
       </footer>
     </section>
 

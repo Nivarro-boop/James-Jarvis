@@ -11,6 +11,9 @@ import ExpoModulesCore
 public final class JarvisWakeModule: Module {
   public func definition() -> ModuleDefinition {
     Name("JarvisWake")
+    OnCreate { _ = WatchRelay.shared }
+    AsyncFunction("configureWatch") { (link: String?) in try WatchRelay.shared.configure(link) }
+    Function("watchStatus") { WatchRelay.shared.status() }
 
     AsyncFunction("wake") { (mac: String, broadcast: String, address: String) in
       let packet = try magicPacket(mac: mac)
@@ -19,7 +22,7 @@ public final class JarvisWakeModule: Module {
       for target in [broadcast, address] where !target.isEmpty {
         do {
           // Dreimal, denn UDP verspricht nichts.
-          for _ in 0..<3 { try send(packet, to: target) }
+          for _ in 0..<3 { try sendWakePacket(packet, to: target) }
           delivered = true
         } catch let error as WakeException {
           failures.append(error.reason)
@@ -53,7 +56,7 @@ func magicPacket(mac: String) throws -> [UInt8] {
   return packet
 }
 
-func send(_ packet: [UInt8], to host: String) throws {
+func sendWakePacket(_ packet: [UInt8], to host: String) throws {
   var addr = sockaddr_in()
   addr.sin_len = UInt8(MemoryLayout<sockaddr_in>.size)
   addr.sin_family = sa_family_t(AF_INET)

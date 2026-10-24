@@ -87,12 +87,18 @@ export interface WsSocket {
   onClose: (() => void) | null
 }
 
+/** Also protect rejected upgrades: they never reach the framed connection. */
+export function guardSocket(socket: Duplex): void {
+  socket.on('error', () => socket.destroy())
+}
+
 /**
  * Beantwortet den Upgrade-Handschlag und gibt die fertige Verbindung zurück.
  * `null` heißt: war keine gültige WebSocket-Anfrage, die Verbindung ist schon
  * abgewiesen.
  */
 export function accept(req: IncomingMessage, socket: Duplex, head?: Buffer): WsSocket | null {
+  guardSocket(socket)
   const key = req.headers['sec-websocket-key']
   const version = req.headers['sec-websocket-version']
 

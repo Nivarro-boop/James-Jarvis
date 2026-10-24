@@ -11,4 +11,8 @@ const builtFiles = ['out/main/index.js', 'out/preload/index.js', 'out/renderer/c
 for (const name of builtFiles) assert.ok(asar.extractFile(path, require('node:path').normalize(name)).equals(fs.readFileSync(name)), 'Packaged build is outdated: ' + name)
 for(const name of ['windows-helper.ps1','input-server.ps1','uia-server.ps1','audio-devices.ps1'])assert.ok(fs.existsSync('dist/win-unpacked/resources/'+name),name)
 assert.ok(!files.some(f=>/out[\\/]audit[\\/]|\.log$/.test(f)),'Audit logs packaged')
+assert.ok(!files.some(f => /out[\\/][^\\/]+\.(?:cjs|mjs)$/.test(f)), 'UI test wrapper packaged')
+for (const name of ['index.html', 'app.js', 'style.css', 'sw.js', 'mic-worklet.js']) {
+  assert.ok(fs.readFileSync('dist/win-unpacked/resources/companion/' + name).equals(fs.readFileSync('resources/companion/' + name)), 'Phone resource is outdated: ' + name)
+}
 console.log('PASS packaged version '+version+': UI, main, wake models, Windows helpers; no audit logs')

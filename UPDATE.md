@@ -1,3 +1,31 @@
+# GitHub-Update: ruhige Orb-Ansicht (24.10.2026)
+
+Markierte Knöpfe entfernt; Schreiben und Pause im Menü erhalten. Alte
+Diagnoseeinträge werden als Loghinweise benannt. Abgewiesene WebSocket-
+Verbindungen fangen Socket-Resets ab. Die bisherigen lokal geprüften Handy-,
+Anmelde- und Einstellungsverbesserungen werden mit veröffentlicht.
+[Prüfbericht](docs/GitHub-Update-1.3.12.md).
+
+# Orb, Apple Watch und Remote-Anmeldung – Update 1.3.11 (24.10.2026)
+
+Großer Orb statt Kacheln, Schreiben und Verlauf auf Wunsch, kompaktere
+Einstellungen und Verbindungen, gemeinsamer Kopplungs-QR-Code. Die ChatGPT-
+Anmeldung hat einen geprüften Rückweg für Remote Play. Computer-Abbruch und
+gehaltene Maustasten abgesichert; Desktop-npm-Audit ohne Meldungen.
+
+Native Watch-App und iPhone-Relay sind implementiert. Signierter Apple-Build
+und echte Gerätetests stehen aus; Team-/Expo-Projekt-ID fehlen noch.
+2.119 Tests, Typechecks, Mobile-Lint und UI-Prüfungen bestanden.
+[Änderungen, Bilder und Prüfgrenzen](docs/Orb-Watch-Remote-Update-1.3.11.md).
+
+# iPhone und Audio – Update 1.3.10 (24.10.2026)
+
+Neue Handy-Oberfläche mit Tonprüfung, Gesprächsverlauf und gesicherten Entwürfen.
+Audiofreigabe, Mikrofon-Lebenszyklus, Texte aus der Pause, Sendebestätigung und
+Rechnerstatus repariert. 2.101 Tests, Typecheck, Handy-Browserprüfung und sieben
+Desktop-UI-Prüfungen bestanden. Einzelheiten und Gerätegrenzen:
+[Prüfbericht](docs/iPhone-Update-1.3.10-2026-10-24.md).
+
 # Gesamtprüfung und iPhone-App – lokale Ergänzung 24.10.2026
 
 - Gesamtprüfung Desktop: Typecheck, 2.093 Tests, Produktionsbuild und sieben

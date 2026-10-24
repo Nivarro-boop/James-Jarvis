@@ -1,5 +1,14 @@
 # James-Jarvis
 
+Update **1.3.11**: großer Orb, kompakte Einstellungen, iPhone-QR-Kopplung und
+Remote-Play-Rückweg für ChatGPT. Native Apple-Watch-Erweiterung implementiert;
+Apple-Build und Gerätetests stehen noch aus.
+[Änderungen und Prüfungen](docs/Orb-Watch-Remote-Update-1.3.11.md).
+
+Update **1.3.10 (24.10.2026)**: überarbeitete iPhone-Oberfläche, Tonprüfung,
+Gesprächsverlauf, sichere Entwürfe und zuverlässigere Sprach- und Textbedienung
+zwischen Handy und Rechner. [Änderungen und Prüfungen](docs/iPhone-Update-1.3.10-2026-10-24.md).
+
 Lokale Überarbeitung **23.10.2026**: neue Gestaltung von Startseite und Einstellungen,
 Texteingabe mit erhaltenem Entwurf, Gesprächsansicht, Tastaturmenü und fokussierter Lernmodus.
 Lernkarten werden validiert und mitgesichert; PC-Einlesen und Einrichtung sind robuster.
