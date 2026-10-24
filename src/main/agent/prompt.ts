@@ -1,4 +1,5 @@
 import { workingContextBlock, selectContextMemories } from '@shared/workingContext'
+import { pcProfileBlock } from './pcProfile'
 import { workingContext } from './workingContext'
 import { listMemories, recentDesktopTranscript } from '../db'
 import { systemPromptDe, buildMemoryBlock, buildUnavailableBlock } from '@shared/prompts/system.de'
@@ -107,6 +108,8 @@ export function buildSystemPrompt(options: { lazyTools?: boolean; query?: string
 
   const memories = options.query ? selectContextMemories(listMemories(500), options.query, settings.tokenSaver.enabled ? 4 : 12) : baselineMemories(settings.tokenSaver.enabled ? 4 : 12)
   if (memories.length > 0) parts.push(buildMemoryBlock(memories))
+  const pc = pcProfileBlock(settings.tokenSaver.enabled ? 600 : 1500)
+  if (pc) parts.push(pc)
 
   if (options.desktopContext) {
     const context = workingContextBlock(workingContext(), settings.tokenSaver.enabled ? 1800 : 5000)

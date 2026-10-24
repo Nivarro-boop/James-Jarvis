@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { defineTool, type ToolDefinition } from '../registry'
-import { getSettings } from '../../store/settings'
+import { homeLocation } from '../../location'
 import type { GeoPoint, LatLon, PlacesCard, RouteCard, RouteMode } from '@shared/types'
 import { ROUTE_PATH_MAX } from '@shared/types'
 import { clock, spokenDistance, spokenDuration } from '@shared/format'
@@ -56,7 +56,7 @@ const ortSuchen = defineTool({
     'Findet Orte, Adressen, Geschäfte und Einrichtungen in der Nähe, mit Adresse und Entfernung. ' +
     'Für "wo ist die nächste Apotheke", "gibt es hier einen Supermarkt", "wo liegt der Stephansdom", ' +
     '"welche Adresse hat das Café Central".',
-  spokenHint: 'Ich schaue nach.',
+  spokenHint: 'Mhm.',
   schema: z.object({
     suche: z
       .string()
@@ -69,7 +69,7 @@ const ortSuchen = defineTool({
   }),
   async execute({ suche, nahe, anzahl }, ctx) {
     const signal = ctx?.signal
-    const around = nahe?.trim() || getSettings().homeLocation.trim()
+    const around = nahe?.trim() || await homeLocation()
     const center = around ? await locate(around, undefined, signal) : undefined
     const limit = Math.min(10, Math.max(1, Math.round(anzahl ?? 3)))
 
@@ -128,7 +128,7 @@ const routeBerechnen = defineTool({
     'Rechnet Fahrzeit und Entfernung von A nach B aus, mit dem Auto, zu Fuß oder mit dem Fahrrad. ' +
     'Für "wie lange brauche ich nach Graz", "wie weit ist es zum Flughafen", ' +
     '"wann bin ich dort, wenn ich jetzt losfahre".',
-  spokenHint: 'Ich rechne den Weg aus.',
+  spokenHint: 'Okay.',
   schema: z.object({
     nach: z.string().describe('Ziel: Adresse, Ort oder bekannter Platz.'),
     von: z.string().optional().describe('Start. Ohne Angabe der eingestellte Standardstandort.'),
@@ -136,7 +136,7 @@ const routeBerechnen = defineTool({
   }),
   async execute({ nach, von, modus }, ctx) {
     const signal = ctx?.signal
-    const start = von?.trim() || getSettings().homeLocation.trim()
+    const start = von?.trim() || await homeLocation()
     if (!start) {
       throw new Error('Noch kein Standardstandort eingestellt. Unter Zugänge den Ort speichern oder den Start nennen.')
     }

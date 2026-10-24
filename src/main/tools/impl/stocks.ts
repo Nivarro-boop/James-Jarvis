@@ -201,7 +201,7 @@ const stockPrice = defineTool({
       .optional()
       .describe('Auch Veränderung zum Vortag nennen. Standard ja.')
   }),
-  spokenHint: 'Ich hole den Kurs.',
+  spokenHint: 'Okay.',
   async execute({ symbol, vergleich = true }, ctx) {
     const input = symbol.trim()
     let quote: StockCard | null = null
@@ -264,7 +264,7 @@ const exchangeRate = defineTool({
     nach: z.string().describe('Zielwährung, z.B. EUR, USD, CHF.'),
     betrag: z.number().optional().describe('Betrag zum Umrechnen. Standard ist 1.')
   }),
-  spokenHint: 'Ich hole den Wechselkurs.',
+  spokenHint: 'Mhm.',
   async execute({ von, nach, betrag = 1 }) {
     const fromUpper = von.toUpperCase().trim()
     const toUpper = nach.toUpperCase().trim()

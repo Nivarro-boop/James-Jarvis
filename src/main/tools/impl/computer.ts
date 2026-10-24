@@ -356,7 +356,7 @@ const computerTask = defineTool({
   // Sperrliste unten und der Not-Aus über dreimal Escape — die bleiben, und
   // sie sind auch das, was wirklich schützt. Wer die Rückfrage möchte, stellt
   // computer_task in den Einstellungen auf "fragt nach".
-  spokenHint: 'Ich übernehme kurz.',
+  spokenHint: 'Okay.',
   async execute({ goal, startApp }, ctx) {
     const settings = getSettings()
     const useChatGpt = settings.brainProvider === 'chatgpt' || settings.speech.thinkProvider === 'chatgpt'

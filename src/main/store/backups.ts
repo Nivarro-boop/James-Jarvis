@@ -7,6 +7,7 @@ import { promisify } from 'node:util'
 import { snapshotDb } from '../db'
 import { getSettings } from './settings'
 import { listSkills } from '../agent/skills'
+import { listDecks } from '../study/store'
 import type { BackupInfo } from '@shared/types'
 
 const BACKUP_FILE = /^(automatic-\d{4}-\d{2}-\d{2}|manual-\d+-[a-f0-9-]+)\.james-backup\.json\.gz$/
@@ -62,8 +63,9 @@ async function snapshot(automatic: boolean, now: number): Promise<BackupInfo> {
     for (const server of settings.mcpServers) server.env = {}
     const payload = { format: 'void-james-backup', version: 1, createdAt: now,
       appVersion: app.getVersion(), settings, skills: listSkills(),
+      study: { version: 1, decks: listDecks() },
       database: { encoding: 'base64', sqlite: readFileSync(databaseFile).toString('base64') },
-      excluded: ['Keystore', 'OAuth-Tokens', 'MCP-Umgebungswerte', 'Hermes-Profil', 'Sprachmodelle', 'Protokolldateien'] }
+      excluded: ['Keystore', 'OAuth-Tokens', 'MCP-Umgebungswerte', 'Sprachmodelle', 'Protokolldateien'] }
     const compressed = await compress(JSON.stringify(payload))
     writeFileSync(staging, compressed, { flag: 'wx', flush: true })
     renameSync(staging, file)

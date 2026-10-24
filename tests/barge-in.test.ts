@@ -53,10 +53,10 @@ it('bricht den laufenden Denkzug ab und verarbeitet den neuen Satz ohne alte Akt
     write: false, platform: 'node', format: 'cjs', packages: 'external', logLevel: 'silent',
     alias: { '@shared': resolve('src/shared') },
     plugins: [{ name: 'cascade-fixture', setup(b) {
-      b.onResolve({ filter: /(?:\.\/brain|audio\/(?:player|elevenVoice|piperVoice|vibeVoice))$/ }, args => ({ path: args.path, namespace: 'fixture' }))
+      b.onResolve({ filter: /(?:\.\/brain|audio\/(?:player|elevenVoice|piperVoice))$/ }, args => ({ path: args.path, namespace: 'fixture' }))
       b.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ loader: 'js', contents:
         args.path.endsWith('brain') ? 'export const createBrain=()=>window.testBrain; export class GeminiBrain {}'
-        : 'export const createPlayer=()=>{}; export const createVoiceStream=()=>{}; export const planVoice=()=>{}; export const createPiperStream=()=>{}; export const planPiperVoice=()=>{}; export const createVibeVoiceStream=()=>{}; export const planVibeVoice=()=>{}' }))
+        : 'export const createPlayer=()=>{}; export const createVoiceStream=()=>{}; export const planVoice=()=>{}; export const createPiperStream=()=>{}; export const planPiperVoice=()=>{}' }))
     } }] })
   let firstHooks: any
   const inputs: string[] = []

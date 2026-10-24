@@ -246,7 +246,7 @@ const preview = defineTool({
     'wenn der Nutzer "räum mal auf" sagt — dann kannst du ihm nennen, was passieren würde, ' +
     'bevor es passiert.',
   schema: z.object({ folder: folderField, by: byField }),
-  spokenHint: 'Ich seh mir das an.',
+  spokenHint: 'Okay.',
   async execute({ folder, by }) {
     const dir = app.getPath(FOLDERS[folder])
     const files = await scan(dir, by ?? 'art')
@@ -294,7 +294,7 @@ const organize = defineTool({
     'Nichts wird gelöscht oder überschrieben, bestehende Unterordner bleiben unberührt, und ' +
     'file_organize_undo macht den Lauf rückgängig.',
   schema: z.object({ folder: folderField, by: byField }),
-  spokenHint: 'Ich räum auf.',
+  spokenHint: 'Mhm.',
   async execute({ folder, by }, ctx) {
     const how = by ?? 'art'
     const dir = app.getPath(FOLDERS[folder])
@@ -375,7 +375,7 @@ const undo = defineTool({
     'Macht das letzte Aufräumen rückgängig und legt alle Dateien dorthin zurück, wo sie waren. ' +
     'Für "mach das wieder rückgängig" oder "so wollte ich das nicht".',
   schema: z.object({}),
-  spokenHint: 'Ich stell das zurück.',
+  spokenHint: 'Okay.',
   async execute() {
     const journal = await readJournal()
     if (!journal || journal.moves.length === 0) {

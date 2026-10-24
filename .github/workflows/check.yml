@@ -1,0 +1,31 @@
+name: Pull request checks
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test -- --low-resource
+      # Build application code without fetching optional voice assets.
+      - run: npx electron-vite build
+      - run: node scripts/check-redesign-ui.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: isolated-ui-screenshots
+          path: out/audit/redesign/*.png
+          if-no-files-found: ignore

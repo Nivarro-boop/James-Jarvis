@@ -59,7 +59,7 @@ const play = defineTool({
       .optional()
       .describe('Gerätename, etwa "Echo Dot". Weglassen, wenn der Nutzer keines genannt hat.')
   }),
-  spokenHint: 'Einen Moment.',
+  spokenHint: 'Mhm.',
   async execute({ query, kind, service, device }, ctx) {
     const outcome = await playMusic({
       query,
@@ -159,7 +159,7 @@ const list = defineTool({
     'die Ausgabegeräte dieses Rechners. Nutze das, wenn du den genauen Namen brauchst oder der ' +
     'Nutzer fragt, wo überhaupt gespielt werden kann.',
   schema: z.object({}),
-  spokenHint: 'Ich schau nach.',
+  spokenHint: 'Okay.',
   async execute() {
     const devices = await allDevices()
     if (devices.length === 0) {
@@ -198,7 +198,7 @@ const switchDevice = defineTool({
   schema: z.object({
     device: z.string().describe('Der Gerätename, so wie der Nutzer ihn sagt.')
   }),
-  spokenHint: 'Mach ich.',
+  spokenHint: 'Mhm.',
   async execute({ device }) {
     const devices = await allDevices()
     const match = matchDevice(devices, device)
@@ -341,7 +341,7 @@ const connect = defineTool({
     'Verbindet James mit dem Spotify-Konto des Nutzers. Öffnet die Anmeldung im Browser. ' +
     'Für "verbinde Spotify" oder wenn music_play meldet, dass Spotify nicht verbunden ist.',
   schema: z.object({}),
-  spokenHint: 'Ich öffne die Spotify-Anmeldung.',
+  spokenHint: 'Okay.',
   async execute() {
     const result = await connectSpotify()
     if (!result.ok) return { verbunden: false, fehler: result.error }

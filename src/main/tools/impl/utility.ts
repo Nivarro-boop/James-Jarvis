@@ -2,6 +2,7 @@ import { z } from 'zod'
 import { defineTool, type ToolDefinition } from '../registry'
 import { fallbackNote, thinkText } from '../../providers/text'
 import { getSettings } from '../../store/settings'
+import { homeLocation } from '../../location'
 import { geocodeOpenMeteo } from '../../maps/geocode'
 import type { WeatherCard } from '@shared/types'
 
@@ -76,8 +77,8 @@ const weather = defineTool({
     days: z.number().optional().describe('Wie viele Tage Vorhersage, Standard zwei, höchstens sieben.')
   }),
   async execute({ place, days }, ctx) {
-    const location = place?.trim() || getSettings().homeLocation.trim()
-    if (!location) throw new Error('Noch kein Standardstandort eingestellt. Unter Zugänge den Ort speichern oder in der Frage nennen.')
+    const location = place?.trim() || await homeLocation()
+    if (!location) throw new Error('Noch kein Standardstandort eingestellt. In den Einstellungen unter Konten & Standort den Ort speichern oder den echten Standort erlauben.')
     const spot = await geocode(location)
     const span = Math.min(CARD_DAYS, Math.max(1, days ?? CARD_DAYS))
 

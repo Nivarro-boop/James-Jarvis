@@ -2,9 +2,69 @@ import { useEffect, useState, type JSX } from 'react'
 import type { SelfHealDashboard } from '@shared/types'
 import { useCrystal } from '../store/crystalStore'
 
-export function HealthPanel(): JSX.Element {
+export interface HealthSummary {
+  loading: boolean
+  problems: number
+  /** Kurztext der ersten Störung, damit oben steht, was los ist. */
+  first: string
+  reporting: boolean
+  fixing: boolean
+  note: string
+  /** Reparieren und, wenn erlaubt, einen anonymen Bericht senden. */
+  fix: () => Promise<void>
+}
+
+export function useHealthSummary(): HealthSummary {
+  const [report, setReport] = useState<SelfHealDashboard['report'] | null>(null)
+  const [fixing, setFixing] = useState(false)
+  const [note, setNote] = useState('')
+  const lastError = useCrystal(s => s.lastError)
+  const state = useCrystal(s => s.state)
+  const settings = useCrystal(s => s.settings)
+  useEffect(() => {
+    let disposed = false
+    const load = (): void => {
+      void window.jarvis.invoke('selfheal:status', { hours: 24 })
+        .then(next => { if (!disposed) setReport(next.report) })
+        .catch(() => { if (!disposed) setReport(r => r ?? { hours: 24, total: 0, healed: 0, summary: '', problems: [] }) })
+    }
+    load()
+    const timer = window.setInterval(load, 15000)
+    return () => { disposed = true; window.clearInterval(timer) }
+  }, [])
+  const runtime = state === 'error' && lastError ? lastError : ''
+  const list = report?.problems ?? []
+  const reporting = Boolean(settings?.diagnosticReporting?.enabled)
+  const fix = async (): Promise<void> => {
+    if (fixing) return
+    setFixing(true)
+    setNote('Repariere …')
+    try {
+      const next = await window.jarvis.invoke('selfheal:repair', { restartVoice: true })
+      setReport(next.report)
+      const sent = reporting && next.report.problems.length
+        ? await window.jarvis.invoke('diagnostics:send').catch(() => ({ ok: false, detail: '' }))
+        : null
+      setNote(!next.report.problems.length ? 'Behoben.'
+        : sent?.ok ? `${next.report.problems.length} offen · Bericht gesendet.`
+        : `${next.report.problems.length} offen · Einstellungen → Diagnose.`)
+    } catch { setNote('Reparatur fehlgeschlagen.') }
+    finally { setFixing(false) }
+  }
+  return {
+    loading: report === null,
+    problems: list.length + (runtime ? 1 : 0),
+    first: runtime || list[0]?.message || '',
+    reporting,
+    fixing,
+    note,
+    fix
+  }
+}
+
+export function HealthPanel({ inline = false }: { inline?: boolean } = {}): JSX.Element {
   const [health, setHealth] = useState<SelfHealDashboard | null>(null)
-  const [open, setOpen] = useState(false)
+  const [open, setOpen] = useState(inline)
   const [busy, setBusy] = useState(false)
   const [notice, setNotice] = useState('')
   const lastError = useCrystal(s => s.lastError)
@@ -59,12 +119,12 @@ export function HealthPanel(): JSX.Element {
     } catch (e) { setNotice(e instanceof Error ? e.message : 'Reparatur fehlgeschlagen.') }
     finally { setBusy(false) }
   }
-  return <div className="health-control">
-    <button className="home-chip health-toggle" data-error={count > 0} aria-expanded={open}
-      onClick={() => setOpen(!open)}>{count ? `Fehler beheben · ${count}` : 'Fehler beheben'}</button>
+  return <div className={inline ? 'health-control is-inline' : 'health-control'}>
+    {!inline && <button className="home-chip health-toggle" data-error={count > 0} aria-expanded={open}
+      onClick={() => setOpen(!open)}>{count ? `Fehler beheben · ${count}` : 'Fehler beheben'}</button>}
     {open && <section className="health-popover" aria-label="Systemdiagnose">
       <div className="home-card-head"><span className="home-card-tag">Diagnose & Reparatur</span>
-        <button className="home-nav-btn" onClick={() => setOpen(false)} aria-label="Diagnose schließen">×</button></div>
+        {!inline && <button className="home-nav-btn" onClick={() => setOpen(false)} aria-label="Diagnose schließen">×</button>}</div>
       <p>{count ? 'Fehler gefunden. Verfügbare Reparaturen jetzt ausführen?' : health ? 'Das Log wird überwacht. Prüfe die eingerichteten Dienste jederzeit.' : 'Diagnose wird geladen …'}</p>
       {runtimeError && <p role="alert">{runtimeError}</p>}
       {showWakeMissing && <p>Weckwort nicht bereit. Ein passender Klassifikator muss installiert werden. Klick und Hotkey funktionieren weiter.</p>}

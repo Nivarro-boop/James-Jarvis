@@ -21,7 +21,7 @@ const desktopTask = defineTool({
     goal: z.string().describe('Was erreicht werden soll, konkret in einem Satz'),
     app: z.string().optional().describe('Fenstertitel oder Programmname; leer = aktives Fenster')
   }),
-  spokenHint: 'Mach ich.',
+  spokenHint: 'Mhm.',
   async execute({ goal, app }, ctx) {
     const vision = async (): Promise<DesktopResult> => {
       const result = await runTool({

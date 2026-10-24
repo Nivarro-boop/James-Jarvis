@@ -780,7 +780,7 @@ export class JarvisController {
     this.bargeIn.reset()
     const provider = this.settings.speech.provider
     const wantsOwnVoice =
-      (provider === 'elevenlabs' || provider === 'piper' || provider === 'vibevoice') &&
+      (provider === 'elevenlabs' || provider === 'piper') &&
       !this.cascadeGivenUp
     // OpenAI Realtime ist wie Gemini Live ein Motor aus einem Stück. Gibt er
     // auf, übernimmt Gemini Live — derselbe Rückweg wie bei der Kaskade.
@@ -792,7 +792,7 @@ export class JarvisController {
         : new LiveSession(this.settings, this.sessionEvents(current))
 
     const label = wantsRealtime ? 'OpenAI Realtime'
-      : wantsOwnVoice ? `${this.settings.speech.thinkProvider === 'chatgpt' ? 'ChatGPT' : this.settings.speech.thinkProvider === 'hermes' ? 'Hermes' : this.settings.speech.thinkProvider === 'ollama' ? 'Ollama' : 'Gemini'} · ${provider === 'piper' ? 'Piper' : provider === 'elevenlabs' ? 'ElevenLabs' : 'VibeVoice'}`
+      : wantsOwnVoice ? `${this.settings.speech.thinkProvider === 'chatgpt' ? 'ChatGPT' : this.settings.speech.thinkProvider === 'ollama' ? 'Ollama' : 'Gemini'} · ${provider === 'piper' ? 'Piper' : 'ElevenLabs'}`
       : 'Gemini Live'
     useCrystal.getState().setEngineLabel(label)
     this.gaps.setChannel(wantsRealtime ? 'realtime' : wantsOwnVoice ? 'cascade' : 'live')

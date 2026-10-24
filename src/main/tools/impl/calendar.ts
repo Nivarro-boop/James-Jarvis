@@ -212,7 +212,7 @@ const listCalendars = defineTool({
     'oder bevor du einen Termin in einen bestimmten Kalender einträgst.',
   schema: z.object({}),
   requiresSecret: 'googleOAuthClientId',
-  spokenHint: 'Ich schaue, welche Kalender du hast.',
+  spokenHint: 'Okay.',
   async execute() {
     return withCalendar(async (calendar) => {
       const list = await listCalendarIds(calendar)
@@ -247,7 +247,7 @@ const agenda = defineTool({
       )
   }),
   requiresSecret: 'googleOAuthClientId',
-  spokenHint: 'Ich sehe im Kalender nach.',
+  spokenHint: 'Mhm.',
   async execute({ zeitraum, maximal, kalender }, ctx) {
     const { from, to, label } = resolveRange(zeitraum ?? 'heute')
     const showAgenda = (items: { event: any; name?: string }[]): void => {
@@ -358,7 +358,7 @@ const search = defineTool({
       .describe('Name oder ID eines bestimmten Kalenders. Ohne Angabe alle Kalender.')
   }),
   requiresSecret: 'googleOAuthClientId',
-  spokenHint: 'Ich suche den Termin.',
+  spokenHint: 'Okay.',
   async execute({ suche, vergangenheit, kalender }) {
     return withCalendar(async (calendar) => {
       const now = new Date()

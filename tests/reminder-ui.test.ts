@@ -15,6 +15,7 @@ it('verbindet automatische Erinnerungen mit Sprache und entfernt den Listener be
     './live/companionBridge': 'export const startCompanionBridge=()=>({stop(){}})',
     './store/crystalStore': 'export const useCrystal={getState:()=>({setSettings(){}})}',
     './styles.css': '',
+    './refinement.css': '',
     './home/home.css': ''
   }
   const bundle = await build({

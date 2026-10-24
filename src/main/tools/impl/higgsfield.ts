@@ -162,7 +162,7 @@ const generateImage = defineTool({
     quality: z.enum(['standard', 'hoch']).optional().describe('Standard ist schneller und günstiger.')
   }),
   requiresSecret: 'higgsfield',
-  spokenHint: 'Ich lege los.',
+  spokenHint: 'Okay.',
   async execute({ prompt, aspectRatio, quality }) {
     const model = quality === 'hoch' ? MODELS.bild_hq : MODELS.bild
     const response = await submit(model, {
@@ -198,7 +198,7 @@ const generateVideo = defineTool({
     quality: z.enum(['standard', 'hoch']).optional()
   }),
   requiresSecret: 'higgsfield',
-  spokenHint: 'Ich starte das Video.',
+  spokenHint: 'Mhm.',
   async execute({ prompt, imageUrl, aspectRatio, quality }) {
     const model = quality === 'hoch' ? MODELS.video_hq : MODELS.video
     const body: Record<string, unknown> = {

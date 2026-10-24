@@ -9,7 +9,6 @@ import { getSettings } from '../store/settings'
 import { telephonyStatus } from '../telephony'
 import { piperHealth } from '../providers/piper'
 import { whisperHealth } from '../providers/whisper'
-import { voiceServiceStatus } from '../voice/vibevoice'
 import { forgetOllamaReachability, ollamaReachable } from '../providers/ollama'
 import {
   healthReport,
@@ -57,7 +56,6 @@ const AREA_BY_SCOPE: Record<string, Area> = {
   telefonie: 'telefonie',
   text: 'gemini',
   uia: 'werkzeug',
-  vibevoice: 'stimme',
   whisper: 'stimme',
   window: 'system'
 }
@@ -188,18 +186,6 @@ export async function inspectConfiguredServices(): Promise<void> {
   await configuration('elevenlabs-zugang-fehlt', !needsEleven || !!getSecret('elevenlabs'), 'ElevenLabs-API-Zugang fehlt oder ist nicht lesbar. Unter Stimme den ElevenLabs-Schlüssel erneut eintragen und prüfen.', 'stimme')
   await configuration('chatgpt-anmeldung-fehlt', native || settings.speech.thinkProvider !== 'chatgpt' || chatGptStatus().connected, 'ChatGPT-Anmeldung fehlt oder ist nicht lesbar. Unter Stimme erneut mit ChatGPT anmelden und ein Kontomodell wählen.')
   await configuration('wake-modell-fehlt', !settings.wake.enabled || wakeStatus().installed, 'Weckwort-Modell fehlt. Einen passenden Klassifikator installieren; für Hey Jarvis ist jarvis.onnx erforderlich.')
-
-  if (settings.speech.provider === 'vibevoice') {
-    const status = voiceServiceStatus()
-    if (!status.running && status.phase !== 'startet' && status.phase !== 'lädt') {
-      await report({
-        area: 'stimme',
-        code: 'dienst-beendet',
-        message: status.detail || 'Der ausgewählte VibeVoice-Dienst läuft nicht.',
-        context: { source: 'health-check', provider: 'vibevoice' }
-      })
-    }
-  }
 
   if (settings.speech.provider === 'piper') {
     const status = await piperHealth()

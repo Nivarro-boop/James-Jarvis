@@ -127,6 +127,7 @@ def parse_args(argv):
     """Nur Pfade und Zahlen. Was hier nicht steht, ist keine Einstellung."""
     voice = ""
     length_scale = 1.0
+    noise = {}
     index = 0
     while index < len(argv):
         arg = argv[index]
@@ -139,10 +140,16 @@ def parse_args(argv):
             except ValueError:
                 note("Das Sprechtempo war keine Zahl. Ich nehme die Vorgabe der Stimme.")
             index += 2
+        elif arg in ("--noise-scale", "--noise-w") and index + 1 < len(argv):
+            try:
+                noise[arg[2:].replace("-", "_")] = float(argv[index + 1])
+            except ValueError:
+                note("Die Klangangabe war keine Zahl. Ich nehme die Vorgabe der Stimme.")
+            index += 2
         else:
             note("Die Angabe " + repr(arg) + " kenne ich nicht und übergehe sie.")
             index += 1
-    return voice, length_scale
+    return voice, length_scale, noise
 
 
 def import_piper():
@@ -205,7 +212,7 @@ def audio_bytes(chunk):
 SENTENCE_SILENCE = 0.2
 
 
-def make_synth(voice, synthesis_config, length_scale):
+def make_synth(voice, synthesis_config, length_scale, noise=None):
     """
     Einen Weg von Text zu Tonblöcken bauen, passend zur vorgefundenen Fassung.
 
@@ -214,9 +221,17 @@ def make_synth(voice, synthesis_config, length_scale):
     anderen Wert als 1,0 mit. Wer die Eins durchreicht, überschreibt sie.
     """
     scale = None if abs(length_scale - 1.0) < 1e-6 else length_scale
+    noise = noise or {}
 
     if synthesis_config is not None:
-        config = None if scale is None else synthesis_config(length_scale=scale)
+        options = {}
+        if scale is not None:
+            options["length_scale"] = scale
+        if "noise_scale" in noise:
+            options["noise_scale"] = noise["noise_scale"]
+        if "noise_w" in noise:
+            options["noise_w_scale"] = noise["noise_w"]
+        config = synthesis_config(**options) if options else None
 
         def run(text):
             for chunk in voice.synthesize(text, syn_config=config):
@@ -228,7 +243,11 @@ def make_synth(voice, synthesis_config, length_scale):
 
         def run(text):
             for chunk in voice.synthesize_stream_raw(
-                text, length_scale=scale, sentence_silence=SENTENCE_SILENCE
+                text,
+                length_scale=scale,
+                noise_scale=noise.get("noise_scale"),
+                noise_w=noise.get("noise_w"),
+                sentence_silence=SENTENCE_SILENCE,
             ):
                 yield audio_bytes(chunk)
 
@@ -238,7 +257,7 @@ def make_synth(voice, synthesis_config, length_scale):
 
 
 def main(argv):
-    voice_path, length_scale = parse_args(argv)
+    voice_path, length_scale, noise = parse_args(argv)
     if not voice_path:
         note("Ohne --voice weiß ich nicht, womit ich sprechen soll.")
         return EXIT_ARGS
@@ -259,7 +278,7 @@ def main(argv):
         note("Die Stimme " + os.path.basename(voice_path) + " ließ sich nicht laden: " + str(err))
         return EXIT_VOICE
 
-    synth = make_synth(voice, synthesis_config, length_scale)
+    synth = make_synth(voice, synthesis_config, length_scale, noise)
     if synth is None:
         note(
             "Dieses piper-tts kennt weder synthesize noch synthesize_stream_raw. "

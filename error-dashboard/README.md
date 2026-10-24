@@ -21,7 +21,7 @@ Eine vollständige Bereitstellung ersetzt die Website. Bei einer bestehenden and
 
 ## Deine beiden Adressen
 
-Die Fehlerwebseite läuft auf `https://fastidious-pastelito-1f1564.netlify.app/` (Netlify-Projekt `fastidious-pastelito-1f1564`). JARVIS sendet ab 1.3.4 an `https://fastidious-pastelito-1f1564.netlify.app/api/error-report`; die frühere Voreinstellung `aimarketer-electronics` (nie bereitgestellt) wird beim Start umgestellt.
+Die Fehlerwebseite läuft auf `https://jocular-otter-624907.netlify.app/` (Netlify-Projekt `jocular-otter-624907`). JARVIS sendet ab 1.3.4 an `https://jocular-otter-624907.netlify.app/api/error-report`; die frühere Voreinstellung `aimarketer-electronics` (nie bereitgestellt) wird beim Start umgestellt.
 
 `https://resonant-shortbread-6be4b2.netlify.app/` ist ein älteres Dashboard ohne Function.
 
@@ -63,7 +63,7 @@ Zeilenumbrüche werden zusammengezogen, Markdown-Zeichen wie `*`, `_`, `[`, `<` 
 
 ## Vor dem ersten Lückenbericht bereitstellen
 
-Auf `fastidious-pastelito-1f1564` lief bis 11.10.2026 die ältere Fassung ohne `kind` und ohne Token. Damit Fehlerberichte und Lücken ankommen:
+Auf `jocular-otter-624907` lief bis 11.10.2026 die ältere Fassung ohne `kind` und ohne Token. Damit Fehlerberichte und Lücken ankommen:
 
 1. Dieses Projekt auf dieser Website bereitstellen (siehe „Bereitstellung“) oder Function, `report-handler.mjs`, `@netlify/blobs` und die Weiterleitung in deren Projekt übernehmen.
 2. In Netlify die Umgebungsvariable `JARVIS_REPORT_TOKEN` mit einem langen Zufallswert setzen und neu bereitstellen.

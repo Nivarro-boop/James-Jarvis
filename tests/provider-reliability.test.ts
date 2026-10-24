@@ -8,7 +8,6 @@ import { app, safeStorage } from 'electron'
 import { clearSecret, setSecret } from '@main/secrets/keystore'
 import { geminiClient, generateWithFallback } from '@main/providers/gemini'
 import { chatGptResponse, readResponseStream } from '@main/providers/chatgptResponses'
-import { readHermesEvents } from '@main/providers/hermesEvents'
 import { ollamaThink } from '@main/providers/ollama'
 
 function credentials(t: TestContext): string {
@@ -132,16 +131,6 @@ describe('Provider recovery from stalled operations', () => {
     const body = new ReadableStream<Uint8Array>({ cancel: () => new Promise(() => undefined) })
     const reason = new Error('Test stop')
     const pending = readResponseStream(body, undefined, controller.signal)
-    controller.abort(reason)
-    await assert.rejects(pending, error => error === reason)
-    assert.equal(body.locked, false)
-  })
-
-  it('releases a stuck Hermes event reader on Stop, including stuck cleanup', async () => {
-    const controller = new AbortController()
-    const body = new ReadableStream<Uint8Array>({ cancel: () => new Promise(() => undefined) })
-    const reason = new Error('Test stop')
-    const pending = readHermesEvents(body, 'run_test', () => undefined, controller.signal)
     controller.abort(reason)
     await assert.rejects(pending, error => error === reason)
     assert.equal(body.locked, false)

@@ -43,7 +43,7 @@
 .home .home-dock .live-status-copy small { font-size: 8px; letter-spacing: 1.5px; }
 .home .home-dock .live-status-copy strong { font-size: 13px; }
 .home .home-dock .live-text { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-.home .live-stop { display: inline-flex; gap: 7px; align-items: center; flex: none; }
+.home .live-stop, .home .live-talk { display: inline-flex; gap: 7px; align-items: center; flex: none; }
 .home .live-stop > span { font-size: 9px; }
 .home .live-stop kbd { font: inherit; font-size: 9px; color: #9caea3; border: 1px solid #81988a40; padding: 1px 4px; border-radius: 4px; }
 .home .composer { min-width: 0; }

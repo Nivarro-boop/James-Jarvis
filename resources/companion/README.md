@@ -93,20 +93,14 @@ UDP-Pakete verschicken, und ein Zauberpaket ist nichts anderes. Schläft der
 Rechner, ist auch der Server hier aus — geweckt werden kann er also nur vom
 Telefon, und das geht nur nativ.
 
-Der Weg führt über [Capacitor](https://capacitorjs.com): Es verpackt genau diese
-Dateien in eine iOS-App, ohne dass sie geändert werden müssen.
-
-```bash
-npm create @capacitor/app@latest jarvis-phone
-```
-
-In `capacitor.config.json` den `webDir` auf eine Kopie dieses Ordners zeigen
-lassen. Danach ein Plugin mit einem UDP-Sockel — es gibt fertige, oder zwanzig
-Zeilen Swift — und die Brücke unter dem Namen anmelden, den `app.js` sucht:
+Die App liegt unter [`mobile/`](../../mobile/README.md) (Expo, gebaut mit EAS).
+Sie lädt diese Seite vom Rechner in eine WebView und meldet die Brücke unter
+dem Namen an, den `app.js` sucht:
 
 ```js
 window.jarvisNative = {
-  async wake({ mac, broadcast }) { /* 6× 0xFF, dann 16× die MAC, UDP an Port 9 */ }
+  async wake({ mac, broadcast, address }) { /* 6× 0xFF, dann 16× die MAC, UDP an Port 9 */ },
+  remember({ mac, broadcast, address }) { /* Weckziel merken, falls die Seite später nicht lädt */ }
 }
 ```
 

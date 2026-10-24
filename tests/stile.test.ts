@@ -47,7 +47,10 @@ function definierteKlassen(): Set<string> {
     if (/^(?:https?:|data:|\/\/)/.test(importiert)) return
     const pfad = importiert.startsWith('@renderer/')
       ? resolve(RENDERER, importiert.slice('@renderer/'.length))
-      : resolve(dirname(von), importiert)
+      : /^[.\/]/.test(importiert)
+        ? resolve(dirname(von), importiert)
+        // Paket-Import wie `mapbox-gl/dist/mapbox-gl.css`: aus node_modules.
+        : resolve(WURZEL, 'node_modules', importiert)
     assert.ok(existsSync(pfad), `Importiertes Stylesheet fehlt: ${pfad}`)
     if (stylesheets.has(pfad)) return
     stylesheets.add(pfad)

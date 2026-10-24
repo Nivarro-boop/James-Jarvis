@@ -48,6 +48,28 @@ export async function chatGptModels(): Promise<ChatGptModel[]> {
     .map((m) => ({ id: m.slug!, name: m.display_name || m.slug! }))
 }
 
+/** „Automatisch“ in den Einstellungen: kein fester Modellname. */
+export const CHATGPT_AUTO = 'auto'
+const FAST = /mini|nano|luna|flash|fast|spark|lite/i
+let modelCache: { at: number; models: ChatGptModel[] } | null = null
+
+/**
+ * Löst „Automatisch“ auf: schnell im Gespräch, gründlich bei schwierigen
+ * Aufgaben (Unteragenten, Bildschirmarbeit). Gewählt wird aus den Modellen,
+ * die das Konto wirklich anbietet; die Liste wird zehn Minuten gemerkt.
+ */
+export async function resolveChatGptModel(model: string, purpose: 'fast' | 'deep' = 'fast'): Promise<string> {
+  if (model !== CHATGPT_AUTO) return model
+  if (!modelCache || Date.now() - modelCache.at > 10 * 60_000) modelCache = { at: Date.now(), models: await chatGptModels() }
+  const all = modelCache.models.map(m => m.id)
+  const general = all.filter(id => !/codex/i.test(id))
+  const pool = general.length ? general : all
+  const pick = purpose === 'fast' ? pool.find(id => FAST.test(id)) : pool.find(id => !FAST.test(id))
+  const chosen = pick ?? pool[0]
+  if (!chosen) throw new Error('Dein ChatGPT-Konto liefert keine verfügbaren Modelle.')
+  return chosen
+}
+
 /** Deliberately whitelist fields: plan usage rejects max_output_tokens and many API parameters. */
 export function chatGptRequestBody(model: string, instructions: string, input: ChatGptItem[], tools?: unknown[]): Record<string, unknown> {
   if (!model.trim()) throw new Error('Bitte ein verfügbares ChatGPT-Modell in den Einstellungen auswählen.')
@@ -57,8 +79,10 @@ export function chatGptRequestBody(model: string, instructions: string, input: C
 
 export async function chatGptResponse(
   model: string, instructions: string, input: ChatGptItem[],
-  options: { tools?: unknown[]; signal?: AbortSignal; onText?: (text: string) => void } = {}
+  options: { tools?: unknown[]; signal?: AbortSignal; onText?: (text: string) => void; purpose?: 'fast' | 'deep' } = {}
 ): Promise<ChatGptResponse> {
+  // Nur „Automatisch“ braucht die Modellliste; sonst ohne Umweg, damit ein Abbruch sofort greift.
+  if (model === CHATGPT_AUTO) model = await resolveChatGptModel(model, options.purpose)
   consumeModelCall()
   const started = Date.now()
   let firstMs: number | null = null

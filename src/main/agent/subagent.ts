@@ -11,8 +11,6 @@ import type { ChatGptItem } from '@shared/chatgpt'
 import type { Settings } from '@shared/types'
 import { slimDescription } from './tokenSaver'
 import { toolRoundLimit } from '@shared/conversationBudget'
-import { hermesHealth, hermesRun } from '../providers/hermes'
-import { startHermesGateway } from '../providers/hermesService'
 import { ToolLoopGuard, guardedCall } from '@shared/agentLoop'
 
 /** Unteragenten arbeiten unbeaufsichtigt und dürfen mehr Runden als die Sprachschleife (wie Hermes' delegate_task). */
@@ -98,27 +96,7 @@ export async function runSubagent(goal: string, context: string | undefined, par
   const provider = ['chatgpt', 'ollama'].includes(settings.speech.thinkProvider)
     ? settings.speech.thinkProvider : settings.brainProvider
   const signal = parentSignal ? AbortSignal.any([parentSignal, AbortSignal.timeout(TIMEOUT_MS)]) : AbortSignal.timeout(TIMEOUT_MS)
-  // Hermes ist immer der Agent. Nur wenn er weder läuft noch startet,
-  // übernimmt der gewählte Denkmotor, damit der Auftrag nicht verloren geht.
-  const hermes = (await hermesHealth()).ok ? { ok: true } : await startHermesGateway().catch(() => ({ ok: false }))
-  if (hermes.ok) {
-    try {
-      const summary = await hermesRun(context ? `${goal}\n\nKontext: ${context}` : goal, id, signal, {
-        onText: () => {},
-        onProgress: thought => activityAnnotate(id, { thought })
-      })
-      activityEnd(id, true, summary)
-      return { goal, ok: true, summary, steps: 0 }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      if (signal.aborted) {
-        activityEnd(id, false, message)
-        return { goal, ok: false, summary: message, steps: 0 }
-      }
-      console.warn('[agent] Hermes gescheitert, Denkmotor übernimmt:', message)
-    }
-  }
-
+  // Unteragenten laufen über den gewählten Denkmotor; der externe Hermes-Agent ist entfernt.
   if (provider === 'chatgpt' || provider === 'ollama') {
     return runTextSubagent(id, goal, context, provider, settings, signal)
   }
@@ -216,7 +194,7 @@ async function runTextSubagent(id: string, goal: string, context: string | undef
       let answer = ''
       if (provider === 'chatgpt') {
         const response = await chatGptResponse(settings.chatGptModel, SYSTEM, items,
-          { tools: !guard.halted && round < subagentRounds(settings.tokenSaver.enabled) - 1 ? chatGptTools(schemas) : undefined, signal })
+          { tools: !guard.halted && round < subagentRounds(settings.tokenSaver.enabled) - 1 ? chatGptTools(schemas) : undefined, signal, purpose: 'deep' })
         answer = response.text.trim()
         items.push(...response.output.filter(item => item.type !== 'reasoning').map(({ id: _id, ...item }) => item))
         calls = response.output.filter(item => item.type === 'function_call').map(item => ({

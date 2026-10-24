@@ -21,6 +21,7 @@ import { healthReport } from '../../selfheal'
 import { listMemories } from '../../db'
 import { getSettings } from '../../store/settings'
 import { broadcast } from '../../ipc/emit'
+import { refreshPcProfile, searchPcProfile } from '../../agent/pcProfile'
 
 /**
  * Das Gehirn als Werkzeuge: Projekte, Notizen, Tag, Briefing, Kacheln.
@@ -42,7 +43,7 @@ function dayBounds(offsetDays = 0): { from: Date; to: Date } {
   return { from, to }
 }
 
-async function dayEvents(offsetDays = 0): Promise<Awaited<ReturnType<typeof eventsBetween>> | null> {
+export async function dayEvents(offsetDays = 0): Promise<Awaited<ReturnType<typeof eventsBetween>> | null> {
   if (!hasGoogleAuth() || !hasCalendarAuth()) return null
   const { from, to } = dayBounds(offsetDays)
   return eventsBetween(from, to)
@@ -234,6 +235,21 @@ const morningBriefing = defineTool({
   }
 }) as ToolDefinition
 
+const pcSearch = defineTool({
+  name: 'pc_search',
+  group: 'memory',
+  description:
+    'Durchsucht, was James lokal über diesen Computer weiß: installierte Programme, Ordner, zuletzt benutzte Dateien ' +
+    'und Textausschnitte aus aktuellen Dokumenten. Für „wo ist meine Datei …“, „welches Programm habe ich für …“, ' +
+    '„woran habe ich zuletzt gearbeitet“ und um Antworten persönlicher zu machen.',
+  schema: z.object({ query: z.string().min(1).describe('Suchbegriffe'), neu_einlesen: z.boolean().optional() }),
+  async execute({ query, neu_einlesen }) {
+    if (!getSettings().pcProfile) return { fehler: 'PC-Einlesen ist in den Einstellungen unter Gedächtnis ausgeschaltet.' }
+    await refreshPcProfile(Boolean(neu_einlesen))
+    return searchPcProfile(query)
+  }
+}) as ToolDefinition
+
 // ─── Kacheln ────────────────────────────────────────────────────────────
 
 const widgetSet = defineTool({
@@ -292,6 +308,6 @@ const selfTest = defineTool({
 
 export const brainTools: ToolDefinition[] = [
   projectCreate, projectList, projectStatus, projectUpdate,
-  notesSearch, noteSave, brainTidy, dayPlan, morningBriefing,
+  notesSearch, noteSave, brainTidy, dayPlan, morningBriefing, pcSearch,
   widgetSet, widgetRemove, selfTest
 ]

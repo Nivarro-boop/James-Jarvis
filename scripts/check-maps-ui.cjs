@@ -6,7 +6,7 @@ const assert = require('node:assert/strict')
 ;(async () => {
  const profile = mkdtempSync(join(tmpdir(), 'james-map-ui-')), wrapper = resolve('out/map-ui-wrapper.cjs')
  const userData = join(profile, 'void-jarvis'); mkdirSync(userData, { recursive: true })
- writeFileSync(join(userData, 'settings.json'), JSON.stringify({ setupDone: true, wake: { enabled: false, clap: false }, automaticBackups: false }))
+ writeFileSync(join(userData, 'settings.json'), JSON.stringify({ setupDone: true, gamingMode: true, pcProfile: false, dailyBriefing: false, diagnosticReporting: { enabled: false, automatic: false, capabilityGaps: false, url: '' }, wake: { enabled: false, clap: false }, automaticBackups: false }))
  writeFileSync(wrapper, `const {app}=require('electron');app.setPath('appData',${JSON.stringify(profile)});app.setPath('userData',${JSON.stringify(userData)});require('./main/index.js')`)
  let app
  try {

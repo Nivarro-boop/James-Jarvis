@@ -1,183 +1,187 @@
 <!doctype html>
 <html lang="de">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>JARVIS // Error Monitor</title>
-  <style>
-    :root{--bg:#05070b;--panel:#0d1118;--panel2:#111722;--line:#202938;--text:#eef3f8;--muted:#8d9aaa;--green:#49e69a;--red:#ff5d73;--yellow:#f4c95d;--blue:#65a8ff;--violet:#b896ff}
-    *{box-sizing:border-box} body{margin:0;background:radial-gradient(circle at top,#10192a 0,#05070b 44%);color:var(--text);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;min-height:100vh}
-    .wrap{max-width:1180px;margin:0 auto;padding:28px 18px 48px}.top{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:22px}.brand{font-weight:800;letter-spacing:.08em}.brand span{color:var(--blue)}.status{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}.dot{width:9px;height:9px;border-radius:50%;background:var(--green);box-shadow:0 0 16px var(--green)}
-    h1{font-size:34px;line-height:1.05;margin:0 0 8px}.sub{color:var(--muted);margin:0 0 24px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card{background:linear-gradient(180deg,var(--panel2),var(--panel));border:1px solid var(--line);border-radius:18px;padding:18px}.label{font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.08em}.value{font-size:28px;font-weight:800;margin-top:7px}.value.red{color:var(--red)}.value.yellow{color:var(--yellow)}.value.blue{color:var(--blue)}
-    .bar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:24px 0 12px}.bar h2{font-size:18px;margin:0}.actions{display:flex;gap:8px}button{border:1px solid var(--line);background:#121824;color:var(--text);padding:9px 13px;border-radius:10px;cursor:pointer}button:hover{background:#172131}.muted{color:var(--muted)}
-    .table{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:rgba(9,12,17,.72)}.row{display:grid;grid-template-columns:155px 90px 1fr 160px;gap:14px;padding:14px 16px;border-top:1px solid var(--line);align-items:start}.row:first-child{border-top:0}.head{font-size:12px;color:var(--muted);text-transform:uppercase;background:#0b1017}.pill{display:inline-flex;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:700;text-transform:uppercase}.pill.error{background:rgba(255,93,115,.12);color:var(--red)}.pill.warn{background:rgba(244,201,93,.12);color:var(--yellow)}.pill.info{background:rgba(101,168,255,.12);color:var(--blue)}.message{font-weight:650}.details{margin-top:5px;color:var(--muted);font-size:12px;white-space:pre-wrap;word-break:break-word}.empty{padding:40px;text-align:center;color:var(--muted)}
-    .hint{margin-top:18px;color:var(--muted);font-size:12px}.endpoint{display:inline-block;margin-top:8px;padding:8px 10px;background:#080c12;border:1px solid var(--line);border-radius:9px;color:#cfe2ff;font-family:ui-monospace,SFMono-Regular,Menlo,monospace}
-    [hidden]{display:none!important}.bar{flex-wrap:wrap}.tabs{display:flex;flex-wrap:wrap;gap:6px}.tab[aria-selected="true"]{background:#172131;border-color:var(--blue);color:#cfe2ff}button:focus-visible,input:focus-visible{outline:2px solid var(--blue);outline-offset:2px}button:disabled{opacity:.6;cursor:default}
-    .gapbar{display:flex;flex-wrap:wrap;align-items:center;gap:10px 16px;margin:0 0 12px;font-size:13px}.msg{min-height:1em;margin:0 0 10px;font-size:13px;color:var(--muted)}.pill.gap{background:rgba(184,150,255,.14);color:var(--violet)}.row.done{opacity:.55}
-    .gapdl{display:grid;grid-template-columns:max-content 1fr;gap:4px 12px;margin:10px 0 0;font-size:12px}.gapdl dt{color:var(--muted)}.gapdl dd{margin:0;white-space:pre-wrap;word-break:break-word}.gap-actions{margin-top:10px}#md-out{width:100%;min-height:150px;margin:0 0 12px;background:#080c12;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px}
-    @media(max-width:840px){.grid{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:115px 75px 1fr}.row>*:last-child{display:none}}@media(max-width:560px){.wrap{padding:20px 12px}.grid{grid-template-columns:1fr 1fr}.value{font-size:24px}.row{grid-template-columns:92px 68px 1fr;gap:8px;padding:12px}.head{font-size:10px}.gapdl{grid-template-columns:1fr;gap:2px}.gapdl dd{margin-bottom:6px}}
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>James-Jarvis Analytics</title>
+<style>
+  :root { --bg:#0d1213; --panel:#151c1e; --line:#2a3537; --text:#f0f2ef; --muted:#9aa6a3; --green:#3ddc84; --red:#ff5a5a; --amber:#e0b84a; --mint:#9fe3c0; --pink:#e58bd0; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.5 system-ui,"Segoe UI",sans-serif; }
+  .wrap { max-width:1180px; margin:0 auto; padding:0 16px 48px; }
+  header { display:flex; flex-wrap:wrap; gap:12px; justify-content:space-between; align-items:center; padding:22px 0; }
+  h1 { margin:0; font-size:26px; letter-spacing:-.02em; }
+  h1 span { background:linear-gradient(90deg,var(--mint),var(--pink)); -webkit-background-clip:text; background-clip:text; color:transparent; }
+  .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  input, select, button { font:inherit; color:var(--text); background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:8px 12px; }
+  input { min-width:0; }
+  button { cursor:pointer; }
+  button.primary { background:var(--mint); color:#0d1213; border-color:var(--mint); font-weight:700; }
+  .status { display:inline-flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); }
+  .status i { width:9px; height:9px; border-radius:50%; background:var(--amber); }
+  .status[data-s="ok"] i { background:var(--green); box-shadow:0 0 8px var(--green); }
+  .status[data-s="err"] i { background:var(--red); }
+  .kpis { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:12px; margin-bottom:16px; }
+  .kpi, .card { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:16px 18px; }
+  .kpi small { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.06em; }
+  .kpi strong { display:block; font-size:30px; line-height:1.2; margin-top:4px; font-variant-numeric:tabular-nums; }
+  .kpi em { font-style:normal; font-size:12px; color:var(--muted); }
+  .grid2 { display:grid; grid-template-columns:2fr 1fr; gap:12px; margin-bottom:12px; }
+  .grid3 { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; margin-bottom:12px; }
+  h2 { margin:0 0 12px; font-size:15px; }
+  .chart { width:100%; height:200px; display:block; }
+  .chart text { fill:var(--muted); font-size:10px; }
+  .bars { display:grid; gap:8px; }
+  .bar { display:grid; grid-template-columns:minmax(0,1fr) auto; gap:4px 10px; font-size:13px; }
+  .bar div { grid-column:1/-1; height:6px; border-radius:3px; background:#232d2f; overflow:hidden; }
+  .bar div b { display:block; height:100%; background:var(--mint); border-radius:3px; }
+  .bar span:last-child { color:var(--muted); font-variant-numeric:tabular-nums; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  th, td { text-align:left; padding:8px 6px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { color:var(--muted); font-weight:500; }
+  td code { font-size:12px; color:var(--muted); word-break:break-all; }
+  .lvl { display:inline-block; padding:1px 8px; border-radius:999px; font-size:11px; }
+  .lvl.error { background:#ff5a5a22; color:var(--red); } .lvl.warning { background:#e0b84a22; color:var(--amber); } .lvl.info { background:#3ddc8422; color:var(--green); }
+  .empty, .err { color:var(--muted); padding:24px 0; text-align:center; }
+  .err { color:var(--red); }
+  .tablewrap { overflow-x:auto; }
+  @media (max-width:900px) { .kpis { grid-template-columns:repeat(2,minmax(0,1fr)); } .grid2, .grid3 { grid-template-columns:1fr; } }
+</style>
 </head>
 <body>
 <div class="wrap">
-  <div class="top"><div class="brand">JARVIS <span>//</span> SYSTEM MONITOR</div><div class="status"><span class="dot" id="dot"></span><span id="status">VERBUNDEN</span></div></div>
-  <h1>Fehlerzentrale</h1><p class="sub">Fehlerberichte und gemeldete Fähigkeitslücken von deinem JARVIS.</p>
-  <div class="grid">
-    <div class="card"><div class="label">Alle Berichte</div><div class="value blue" id="all">–</div></div>
-    <div class="card"><div class="label">Fehler</div><div class="value red" id="errors">–</div></div>
-    <div class="card"><div class="label">Warnungen</div><div class="value yellow" id="warnings">–</div></div>
-    <div class="card"><div class="label">Letzter Bericht</div><div class="value" id="last" style="font-size:16px">–</div></div>
-  </div>
-  <div class="bar">
-    <div class="tabs" id="tabs" role="tablist" aria-label="Berichtsart">
-      <button class="tab" role="tab" data-tab="all" aria-controls="table">Alle</button>
-      <button class="tab" role="tab" data-tab="incident" aria-controls="table">Fehler</button>
-      <button class="tab" role="tab" data-tab="gap" aria-controls="table">Fähigkeitslücken <span id="gap-open">(offen –)</span></button>
+  <header>
+    <h1>James-Jarvis <span>Analytics</span></h1>
+    <div class="controls">
+      <span class="status" id="status" data-s="load"><i></i><span>Lädt …</span></span>
+      <select id="range" aria-label="Zeitraum"><option value="7">7 Tage</option><option value="14" selected>14 Tage</option><option value="30">30 Tage</option><option value="0">Alles</option></select>
+      <input id="token" type="password" placeholder="Token (optional)" aria-label="Zugangstoken" size="16">
+      <button id="reload">Neu laden</button>
+      <a href="liste.html" style="color:var(--muted);font-size:13px">Fehlerliste</a>
+      <button class="primary" id="copy">Alles kopieren</button>
     </div>
-    <div class="actions"><button id="refresh">↻ Aktualisieren</button></div>
-  </div>
-  <div class="gapbar" id="gapbar" hidden>
-    <label><input type="checkbox" id="show-done" /> Erledigte zeigen</label>
-    <button id="copy-md">Offene Lücken als Markdown kopieren</button>
-  </div>
-  <p class="msg" id="gap-msg" role="status"></p>
-  <textarea id="md-out" readonly hidden aria-label="Offene Lücken als Markdown"></textarea>
-  <div class="table" id="table" role="tabpanel"><div class="row head"><div>Zeit</div><div>Level</div><div>Meldung</div><div>Quelle</div></div><div class="empty">Lade Berichte …</div></div>
-  <div class="hint"><label>API-Adresse <input id="api" type="url" style="width:min(600px,100%)" aria-label="API-Adresse" /></label><br /><label>Zugangstoken (optional) <input id="token" type="password" autocomplete="off" aria-label="Zugangstoken" /></label><p id="load-error" role="alert"></p></div>
-  <div class="hint">JARVIS Endpoint <div class="endpoint">POST /api/error-report</div> <div class="endpoint">PATCH /api/error-report (Status einer Lücke)</div></div>
+  </header>
+
+  <section class="kpis">
+    <div class="kpi"><small>Berichte</small><strong id="k-total">–</strong><em>im Zeitraum</em></div>
+    <div class="kpi"><small>Letzte 24 h</small><strong id="k-day">–</strong><em id="k-trend">&nbsp;</em></div>
+    <div class="kpi"><small>Fehler</small><strong id="k-err">–</strong><em>Stufe „error“</em></div>
+    <div class="kpi"><small>Versionen</small><strong id="k-ver">–</strong><em id="k-latest">&nbsp;</em></div>
+    <div class="kpi"><small>Störungen gesamt</small><strong id="k-inc">–</strong><em>Summe der Zähler</em></div>
+  </section>
+
+  <section class="grid2">
+    <div class="card"><h2>Berichte pro Tag</h2><svg class="chart" id="chart" role="img" aria-label="Berichte pro Tag"></svg></div>
+    <div class="card"><h2>Nach Stufe</h2><div class="bars" id="by-level"></div></div>
+  </section>
+
+  <section class="grid3">
+    <div class="card"><h2>Nach Version</h2><div class="bars" id="by-version"></div></div>
+    <div class="card"><h2>Nach System</h2><div class="bars" id="by-platform"></div></div>
+    <div class="card"><h2>Häufigste Meldungen</h2><div class="bars" id="by-message"></div></div>
+  </section>
+
+  <section class="card">
+    <h2>Neueste Berichte</h2>
+    <div class="tablewrap"><table><thead><tr><th>Zeit</th><th>Stufe</th><th>Meldung</th><th>Version</th><th>Details</th></tr></thead><tbody id="rows"></tbody></table></div>
+    <div id="note" class="empty" hidden></div>
+  </section>
 </div>
+
 <script>
-  const $=id=>document.getElementById(id);
-  const saved={get(k){try{return localStorage.getItem(k)}catch{return null}},set(k,v){try{localStorage.setItem(k,v)}catch{}}};
-  const fmt = value => { try{return new Date(value).toLocaleString('de-AT',{dateStyle:'short',timeStyle:'medium'})}catch{return value||'–'} };
-  const day = value => { try{return new Date(value).toLocaleDateString('de-AT')}catch{return value||'–'} };
-  function row(r){
-    const level=String(r.level||'error').toLowerCase(); const cls=level==='warning'||level==='warn'?'warn':level==='info'?'info':'error';
-    return `<div class="row"><div class="muted">${esc(fmt(r.timestamp))}</div><div><span class="pill ${cls}">${esc(level)}</span></div><div><div class="message">${esc(r.message)}</div>${r.details?`<div class="details">${esc(r.details)}</div>`:''}</div><div class="muted">${esc(r.source||'JARVIS')}</div></div>`;
-  }
-  function esc(s){return String(s??'').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-  // Fähigkeitslücken: details ist JSON aus der App; alles Angezeigte läuft durch esc().
-  const isGap=r=>!!r&&r.kind==='capability-gap';
-  const isOpen=r=>r.status!=='done';
-  const countOf=r=>Number.isInteger(r.count)&&r.count>0?r.count:1;
-  const seen=r=>String(r.lastSeen||r.timestamp||'');
-  const newestFirst=(a,b)=>seen(b).localeCompare(seen(a));
-  function parseGap(r){try{const g=JSON.parse(r.details);return g&&typeof g==='object'&&!Array.isArray(g)?g:null}catch{return null}}
-  const TOOL_KINDS={unknown:'unbekanntes Werkzeug','no-match':'nichts gefunden',invalid:'ungültige Argumente',locked:'gesperrt',error:'Fehler'};
-  function gapRow(r){
-    const g=parseGap(r); const done=!isOpen(r);
-    let body=r.details?`<div class="details">${esc(r.details)}</div>`:'';
-    if(g){
-      const tools=Array.isArray(g.tools)&&g.tools.length?g.tools.map(t=>`${t?.tool??'?'} (${TOOL_KINDS[t?.kind]||t?.kind||'?'})${t?.detail?': '+t.detail:''}`).join('\n'):'–';
-      const version=`${g.appVersion||'–'}${r.lastAppVersion&&r.lastAppVersion!==g.appVersion?`, zuletzt ${r.lastAppVersion}`:''}`;
-      const fields=[['Anfrage',g.request],['Antwort von James',g.answer],['Erkannter Grund',g.reason],['Lösungsvorschlag',g.suggestion],['Werkzeuge',tools],['Kanal',g.channel],['App-Version',version],['Häufigkeit',`${countOf(r)}× · erstmals ${fmt(r.timestamp)} · zuletzt ${fmt(seen(r))}`]];
-      body=`<dl class="gapdl">${fields.map(([k,v])=>`<dt>${esc(k)}</dt><dd>${esc(v===undefined||v===null||v===''?'–':v)}</dd>`).join('')}</dl>`;
-    }
-    const button=typeof r.id==='string'?`<div class="gap-actions"><button data-id="${esc(r.id)}" data-status="${done?'open':'done'}">${done?'Wieder öffnen':'Erledigt'}</button></div>`:'';
-    return `<div class="row${done?' done':''}"><div class="muted">${esc(fmt(seen(r)))}</div><div><span class="pill gap">LÜCKE</span></div><div><div class="message">${esc(r.message)}</div>${body}${button}</div><div class="muted">${done?'erledigt':r.reopenedAt?'wieder offen':'offen'}<br />${esc(r.source||'JARVIS')}</div></div>`;
-  }
-  // Markdown für den Entwickler: Zeilenumbrüche zusammenziehen, Steuerzeichen maskieren.
-  const md=s=>String(s??'').replace(/\s+/g,' ').trim().replace(/[\\`*_[\]<>|~#]/g,'\\$&');
-  function markdown(){
-    const open=gaps.filter(isOpen);
-    const lines=['## Fähigkeitslücken für das nächste Update',''];
-    for(const r of open){
-      const g=parseGap(r)||{};
-      lines.push(`- [ ] **${md(g.reason||r.message||'Unbekannter Grund')}** (${countOf(r)}×, zuletzt ${md(day(seen(r)))}) — Vorschlag: ${md(g.suggestion||'–')}`);
-      lines.push(`  - Anfrage: „${md(g.request||'–')}“`);
-    }
-    return {text:lines.join('\n')+'\n',count:open.length};
-  }
-  const apiInput=$('api');
-  apiInput.value=saved.get('jarvis-report-api') || '/api/error-report';
-  const TABS=['all','incident','gap'];
-  let tab=TABS.includes(saved.get('jarvis-report-tab'))?saved.get('jarvis-report-tab'):'all';
-  let showDone=saved.get('jarvis-report-show-done')==='1';
-  let incidents=[],gaps=[],gapError='',loaded=false;
-  function render(){
-    for(const b of document.querySelectorAll('[role="tab"]')){const on=b.dataset.tab===tab;b.setAttribute('aria-selected',String(on));b.tabIndex=on?0:-1}
-    const open=gaps.filter(isOpen);
-    $('gap-open').textContent=!loaded||gapError?'(offen –)':`(offen ${open.length})`;
-    $('gapbar').hidden=tab!=='gap'; $('show-done').checked=showDone;
-    if(!loaded) return;
-    const head=tab==='gap'?'<div class="row head"><div>Zuletzt</div><div>Art</div><div>Fähigkeitslücke</div><div>Status</div></div>':'<div class="row head"><div>Zeit</div><div>Level</div><div>Meldung</div><div>Quelle</div></div>';
-    let list,empty;
-    if(tab==='incident'){list=incidents;empty='Noch keine Fehlerberichte.'}
-    else if(tab==='gap'){list=showDone?gaps:open;empty=gapError||(gaps.length?'Keine offenen Fähigkeitslücken.':'Noch keine Fähigkeitslücken.')}
-    else{list=[...incidents,...gaps].sort(newestFirst).slice(0,200);empty='Noch keine Berichte.'}
-    $('table').innerHTML=head+(list.length?list.map(r=>isGap(r)?gapRow(r):row(r)).join(''):`<div class="empty">${esc(empty)}</div>`);
-  }
-  function selectTab(next){tab=next;saved.set('jarvis-report-tab',next);$('gap-msg').textContent='';$('md-out').hidden=true;render()}
-  function apiUrl(params){
-    const url=new URL(apiInput.value,location.href);
-    if(!['https:','http:'].includes(url.protocol)||url.username||url.password) throw new Error('Ungültige API-Adresse');
-    for(const [k,v] of Object.entries(params)) url.searchParams.set(k,v);
-    return url;
-  }
-  function authHeaders(extra={}){const token=$('token').value.trim();return token?{...extra,Authorization:'Bearer '+token}:extra}
-  const httpError=status=>status===404?'API-Route fehlt (HTTP 404). Function muss auf dem API-Host deployt werden.':status===401?'Zugangstoken fehlt oder ist falsch (HTTP 401).':'HTTP '+status;
-  let loading=false;
-  async function load(){
-    if(loading) return; loading=true;
-    $('refresh').disabled=true;
-    const controller=new AbortController(); const timeout=setTimeout(()=>controller.abort(),10000);
-    const status=$('status');
-    try{
-      const get=params=>fetch(apiUrl(params),{cache:'no-store',signal:controller.signal,headers:authHeaders()});
-      const gapRequest=get({kind:'capability-gap',limit:'200'}).catch(e=>e);
-      const res=await get({kind:'incident',limit:'200'});
-      if(!res.ok) throw new Error(httpError(res.status));
-      saved.set('jarvis-report-api',apiInput.value);
-      $('load-error').textContent='';
-      const data=await res.json(); if(!Array.isArray(data.reports)) throw new Error('API liefert kein gültiges Berichtsformat.');
-      // Ältere Server kennen kind nicht und liefern beide Male alles: deshalb hier noch einmal trennen.
-      incidents=data.reports.filter(r=>!isGap(r));
-      try{
-        const gapRes=await gapRequest; if(gapRes instanceof Error) throw gapRes;
-        if(gapRes.status===403) throw new Error('Fähigkeitslücken sind auf dem Server aus: JARVIS_REPORT_TOKEN fehlt (HTTP 403).');
-        if(!gapRes.ok) throw new Error('Fähigkeitslücken: '+httpError(gapRes.status));
-        const gapData=await gapRes.json(); if(!Array.isArray(gapData.reports)) throw new Error('Fähigkeitslücken: kein gültiges Berichtsformat.');
-        gaps=gapData.reports.filter(isGap).sort(newestFirst); gapError='';
-      }catch(e){gaps=[];gapError=e.name==='AbortError'?'Fähigkeitslücken: Zeitüberschreitung.':e.message}
-      const all=[...incidents,...gaps].sort(newestFirst);
-      const errors=incidents.filter(r=>String(r.level).toLowerCase()==='error').length; const warnings=incidents.filter(r=>['warning','warn'].includes(String(r.level).toLowerCase())).length;
-      $('all').textContent=all.length;$('errors').textContent=errors;$('warnings').textContent=warnings;$('last').textContent=all[0]?fmt(seen(all[0])):'–';
-      loaded=true; render();
-      status.textContent='VERBUNDEN'; $('dot').style.background='var(--green)'; $('dot').style.boxShadow='0 0 16px var(--green)';
-    }catch(e){loaded=false;$('load-error').textContent=e.name==='AbortError'?'Zeitüberschreitung: API antwortet nicht.':e.message; $('table').innerHTML='<div class="empty">Berichte konnten nicht geladen werden. API-Adresse, Deployment oder Zugangstoken prüfen.</div>'; status.textContent='API NICHT ERREICHBAR';$('dot').style.background='var(--red)';$('dot').style.boxShadow='0 0 16px var(--red)';}finally{clearTimeout(timeout);loading=false;$('refresh').disabled=false;}
-  }
-  $('tabs').addEventListener('click',e=>{const b=e.target.closest('[role="tab"]');if(b)selectTab(b.dataset.tab)});
-  $('tabs').addEventListener('keydown',e=>{
-    if(e.key!=='ArrowLeft'&&e.key!=='ArrowRight') return;
-    const next=TABS[(TABS.indexOf(tab)+(e.key==='ArrowRight'?1:TABS.length-1))%TABS.length];
-    selectTab(next); document.querySelector(`[role="tab"][data-tab="${next}"]`).focus();
-  });
-  $('show-done').addEventListener('change',e=>{showDone=e.target.checked;saved.set('jarvis-report-show-done',showDone?'1':'0');render()});
-  $('table').addEventListener('click',async e=>{
-    const b=e.target.closest('button[data-id]'); if(!b) return;
-    const msg=$('gap-msg'); b.disabled=true;
-    try{
-      const res=await fetch(apiUrl({}),{method:'PATCH',cache:'no-store',headers:authHeaders({'Content-Type':'application/json'}),body:JSON.stringify({id:b.dataset.id,status:b.dataset.status})});
-      if(!res.ok){const data=await res.json().catch(()=>null);throw new Error(typeof data?.error==='string'?`${data.error} (HTTP ${res.status})`:httpError(res.status))}
-      const g=gaps.find(x=>x.id===b.dataset.id); if(g) g.status=b.dataset.status;
-      msg.textContent=b.dataset.status==='done'?'Als erledigt markiert.':'Wieder geöffnet.';
-      render();
-    }catch(err){msg.textContent='Status nicht geändert: '+err.message;b.disabled=false}
-  });
-  $('copy-md').addEventListener('click',async()=>{
-    const msg=$('gap-msg'),out=$('md-out'); const {text,count}=markdown();
-    out.hidden=true;
-    if(!count){msg.textContent='Keine offenen Fähigkeitslücken zum Kopieren.';return}
-    try{await navigator.clipboard.writeText(text)}
-    catch{
-      out.value=text; out.hidden=false; out.select();
-      let ok=false; try{ok=document.execCommand('copy')}catch{}
-      if(!ok){msg.textContent='Kopieren blockiert: Text unten markieren und kopieren.';return}
-      out.hidden=true;
-    }
-    msg.textContent=`${count} offene ${count===1?'Lücke':'Lücken'} als Markdown kopiert.`;
-  });
-  $('refresh').addEventListener('click',load); render(); load(); setInterval(load,10000);
+const $ = id => document.getElementById(id)
+const store = { get(k) { try { return localStorage.getItem(k) } catch { return null } }, set(k, v) { try { localStorage.setItem(k, v) } catch {} } }
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c])
+const DAY = 86400000
+let all = []
+
+$('token').value = store.get('jj-token') || ''
+$('range').value = store.get('jj-range') || '14'
+
+function parse(r) {
+  let d = {}
+  try { d = JSON.parse(r.details || '{}') || {} } catch {}
+  return { ...r, t: Date.parse(r.timestamp), version: d.appVersion || 'unbekannt', platform: d.platform || 'unbekannt', incidents: Number(d.incidents ?? d.problems ?? 0) || 0 }
+}
+
+function setStatus(s, text) { $('status').dataset.s = s; $('status').lastElementChild.textContent = text }
+
+async function load() {
+  setStatus('load', 'Lädt …')
+  const token = $('token').value.trim()
+  store.set('jj-token', token)
+  const ctrl = new AbortController(); const timer = setTimeout(() => ctrl.abort(), 15000)
+  try {
+    const res = await fetch('/api/error-report?kind=incident&limit=200', { cache: 'no-store', signal: ctrl.signal, headers: token ? { Authorization: 'Bearer ' + token } : {} })
+    if (res.status === 401) throw new Error('Token fehlt oder falsch.')
+    if (!res.ok) throw new Error('API antwortet mit HTTP ' + res.status + '.')
+    const body = await res.json()
+    all = (body.reports || []).map(parse).filter(r => Number.isFinite(r.t))
+    setStatus('ok', all.length + ' Berichte geladen · ' + new Date().toLocaleTimeString('de-AT', { hour: '2-digit', minute: '2-digit' }))
+    render()
+  } catch (e) {
+    setStatus('err', e.name === 'AbortError' ? 'Zeitüberschreitung' : e.message)
+    $('note').hidden = false; $('note').className = 'err'; $('note').textContent = 'Daten konnten nicht geladen werden: ' + (e.name === 'AbortError' ? 'Zeitüberschreitung.' : e.message)
+  } finally { clearTimeout(timer) }
+}
+
+function inRange() {
+  const days = Number($('range').value)
+  return days ? all.filter(r => r.t >= Date.now() - days * DAY) : all
+}
+
+function bars(el, rows) {
+  const max = Math.max(1, ...rows.map(r => r[1]))
+  el.innerHTML = rows.length ? rows.map(([k, v]) => `<div class="bar"><span>${esc(k)}</span><span>${v}</span><div><b style="width:${(v / max * 100).toFixed(1)}%"></b></div></div>`).join('') : '<div class="empty">Keine Daten</div>'
+}
+const countBy = (list, key) => [...list.reduce((m, r) => m.set(r[key], (m.get(r[key]) || 0) + 1), new Map())].sort((a, b) => b[1] - a[1])
+
+function chart(list) {
+  const svg = $('chart'); const w = svg.clientWidth || 700, h = 200, pad = 24
+  const days = Number($('range').value) || Math.max(1, Math.ceil((Date.now() - Math.min(Date.now(), ...list.map(r => r.t))) / DAY))
+  const start = new Date(); start.setHours(0, 0, 0, 0); const first = start.getTime() - (days - 1) * DAY
+  const counts = Array.from({ length: days }, (_, i) => list.filter(r => r.t >= first + i * DAY && r.t < first + (i + 1) * DAY).length)
+  const max = Math.max(1, ...counts), bw = (w - pad) / days
+  svg.setAttribute('viewBox', `0 0 ${w} ${h}`)
+  svg.innerHTML = `<text x="0" y="12">${max}</text><line x1="${pad}" x2="${w}" y1="${h - 20}" y2="${h - 20}" stroke="#2a3537"/>` + counts.map((c, i) => {
+    const bh = (c / max) * (h - 44), x = pad + i * bw + 2
+    const d = new Date(first + i * DAY)
+    const label = (days <= 14 || i % Math.ceil(days / 10) === 0) ? `<text x="${x + bw / 2 - 2}" y="${h - 6}" text-anchor="middle">${d.getDate()}.${d.getMonth() + 1}.</text>` : ''
+    return `<rect x="${x}" y="${h - 20 - bh}" width="${Math.max(2, bw - 4)}" height="${bh}" rx="3" fill="url(#g)"><title>${d.toLocaleDateString('de-AT')}: ${c}</title></rect>${label}`
+  }).join('') + '<defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e58bd0"/><stop offset="1" stop-color="#9fe3c0"/></linearGradient></defs>'
+}
+
+function render() {
+  const list = inRange()
+  const day = all.filter(r => r.t >= Date.now() - DAY).length
+  const prev = all.filter(r => r.t >= Date.now() - 2 * DAY && r.t < Date.now() - DAY).length
+  $('k-total').textContent = list.length
+  $('k-day').textContent = day
+  $('k-trend').textContent = prev || day ? (day >= prev ? '▲ ' : '▼ ') + Math.abs(day - prev) + ' zum Vortag' : 'ruhig'
+  $('k-err').textContent = list.filter(r => r.level === 'error').length
+  const versions = countBy(list, 'version')
+  $('k-ver').textContent = versions.length
+  $('k-latest').textContent = versions.length ? 'meist: ' + versions[0][0] : ' '
+  $('k-inc').textContent = list.reduce((s, r) => s + r.incidents, 0)
+  chart(list)
+  bars($('by-level'), countBy(list, 'level'))
+  bars($('by-version'), versions.slice(0, 8))
+  bars($('by-platform'), countBy(list, 'platform').slice(0, 8))
+  bars($('by-message'), countBy(list, 'message').slice(0, 8))
+  $('rows').innerHTML = list.slice(0, 100).map(r => `<tr><td>${new Date(r.t).toLocaleString('de-AT', { dateStyle: 'short', timeStyle: 'short' })}</td><td><span class="lvl ${esc(r.level)}">${esc(r.level)}</span></td><td>${esc(r.message)}</td><td>${esc(r.version)}</td><td><code>${esc(r.details)}</code></td></tr>`).join('')
+  $('note').hidden = list.length > 0; $('note').className = 'empty'; $('note').textContent = 'Keine Berichte im Zeitraum.'
+}
+
+$('reload').onclick = load
+$('range').onchange = () => { store.set('jj-range', $('range').value); render() }
+$('copy').onclick = async () => {
+  const text = JSON.stringify(inRange().map(({ t, ...r }) => r), null, 2)
+  try { await navigator.clipboard.writeText(text); $('copy').textContent = 'Kopiert ✓' } catch { $('copy').textContent = 'Kopieren fehlgeschlagen' }
+  setTimeout(() => { $('copy').textContent = 'Alles kopieren' }, 2000)
+}
+addEventListener('resize', () => all.length && chart(inRange()))
+load()
+setInterval(load, 60000)
 </script>
 </body>
 </html>

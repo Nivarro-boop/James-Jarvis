@@ -85,7 +85,7 @@ const devices = defineTool({
       .describe('Nach Raum oder Gerätename filtern, etwa "wohnzimmer". Ohne Angabe alles.'),
     onlyOn: z.boolean().optional().describe('Nur zeigen, was gerade an oder offen ist.')
   }),
-  spokenHint: 'Ich schau nach.',
+  spokenHint: 'Okay.',
   async execute({ query, onlyOn }) {
     const all = await listEntities()
     let found = query ? matchEntities(all, query) : all
@@ -183,7 +183,7 @@ const control = defineTool({
       .describe('Nur für Lampen: Helligkeit in Prozent, 1 bis 100. Setzt action auf an.'),
     temperature: z.number().optional().describe('Nur für Thermostate: Zieltemperatur in Grad.')
   }),
-  spokenHint: 'Mach ich.',
+  spokenHint: 'Mhm.',
   async execute({ device, action, brightness, temperature }) {
     const all = await listEntities()
     const matches = matchEntities(all, device).filter((e) => isActionable(e.domain))

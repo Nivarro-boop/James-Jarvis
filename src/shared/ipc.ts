@@ -21,6 +21,7 @@ import type { BrainGraph, Widget } from './brain'
 
 import type { SipStatus } from './types'
 import type { ChatGptItem, ChatGptModel, ChatGptResponse, ChatGptStatus } from './chatgpt'
+import type { StudyStats } from './study'
 import type { CompanionSetup, CompanionStatus, WakeReadiness } from './companion'
 import type {
   AlexaStatus,
@@ -39,6 +40,11 @@ import type {
   DisplayCard,
   UpdateStatus,
   LocalAssetId,
+  HubFiles,
+  HubModel,
+  HubProgress,
+  JarvisLocalModel,
+  JarvisLocalStatus,
   LocalInstallProgress,
   MemoryEntry,
   MusicStatus,
@@ -60,13 +66,20 @@ import type {
   ToolCallRequest,
   ToolCallResult,
   ToolMeta,
-  VoiceServiceStatus,
   TelephonyStatus,
   TwilioAccountInfo,
   WhisperHealth
 } from './types'
 
 /** Renderer → Main, mit Antwort. */
+/** Eine Quizfrage ohne Lösung — die bleibt im Hauptprozess. */
+export type QuizQuestion =
+  | { deckId: string; deckTitle: string; cardId: string; question: string; options?: string[]; stats: StudyStats }
+  | { deckId: string; deckTitle: string; done: true; stats: StudyStats }
+
+/** Was der PC-Abgleich zuletzt gefunden hat — nur Zahlen, keine Inhalte. */
+export interface PcProfileStatus { scannedAt: number | null; programs: number; files: number; documents: number }
+
 export interface IpcInvokeMap {
   'settings:get': { req: void; res: Settings }
   'brain:graph': { req: void; res: BrainGraph }
@@ -74,7 +87,10 @@ export interface IpcInvokeMap {
   'brain:widgets': { req: void; res: Widget[] }
   'brain:removeWidget': { req: { id: string }; res: Widget[] }
   'persona:preview': { req: void; res: string }
-  'wake:status': { req: void; res: { installed: boolean; missing: string[]; model: string } }
+  'wake:status': { req: void; res: { installed: boolean; missing: string[]; model: string; available: string[] } }
+  'wake:personal': { req: void; res: { phrase: string; templates: number[][][]; threshold: number } | null }
+  'wake:personalSave': { req: { phrase: string; templates: number[][][]; threshold: number }; res: { ok: boolean; error?: string } }
+  'wake:personalClear': { req: void; res: void }
   /**
    * Die Bytes einer Weckwort-Datei: ein `.onnx`-Modell oder `runtime` für die
    * WASM-Binärdatei von onnxruntime. Nötig, weil Chromium im Fenster von
@@ -120,6 +136,7 @@ export interface IpcInvokeMap {
    * im Renderer, weil dort der Ton hingehört.
    */
   'secrets:getElevenForLive': { req: void; res: string | null }
+  'secrets:getMapboxForMap': { req: void; res: string | null }
 
   /**
    * Kurzlebiger Zugang für die OpenAI-Realtime-API.
@@ -170,6 +187,14 @@ export interface IpcInvokeMap {
   'selfheal:status': { req: { hours?: number }; res: SelfHealDashboard }
   'selfheal:repair': { req: void | { restartVoice: boolean }; res: SelfHealDashboard }
   'diagnostics:send': { req: void; res: { ok: boolean; detail: string } }
+  'study:decks': { req: void; res: { id: string; title: string; stats: StudyStats }[] }
+  'study:next': { req: { deckId: string; skip?: string }; res: QuizQuestion }
+  'study:answer': { req: { deckId: string; cardId: string; answer: string }; res: { correct: boolean; solution: string; stats: StudyStats } }
+  'study:delete': { req: { deckId: string }; res: boolean }
+  'pc:status': { req: void; res: PcProfileStatus }
+  'pc:rescan': { req: void; res: PcProfileStatus }
+  'pc:clear': { req: void; res: PcProfileStatus }
+  'location:locate': { req: void; res: { ok: boolean; name?: string; lat?: number; lon?: number; error?: string } }
   /**
    * Ein abgeschlossener Gesprächszug, in dem James abgelehnt hat.
    *
@@ -210,10 +235,6 @@ export interface IpcInvokeMap {
 
   'schedule:list': { req: void; res: ScheduleEntry[] }
   'reminder:list': { req: void; res: ReminderEntry[] }
-  'hermes:health': { req: void; res: { ok: boolean; detail: string } }
-  'hermes:start': { req: void; res: { ok: boolean; detail: string } }
-  'hermes:run': { req: { requestId: string; sessionId: string; input: string }; res: { ok: boolean; text?: string; error?: string } }
-  'hermes:cancel': { req: { requestId: string }; res: void }
   'reminder:create': { req: { text: string; at?: string; inMinutes?: number; repeat?: ReminderEntry['repeat'] }; res: ReminderEntry }
   'reminder:done': { req: { id: number }; res: void }
   'reminder:snooze': { req: { id: number; minutes: number }; res: void }
@@ -238,8 +259,6 @@ export interface IpcInvokeMap {
   'local:status': { req: { baseUrl?: string } | void; res: LocalModelStatus }
 
   /** Zustand des lokalen Sprachdienstes; `start` fährt ihn dabei hoch. */
-  'speech:status': { req: { start?: boolean } | void; res: VoiceServiceStatus }
-  'speech:stop': { req: void; res: VoiceServiceStatus }
 
   /** Tunnel und Telefondienst hochfahren, ohne zu telefonieren. */
   'telephony:test': { req: void; res: TelephonyStatus }
@@ -410,7 +429,7 @@ export interface IpcInvokeMap {
    * Ohne diese Angabe stünde in den Einstellungen „verbunden", während James
    * auf jede Terminfrage mit einer Fehlermeldung antwortet.
    */
-  'google:status': { req: void; res: { connected: boolean; calendar: boolean } }
+  'google:status': { req: void; res: { connected: boolean; calendar: boolean; workspace: boolean } }
   /** „Sign in with ChatGPT". `enabled` ist falsch, solange OpenAI James nicht freigegeben hat. */
   'chatgpt:connect': { req: void; res: { ok: boolean; email?: string; error?: string } }
   'chatgpt:cancelSignIn': { req: void; res: void }
@@ -431,12 +450,20 @@ export interface IpcInvokeMap {
   'sip:status': { req: void; res: SipStatus }
   'sip:restart': { req: void; res: SipStatus }
   'update:get': { req: void; res: UpdateStatus }
+  'update:check': { req: void; res: UpdateStatus }
   'update:installNow': { req: void; res: boolean }
   'update:postpone': { req: void; res: void }
   /** Ruft die eingetragene Adresse des Nutzers zur Probe an. */
   'sip:testCall': { req: void; res: { ok: boolean; message: string } }
   'openrouter:models': { req: void; res: { id: string; name: string; context: number }[] }
   'lmstudio:models': { req: { baseUrl?: string }; res: { reachable: boolean; models: string[] } }
+  'hub:search': { req: { query: string; sort?: string }; res: HubModel[] }
+  'hub:files': { req: { repo: string }; res: HubFiles }
+  'hub:install': { req: { repo: string; file: string }; res: JarvisLocalModel }
+  'hub:cancel': { req: void; res: void }
+  'hub:remove': { req: { path: string }; res: JarvisLocalStatus }
+  'hub:runtime': { req: void; res: JarvisLocalStatus }
+  'jarvisLocal:status': { req: void; res: JarvisLocalStatus }
   /** Was auf diesem Rechner liegt, und ob Ollama überhaupt antwortet. */
   'ollama:health': { req: void; res: OllamaHealth }
 
@@ -554,9 +581,11 @@ export interface IpcEventMap {
   'piper:failed': { stream: number; reason: string; fatal: boolean }
   /** Wie weit ein Download ist. */
   'local:progress': LocalInstallProgress
+  /** Fortschritt eines Hugging-Face- oder llama.cpp-Downloads. */
+  'hub:progress': HubProgress
   /** Ein Stück Antworttext aus `chatgpt:respond`, sobald es da ist. */
   'chatgpt:delta': { requestId: string; text: string }
-  'hermes:delta': { requestId: string; text: string }
+  'study:open': { deckId?: string }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap
@@ -570,6 +599,9 @@ export const IPC_INVOKE_CHANNELS = [
   'brain:removeWidget',
   'persona:preview',
   'wake:status',
+  'wake:personal',
+  'wake:personalSave',
+  'wake:personalClear',
   'wake:asset',
   'maps:tile',
   'backup:list',
@@ -585,6 +617,7 @@ export const IPC_INVOKE_CHANNELS = [
   'secrets:checkEleven',
   'secrets:checkOpenai',
   'secrets:getElevenForLive',
+  'secrets:getMapboxForMap',
   'openai:realtimeSecret',
   'openai:checkRealtime',
   'eleven:quota',
@@ -600,6 +633,14 @@ export const IPC_INVOKE_CHANNELS = [
   'selfheal:status',
   'selfheal:repair',
   'diagnostics:send',
+  'location:locate',
+  'study:decks',
+  'study:next',
+  'study:answer',
+  'study:delete',
+  'pc:status',
+  'pc:rescan',
+  'pc:clear',
   'gaps:turn',
   'selfheal:clear',
   'research:list',
@@ -613,10 +654,6 @@ export const IPC_INVOKE_CHANNELS = [
   'contacts:delete',
   'schedule:list',
   'reminder:list',
-  'hermes:health',
-  'hermes:start',
-  'hermes:run',
-  'hermes:cancel',
   'reminder:create',
   'reminder:done',
   'reminder:snooze',
@@ -632,8 +669,6 @@ export const IPC_INVOKE_CHANNELS = [
   'timers:list',
   'timers:cancel',
   'local:status',
-  'speech:status',
-  'speech:stop',
   'telephony:test',
   'telephony:stop',
   'telephony:incoming',
@@ -695,11 +730,19 @@ export const IPC_INVOKE_CHANNELS = [
   'sip:status',
   'sip:restart',
   'update:get',
+  'update:check',
   'update:installNow',
   'update:postpone',
   'sip:testCall',
   'openrouter:models',
   'lmstudio:models',
+  'hub:search',
+  'hub:files',
+  'hub:install',
+  'hub:cancel',
+  'hub:remove',
+  'hub:runtime',
+  'jarvisLocal:status',
   'ollama:health',
   'whisper:health',
   'whisper:transcribe',
@@ -736,8 +779,9 @@ export const IPC_EVENT_CHANNELS = [
   'piper:idle',
   'piper:failed',
   'local:progress',
+  'hub:progress',
   'chatgpt:delta',
-  'hermes:delta'
+  'study:open'
 ] as const satisfies readonly IpcEventChannel[]
 
 /**

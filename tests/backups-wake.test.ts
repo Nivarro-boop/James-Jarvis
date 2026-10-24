@@ -11,6 +11,7 @@ import { closeDb, initDb } from '@main/db'
 import { createReminder } from '@main/scheduler/reminders'
 import { setSettings } from '@main/store/settings'
 import { wakeStatus } from '@main/providers/wakeStatus'
+import { addCards, quizAnswer } from '@main/study/store'
 
 it('sichert die offene Datenbank konsistent, hält sieben tägliche Kopien und lässt Kontodateien aus', async t => {
   const root = mkdtempSync(join(tmpdir(), 'james-backup-'))
@@ -18,9 +19,13 @@ it('sichert die offene Datenbank konsistent, hält sieben tägliche Kopien und l
   t.after(() => { closeDb(); assert.ok(root.startsWith(join(tmpdir(), 'james-backup-'))); rmSync(root, {recursive:true,force:true}) })
   setSettings({automaticBackups:false, mcpServers:[{id:'test',name:'Test',enabled:false,command:'node',args:[],env:{API_KEY:'test-private-value'}}]})
   createReminder({text:'Wichtiger Termin',inMinutes:60})
+  const deck = addCards('Testwissen', [{ question: 'Hauptstadt Frankreichs', answer: 'Paris' }])
+  quizAnswer(deck.id, deck.cards[0].id, 'Paris')
   const manual = await createBackup()
   const payload = JSON.parse(gunzipSync(readFileSync(manual.file)).toString())
   assert.equal(payload.format, 'void-james-backup')
+  assert.equal(payload.study.version, 1)
+  assert.equal(payload.study.decks[0].cards[0].right, 1)
   assert.deepEqual(payload.settings.mcpServers[0].env, {})
   assert.ok(!JSON.stringify(payload).includes('test-private-value'))
   const snapshot = join(root,'read-only-snapshot.db')
@@ -51,9 +56,9 @@ it('meldet den fehlenden Weckwort-Klassifikator und erkennt lokal bereitgestellt
   mkdirSync(dir,{recursive:true})
   writeFileSync(join(dir,'melspectrogram.onnx'),'fixture')
   writeFileSync(join(dir,'embedding_model.onnx'),'fixture')
-  assert.deepEqual(wakeStatus(),{installed:false,missing:['hey_james.onnx'],model:'hey_james.onnx'})
+  assert.deepEqual(wakeStatus(),{installed:false,missing:['hey_james.onnx'],model:'hey_james.onnx',available:[]})
   writeFileSync(join(dir,'jarvis.onnx'),'fixture')
-  assert.deepEqual(wakeStatus(),{installed:true,missing:[],model:'jarvis.onnx'})
+  assert.deepEqual(wakeStatus(),{installed:true,missing:[],model:'jarvis.onnx',available:['jarvis.onnx']})
   writeFileSync(join(dir,'hey_james.onnx'),'fixture')
-  assert.deepEqual(wakeStatus(),{installed:true,missing:[],model:'hey_james.onnx'})
+  assert.deepEqual(wakeStatus(),{installed:true,missing:[],model:'hey_james.onnx',available:['jarvis.onnx','hey_james.onnx']})
 })

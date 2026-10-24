@@ -807,7 +807,7 @@ export class ChatGptBrain implements Brain {
 
   async prepare(signal?: AbortSignal): Promise<void> {
     const status = await abortable(window.jarvis.invoke('chatgpt:status'), requestSignal(signal))
-    if (!status.connected) throw new Error('ChatGPT ist nicht angemeldet. In den Einstellungen unter Zugänge anmelden.')
+    if (!status.connected) throw new Error('ChatGPT ist nicht angemeldet. In den Einstellungen unter Konten & Standort anmelden.')
     if (!this.settings.chatGptModel) throw new Error('Es ist kein ChatGPT-Modell ausgewählt.')
   }
 
@@ -914,53 +914,9 @@ export class ChatGptBrain implements Brain {
 
 /** Welcher Motor denkt — die Entscheidung steht in den Einstellungen. */
 export function createBrain(settings: Settings): Brain {
-  if (settings.speech.thinkProvider === 'hermes') return new HermesBrain(settings)
   if (settings.speech.thinkProvider === 'ollama') return new OllamaBrain(settings)
   if (settings.speech.thinkProvider === 'chatgpt') return new ChatGptBrain(settings)
   return new GeminiBrain(settings)
-}
-
-/** Let the complete local Hermes engine own planning, skills, memory and tools. */
-export class HermesBrain implements Brain {
-  readonly label = 'Hermes'
-  readonly needsText = true
-  private sessionId = crypto.randomUUID()
-  constructor(private settings: Settings) {}
-  update(settings: Settings): void { this.settings = settings }
-  reset(): void { this.sessionId = crypto.randomUUID() }
-  async prepare(signal?: AbortSignal): Promise<void> {
-    const pending = requestSignal(signal)
-    let health = await abortable(window.jarvis.invoke('hermes:health'), pending)
-    if (!health.ok) health = await abortable(window.jarvis.invoke('hermes:start'), pending)
-    if (!health.ok) throw new Error(health.detail)
-  }
-  async run(input: BrainInput, hooks: BrainHooks): Promise<boolean> {
-    if (!input.text?.trim() || hooks.cancelled()) return false
-    const requestId = crypto.randomUUID()
-    let spoke = false
-    const off = window.jarvis.on('hermes:delta', delta => {
-      if (delta.requestId !== requestId || hooks.cancelled()) return
-      spoke = true
-      hooks.onText(delta.text)
-    })
-    let cancelling = false
-    const cancel = (): void => {
-      if (cancelling) return
-      cancelling = true
-      void window.jarvis.invoke('hermes:cancel', { requestId }).catch(() => undefined)
-    }
-    try {
-      const response = await awaitBrainRequest(hooks, () => window.jarvis.invoke('hermes:run', { requestId, sessionId: this.sessionId, input: input.text! }), cancel)
-      if (hooks.cancelled()) return false
-      if (!response.ok) throw new Error(response.error)
-      if (!response.text) return false
-      if (!spoke) hooks.onText(response.text)
-      return true
-    } catch (err) {
-      if (hooks.cancelled()) return false
-      throw err
-    } finally { off() }
-  }
 }
 
 /** Spart bezahlte Sprechzeichen, ohne Werkzeugargumente oder Ergebnisse zu beschneiden. */

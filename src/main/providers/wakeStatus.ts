@@ -2,6 +2,7 @@ import { app } from 'electron'
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { getSettings } from '../store/settings'
+import { PERSONAL_MODEL, readPersonalWake } from './wakePersonal'
 
 /** Selbst trainierte Klassifikatoren, die ohne Einstellung genommen werden. */
 const KNOWN_MODELS = ['jarvis.onnx', 'hey_james.onnx']
@@ -12,15 +13,23 @@ function wakeRoot(): string {
     : join(app.getAppPath(), 'src/renderer/public/wakeword')
 }
 
-export function wakeStatus(): { installed: boolean; missing: string[]; model: string } {
+export function wakeStatus(): { installed: boolean; missing: string[]; model: string; available: string[] } {
   const root = wakeRoot()
   const configured = getSettings().wake.modelName
+  // Eingelerntes Wort: Es braucht nur die beiden Vorstufen, keinen Klassifikator.
+  if (configured === PERSONAL_MODEL && readPersonalWake()) {
+    const missing = ['melspectrogram.onnx', 'embedding_model.onnx'].filter(name => !existsSync(join(root, name)))
+    const available = [...KNOWN_MODELS.filter(name => existsSync(join(root, name))), PERSONAL_MODEL]
+    return { installed: missing.length === 0, missing, model: PERSONAL_MODEL, available }
+  }
   // Liegt das eingestellte Modell nicht da, ein anderes vorhandenes nehmen:
   // Wer `WAKE=jarvis` trainiert, soll danach nicht noch umstellen müssen.
   const model = existsSync(join(root, configured)) ? configured
     : KNOWN_MODELS.find(name => existsSync(join(root, name))) ?? configured
   const missing = ['melspectrogram.onnx', 'embedding_model.onnx', model].filter(name => !existsSync(join(root, name)))
-  return { installed: missing.length === 0, missing, model }
+  // Welche Weckwörter sich in der Einrichtung wählen lassen.
+  const available = KNOWN_MODELS.filter(name => existsSync(join(root, name)))
+  return { installed: missing.length === 0, missing, model, available }
 }
 
 /** Nur ein Dateiname, nie ein Pfad: Der Renderer darf hier nichts anderes lesen. */

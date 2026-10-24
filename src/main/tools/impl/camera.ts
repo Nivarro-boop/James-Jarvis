@@ -36,7 +36,7 @@ const cameraLook = defineTool({
   }),
   // Die Kamera geht an, und das dauert einen Moment. Ohne ein gesprochenes
   // Zeichen wirkt die Pause wie ein Aussetzer.
-  spokenHint: 'Moment, ich schau mal.',
+  spokenHint: 'Mhm.',
   async execute({ question }, ctx) {
     ctx.setState('tool')
 

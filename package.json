@@ -28,6 +28,7 @@
     "@twurple/auth": "^8.1.4",
     "electron-updater": "^6.8.9",
     "googleapis": "^174.0.1",
+    "mapbox-gl": "^3.33.0",
     "node-cron": "^4.6.0",
     "node-sqlite3-wasm": "^0.8.60",
     "openai": "^7.4.0",

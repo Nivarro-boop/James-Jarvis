@@ -26,5 +26,5 @@ export async function chatGptVision(
   const tools = chatGptTools(declarations.map(def => ({ type: 'function', function: {
     ...def, parameters: visionJsonSchema(def.parameters ?? { type: 'OBJECT', properties: {} })
   } })))
-  return chatGptResponse(model, instructions, input, { tools, signal })
+  return chatGptResponse(model, instructions, input, { tools, signal, purpose: 'deep' })
 }

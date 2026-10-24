@@ -6,7 +6,6 @@ import { abortable } from '@shared/async'
 import { createPlayer, type PlayerHandle } from '../audio/player'
 import { createVoiceStream, planVoice, type VoiceStream } from '../audio/elevenVoice'
 import { createPiperStream, planPiperVoice } from '../audio/piperVoice'
-import { createVibeVoiceStream, planVibeVoice } from '../audio/vibeVoice'
 import { createBrain, GeminiBrain, type Brain, type BrainInput } from './brain'
 import type { EngineState, VoiceEngine, VoiceEngineEvents } from './engine'
 
@@ -108,7 +107,7 @@ export class CascadeSession implements VoiceEngine {
    * während längst ein anderer spricht. An dieser Stelle hängt die
    * Kontingentmeldung — ein piper-Strom, der Zeichen abrechnet, verfälscht sie.
    */
-  private voiceKind: 'elevenlabs' | 'piper' | 'vibevoice' = 'elevenlabs'
+  private voiceKind: 'elevenlabs' | 'piper' = 'elevenlabs'
   /** Flash und Turbo kosten einen Credit je zwei Zeichen, Multilingual einen je Zeichen. */
   private voiceCreditMultiplier = 1
 
@@ -269,7 +268,6 @@ export class CascadeSession implements VoiceEngine {
        * darauf niemand füttert, kostet ein Audiogerät für nichts.
        */
       const wantsPiper = this.settings.speech.provider === 'piper'
-      const wantsVibeVoice = this.settings.speech.provider === 'vibevoice'
       const note = (message: string): void => { if (!cancelled()) this.events.onError(message) }
 
       if (wantsPiper) {
@@ -283,17 +281,6 @@ export class CascadeSession implements VoiceEngine {
         console.info(`[kaskade] piper spricht mit ${plan.voice} (${plan.backend}, ${plan.sampleRate} Hz)`)
         if (!(await wait(this.ensurePlayer(abort.signal, generation))) || cancelled()) return
         this.openPiper()
-      } else if (wantsVibeVoice) {
-        const plan = await wait(planVibeVoice(this.settings.speech.speaker, note))
-        if (cancelled()) return
-        if (!plan) {
-          this.onExhausted?.('VibeVoice steht nicht bereit.')
-          this.emit('idle')
-          return
-        }
-        console.info(`[kaskade] VibeVoice spricht mit ${plan.voice} auf Port ${plan.port}`)
-        if (!(await wait(this.ensurePlayer(abort.signal, generation))) || cancelled()) return
-        this.openVibeVoice(plan)
       } else {
         const plan = await wait(planVoice(this.settings, note))
         if (cancelled()) return
@@ -718,7 +705,7 @@ export class CascadeSession implements VoiceEngine {
       const message = err instanceof Error ? err.message : String(err)
       console.error('[kaskade] whisper nicht erreichbar:', message)
       this.events.onError(
-        'Der lokale Zuhörer antwortet nicht. Sieh in den Einstellungen unter Ohren nach.'
+        'Der lokale Zuhörer antwortet nicht. Sieh in den Einstellungen unter Spracherkennung nach.'
       )
       return ''
     }
@@ -857,30 +844,6 @@ export class CascadeSession implements VoiceEngine {
         // Bei einem vorübergehenden Grund baut der Strom beim nächsten Wort
         // selbst neu auf. Endgültig heißt dagegen: Dieser Motor ist am Ende.
         this.events.onError(explainVoice(reason))
-        this.onExhausted?.(reason)
-      }
-    })
-  }
-
-  private openVibeVoice(plan: { port: number; voice: string; token: string }): void {
-    this.voiceKind = 'vibevoice'
-    this.spokenReported = 0
-    this.voice = createVibeVoiceStream(plan, {
-      onAudio: (pcm) => {
-        this.player?.push(pcm)
-        this.onOutputAudio?.(pcm)
-        this.watchOutput()
-      },
-      onIdle: () => {
-        this.voiceActive = false
-        this.settleOutput()
-      },
-      onError: (reason, fatal) => {
-        console.warn(`[kaskade] VibeVoice: ${reason}${fatal ? ' (endgültig)' : ''}`)
-        this.voiceActive = false
-        this.settleOutput()
-        if (!fatal) return
-        this.events.onError(explainVibeVoice(reason))
         this.onExhausted?.(reason)
       }
     })
@@ -1172,14 +1135,6 @@ function explainPiper(reason: string): string {
     )
   }
   return 'Der lokale Sprecher macht gerade nicht mit. Ich spreche mit Geminis Stimme weiter.'
-}
-
-function explainVibeVoice(reason: string): string {
-  const lower = reason.toLowerCase()
-  if (lower.includes('python') || lower.includes('sprecherprofil')) {
-    return `${reason} Solange spreche ich mit Geminis Stimme.`
-  }
-  return 'Der lokale VibeVoice-Dienst ist nicht erreichbar. Ich spreche mit Geminis Stimme weiter.'
 }
 
 function friendlyError(raw: string, brain: string): string {

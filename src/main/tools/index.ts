@@ -42,6 +42,8 @@ import { selfConfigTools } from './impl/selfConfig'
 import { linphoneTools } from './impl/linphone'
 import { capabilityGapTools } from './impl/capabilityGap'
 import { brainTools } from './impl/brain'
+import { googleWorkspaceTools } from './impl/googleWorkspace'
+import { studyTools } from './impl/study'
 
 /**
  * Sammelstelle aller Werkzeuge.
@@ -63,6 +65,8 @@ export function registerAllTools(): void {
   registerAll([
     ...toolSearchTools,
     ...brainTools,
+    ...googleWorkspaceTools,
+    ...studyTools,
     ...selfConfigTools,
     ...linphoneTools,
     ...webTools,

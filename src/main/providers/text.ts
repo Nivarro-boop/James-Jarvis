@@ -1,6 +1,7 @@
 import { friendlyGeminiError, geminiAvailable, generateWithFallback } from './gemini'
 import { ollamaReachable, ollamaThink } from './ollama'
 import { lmStudioReachable, lmStudioThink } from './lmstudio'
+import { ensureLocalServer, localBaseUrl } from '../local/jarvisModels'
 import { openRouterAvailable, think as openRouterThink } from './openrouter'
 import { cloudTextAvailable, cloudThink } from './cloudText'
 import { getSettings } from '../store/settings'
@@ -30,7 +31,7 @@ import { consumeModelCall } from '../agent/modelBudget'
  * können, sonst hält er eine Wolkenantwort für eine lokale.
  */
 
-export type TextProvider = 'gemini' | 'ollama' | 'openrouter' | 'openai' | 'anthropic' | 'chatgpt' | 'lmstudio'
+export type TextProvider = 'gemini' | 'ollama' | 'openrouter' | 'openai' | 'anthropic' | 'chatgpt' | 'lmstudio' | 'jarvis'
 
 export interface TextAnswer {
   text: string
@@ -71,6 +72,9 @@ async function usable(provider: TextProvider, chosen: TextProvider): Promise<boo
     // Nur wenn ausdrücklich gewählt: ein LM-Studio-Server, der zufällig läuft, ist keine Zusage.
     case 'lmstudio':
       return chosen === 'lmstudio' && lmStudioReachable(settings.lmStudio?.baseUrl)
+    // Wie LM Studio nur, wenn ausdrücklich gewählt — das Laden kostet Speicher.
+    case 'jarvis':
+      return chosen === 'jarvis' && Boolean(settings.jarvisLocal?.model)
     case 'ollama': {
       const local = settings.localFallback
       if (!local?.model) return false
@@ -109,6 +113,14 @@ async function callProvider(provider: TextProvider, req: TextRequest): Promise<T
     })
     if (!text.trim()) throw new Error(`${local.model} hat nichts geliefert.`)
     return { text: text.trim(), provider, model: local.model }
+  }
+
+  if (provider === 'jarvis') {
+    await ensureLocalServer()
+    const text = await lmStudioThink('', req.system, req.user, { baseUrl: localBaseUrl(), maxTokens: req.maxTokens, signal: req.signal })
+    if (!text.trim()) throw new Error('Das lokale Modell hat nichts geliefert.')
+    const model = settings.jarvisLocal.model.split(/[\\/]/).pop()?.replace(/\.gguf$/i, '') ?? 'lokal'
+    return { text: text.trim(), provider, model }
   }
 
   if (provider === 'lmstudio') {
@@ -228,9 +240,11 @@ function unavailableReason(provider: TextProvider): string {
       return 'Es ist keine ChatGPT-Anmeldung hinterlegt. In Zugänge mit ChatGPT anmelden.'
     case 'ollama':
       return (
-        'Das lokale Modell antwortet nicht. Prüf in den Einstellungen unter Zugänge, ob Ollama ' +
+        'Das lokale Modell antwortet nicht. Prüf in den Einstellungen unter Konten & Standort, ob Ollama ' +
         'läuft und ein Modell ausgewählt ist.'
       )
+    case 'jarvis':
+      return 'Es ist kein lokales Jarvis-Modell gewählt. Unter Zugänge → Textaufgaben ein Modell von Hugging Face laden.'
     case 'lmstudio':
       return 'LM Studio antwortet nicht. In LM Studio unter „Developer" den Server starten und ein Modell laden.'
     case 'openrouter':
@@ -258,6 +272,7 @@ export function fallbackNote(answer: TextAnswer): string | undefined {
     gemini: 'Gemini',
     ollama: 'dem lokalen Modell',
     lmstudio: 'LM Studio',
+    jarvis: 'dem eigenen lokalen Modell',
     openrouter: 'OpenRouter',
     openai: 'ChatGPT',
     anthropic: 'Claude'

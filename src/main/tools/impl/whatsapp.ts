@@ -131,7 +131,7 @@ const compose = defineTool({
     to: z.string().describe('Name aus dem Adressbuch oder eine Telefonnummer.'),
     message: z.string().describe('Der Text, so wie er dastehen soll.')
   }),
-  spokenHint: 'Ich mach das Gespräch auf.',
+  spokenHint: 'Okay.',
   async execute({ to, message }) {
     const who = recipient(to)
     await openChat(who.phone, message)
@@ -156,7 +156,7 @@ const send = defineTool({
     to: z.string().describe('Name aus dem Adressbuch oder eine Telefonnummer.'),
     message: z.string().describe('Der Text, so wie er verschickt werden soll.')
   }),
-  spokenHint: 'Ich schick das raus.',
+  spokenHint: 'Mhm.',
   async execute({ to, message }) {
     const who = recipient(to)
     const page = await openChat(who.phone, message)
@@ -215,7 +215,7 @@ const unread = defineTool({
     'Sieht nach, in welchen WhatsApp-Gesprächen ungelesene Nachrichten liegen. Für "hab ich ' +
     'was auf WhatsApp" oder "wer hat geschrieben". Liest die Nachrichten selbst nicht.',
   schema: z.object({}),
-  spokenHint: 'Ich schau nach.',
+  spokenHint: 'Okay.',
   async execute() {
     const page = await whatsappPage(BASE)
     await page.waitForSelector('#pane-side', { timeout: READY_MS }).catch(() => undefined)

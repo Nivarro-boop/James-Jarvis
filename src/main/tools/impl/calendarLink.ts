@@ -21,7 +21,7 @@ import { addDays, parseWhen, RANGES, resolveRange } from './calendarTime'
  *
  * Für alle, die Google nicht über OAuth anbinden wollen oder Outlook bzw.
  * iCloud nutzen. Lesen geht über die private iCal-Adresse, die der Nutzer in
- * den Einstellungen unter Zugänge ablegt. Eintragen geht hier nie direkt:
+ * den Einstellungen unter Konten & Standort ablegt. Eintragen geht hier nie direkt:
  * James baut den Termin vor, der Nutzer klickt im eigenen Kalender auf
  * Speichern. Damit gibt es keinen Schreibzugriff, den man absichern müsste.
  */
@@ -77,7 +77,7 @@ const linkAgenda = defineTool({
   }),
   readOnly: true,
   requiresSecret: 'calendarIcsUrl',
-  spokenHint: 'Ich sehe im Kalender nach.',
+  spokenHint: 'Mhm.',
   async execute({ zeitraum, suche, maximal }, ctx) {
     const { from, to, label } = resolveRange(zeitraum ?? 'heute')
     const text = await loadIcs()
@@ -149,7 +149,7 @@ const saveDraft = defineTool({
       .optional()
       .describe('Welchen Weg sofort öffnen. Ohne Angabe nur vorbereiten.')
   }),
-  spokenHint: 'Ich bereite den Termin vor.',
+  spokenHint: 'Okay.',
   async execute({ titel, beginn, ende, dauer_minuten, ort, notiz, oeffnen }) {
     const draft = toDraft(beginn, ende, dauer_minuten, {
       title: titel.trim(),

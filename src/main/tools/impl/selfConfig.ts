@@ -53,6 +53,31 @@ function patchFor(settings: Settings, path: string[], value: unknown): Partial<S
   return { [head]: build(section, rest) } as Partial<Settings>
 }
 
+function validate(path: string, value_json: string): { path: string; keys: string[]; value: unknown; before: unknown } {
+  const keys = path.split('.').filter(Boolean)
+  if (keys.length === 0) throw new Error('Kein Pfad angegeben.')
+  if (LOCKED_ROOTS.has(keys[0]) || LOCKED_LEAVES.test(path)) {
+    throw new Error(`${path} ist gesperrt und nur in den Einstellungen von Hand änderbar.`)
+  }
+  const before = readPath(getSettings(), keys)
+  if (!before.found) throw new Error(`Diese Einstellung gibt es nicht: ${path}. Erst mit settings_read nachsehen.`)
+  let value: unknown
+  try {
+    value = JSON.parse(value_json)
+  } catch {
+    throw new Error('value_json ist kein gültiges JSON.')
+  }
+  const expected = kind(before.value)
+  const got = kind(value)
+  // null ↔ string ist bei Gerätekennungen üblich (null = Standardgerät).
+  const nullable = (expected === 'null' && got === 'string') || (expected === 'string' && got === 'null')
+  if (expected !== got && !nullable) {
+    throw new Error(`${path} erwartet ${expected}, bekommen hat es ${got}.`)
+  }
+  if (expected === 'object') throw new Error('Bitte einen einzelnen Wert ändern, nicht einen ganzen Bereich.')
+  return { path, keys, value, before: before.value }
+}
+
 const read = defineTool({
   name: 'settings_read',
   group: 'system',
@@ -65,7 +90,18 @@ const read = defineTool({
   async execute({ section }) {
     const settings = getSettings() as unknown as Record<string, unknown>
     if (!section) {
-      return { bereiche: Object.keys(settings).filter((k) => !LOCKED_ROOTS.has(k)) }
+      // Die häufigsten Stellschrauben gleich mit Wert, damit kein zweiter Aufruf nötig ist.
+      const s = getSettings()
+      return {
+        haeufig: {
+          persona: s.persona, personality: s.personality, voice: s.voice, 'wake.threshold': s.wake.threshold,
+          'wake.enabled': s.wake.enabled, 'tokenSaver.enabled': s.tokenSaver.enabled, chatGptModel: s.chatGptModel,
+          'speech.provider': s.speech.provider, 'speech.thinkProvider': s.speech.thinkProvider,
+          'piper.lengthScale': s.piper.lengthScale, pcProfile: s.pcProfile, dailyBriefing: s.dailyBriefing,
+          confirmActions: s.confirmActions
+        },
+        bereiche: Object.keys(settings).filter((k) => !LOCKED_ROOTS.has(k))
+      }
     }
     if (LOCKED_ROOTS.has(section)) return { fehler: `${section} ist nur in den Einstellungen von Hand änderbar.` }
     const { found, value } = readPath(settings, section.split('.'))
@@ -78,40 +114,25 @@ const change = defineTool({
   group: 'system',
   description:
     'Ändert eine eigene Einstellung, z. B. speech.provider auf "gemini" oder wake.threshold auf 0.6. ' +
-    'Der Pfad muss existieren, der Wert denselben Typ haben. Werkzeugrechte, MCP-Server und Fernzugriff ' +
+    'Der Pfad muss existieren, der Wert denselben Typ haben. Mehrere Änderungen über `changes` in einem Aufruf. ' +
+    'Häufig: persona, personality, voice, wake.threshold (0.35 ruhig, 0.5 normal, 0.7 laut), tokenSaver.enabled, ' +
+    'chatGptModel ("auto"), piper.lengthScale, pcProfile, dailyBriefing. Werkzeugrechte, MCP-Server und Fernzugriff ' +
     'gehen nur von Hand.',
   alwaysAsk: true,
   schema: z.object({
-    path: z.string().describe('Pfad mit Punkten, z. B. "speech.provider"'),
-    value_json: z.string().describe('Neuer Wert als JSON, z. B. "\\"gemini\\"", "0.6" oder "true"')
+    path: z.string().optional().describe('Pfad mit Punkten, z. B. "speech.provider"'),
+    value_json: z.string().optional().describe('Neuer Wert als JSON, z. B. "\\"gemini\\"", "0.6" oder "true"'),
+    changes: z.array(z.object({ path: z.string(), value_json: z.string() })).max(10).optional()
+      .describe('Mehrere Änderungen auf einmal, mit einer einzigen Rückfrage.')
   }),
-  async execute({ path, value_json }) {
-    const keys = path.split('.').filter(Boolean)
-    if (keys.length === 0) throw new Error('Kein Pfad angegeben.')
-    if (LOCKED_ROOTS.has(keys[0]) || LOCKED_LEAVES.test(path)) {
-      throw new Error(`${path} ist gesperrt und nur in den Einstellungen von Hand änderbar.`)
-    }
-    const settings = getSettings()
-    const before = readPath(settings, keys)
-    if (!before.found) throw new Error(`Diese Einstellung gibt es nicht: ${path}. Erst mit settings_read nachsehen.`)
-
-    let value: unknown
-    try {
-      value = JSON.parse(value_json)
-    } catch {
-      throw new Error('value_json ist kein gültiges JSON.')
-    }
-    const expected = kind(before.value)
-    const got = kind(value)
-    // null ↔ string ist bei Gerätekennungen üblich (null = Standardgerät).
-    const nullable = (expected === 'null' && got === 'string') || (expected === 'string' && got === 'null')
-    if (expected !== got && !nullable) {
-      throw new Error(`${path} erwartet ${expected}, bekommen hat es ${got}.`)
-    }
-    if (expected === 'object') throw new Error('Bitte einen einzelnen Wert ändern, nicht einen ganzen Bereich.')
-
-    setSettings(patchFor(settings, keys, value))
-    return { geändert: path, vorher: before.value, jetzt: value }
+  async execute({ path, value_json, changes }) {
+    const list = changes?.length ? changes : path && value_json !== undefined ? [{ path, value_json }] : []
+    if (!list.length) throw new Error('Kein Pfad angegeben.')
+    // Erst alle prüfen, dann alle schreiben: keine halbe Umstellung bei einem Fehler.
+    const planned = list.map(c => validate(c.path, c.value_json))
+    for (const p of planned) setSettings(patchFor(getSettings(), p.keys, p.value))
+    const done = planned.map(p => ({ geändert: p.path, vorher: p.before, jetzt: p.value }))
+    return done.length === 1 ? done[0] : { geändert: done }
   }
 }) as ToolDefinition
 
@@ -123,7 +144,7 @@ const repair = defineTool({
     'zur Laufzeit geht: Neustart, fehlende Downloads nachladen, anderer Port, Rückfall auf Gemini. ' +
     'Für "repariere dich" oder wenn etwas nicht geht.',
   schema: z.object({}),
-  spokenHint: 'Ich prüfe mich kurz durch.',
+  spokenHint: 'Okay.',
   async execute() {
     const dashboard = await runAutomaticRepair(true)
     const open = dashboard.recent.filter((i) => !i.healed).slice(0, 5)

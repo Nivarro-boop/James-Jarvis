@@ -248,19 +248,19 @@ export function McpSection({ settings, patch, onNavigate }: { settings: Settings
 
   return (
     <>
-      <h2>Konnektoren</h2>
+      <h2>Erweiterungen</h2>
       <p className="lede">
-        Deine Konnektoren für Kalender, Smart Home, Wissen und Arbeit. Wähle eine vorhandene Anbindung
-        oder ergänze eigene Werkzeuge. Konten verbindest du beim jeweiligen Dienst.
+        Erweiterungen geben James neue Fähigkeiten: Kalender, Smart Home, Notizen, Arbeit.
+        Oben stehen die eingebauten, darunter welche zum Hinzufügen mit einem Klick.
       </p>
-      <div className="connector-summary" aria-label="Konnektorstatus"><strong>{settings.mcpServers.length} eingetragen</strong><span>{Object.values(status ?? {}).filter(s => s.state === 'ok').length} verbunden</span><span>{Object.values(status ?? {}).reduce((sum, s) => sum + (s.state === 'ok' ? s.tools : 0), 0)} zusätzliche Werkzeuge</span></div>
-      <label className="connector-search">Konnektor finden<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Kalender, Smart Home, GitHub…" /></label>
+      <div className="connector-summary" aria-label="Status der Erweiterungen"><strong>{settings.mcpServers.length} eingetragen</strong><span>{Object.values(status ?? {}).filter(s => s.state === 'ok').length} verbunden</span><span>{Object.values(status ?? {}).reduce((sum, s) => sum + (s.state === 'ok' ? s.tools : 0), 0)} zusätzliche Werkzeuge</span></div>
+      <label className="connector-search">Erweiterung finden<input type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Kalender, Smart Home, GitHub…" /></label>
       {note && <p role={note.ok ? 'status' : 'alert'} className={note.ok ? 'hint ok' : 'hint err'}>{note.text}</p>}
       {onNavigate && builtInMatches.length > 0 && <section className="connector-builtins" aria-label="In James enthalten"><h3>In James enthalten</h3><div className="mcp-presets">{builtInMatches.map(item => <button type="button" className="mcp-preset" key={item.name} onClick={() => onNavigate(item.section)}><strong>{item.name} <span aria-hidden="true">↗</span></strong><small>{item.description}</small><small>Einrichtung öffnen</small></button>)}</div></section>}
-      {!presets.length && !builtInMatches.length && <p role="status">Kein Treffer. Eigene Konnektoren kannst du unten per Adresse oder Konfiguration hinzufügen.</p>}
+      {!presets.length && !builtInMatches.length && <p role="status">Kein Treffer. Eigene Erweiterungen kannst du ganz unten hinzufügen.</p>}
 
       <div className="field">
-        <h3>Zusätzliche Konnektoren</h3>
+        <h3>Mit einem Klick hinzufügen</h3>
         <div className="mcp-presets">
           {presets.map((preset) => {
             const present = isInstalled(preset)
@@ -291,10 +291,13 @@ export function McpSection({ settings, patch, onNavigate }: { settings: Settings
         </div>
       </div>
 
-      <details className="settings-disclosure"><summary>Eigenen Konnektor per Adresse verbinden</summary><div className="field"><label>Name<input value={remote.name} onChange={event => setRemote({ ...remote, name: event.target.value })} placeholder="Mein Dienst" /></label><label>Serveradresse<input type="url" value={remote.url} onChange={event => setRemote({ ...remote, url: event.target.value })} placeholder="https://mein-dienst.example/mcp" /></label><button className="primary" disabled={reloading || !remote.url.trim()} onClick={() => void addRemote()}>Konnektor hinzufügen</button><p className="hint">Für eine Anmeldung per Token nutze den Konfigurationsimport mit einem Authorization-Header. Der Token wird verschlüsselt abgelegt.</p></div></details>
+      <hr className="section-divider" />
+      <h3>Eigene Erweiterung hinzufügen</h3>
+      <p className="hint">Für Fortgeschrittene: Erweiterungen nach dem MCP-Standard per Adresse, per kopierter Konfiguration oder von Hand.</p>
+      <div className="field"><label className="connector-subhead">Per Adresse</label><label>Name<input value={remote.name} onChange={event => setRemote({ ...remote, name: event.target.value })} placeholder="Mein Dienst" /></label><label>Serveradresse<input type="url" value={remote.url} onChange={event => setRemote({ ...remote, url: event.target.value })} placeholder="https://mein-dienst.example/mcp" /></label><button className="primary" disabled={reloading || !remote.url.trim()} onClick={() => void addRemote()}>Konnektor hinzufügen</button><p className="hint">Für eine Anmeldung per Token nutze den Konfigurationsimport mit einem Authorization-Header. Der Token wird verschlüsselt abgelegt.</p></div>
 
       <div className="field">
-        <label>Konfiguration einfügen</label>
+        <label>Per kopierter Konfiguration</label>
         <textarea
           aria-label="Konnektor-Konfiguration"
           rows={6}

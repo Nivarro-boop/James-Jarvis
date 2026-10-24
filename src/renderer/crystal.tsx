@@ -8,6 +8,7 @@ import { useCrystal } from './store/crystalStore'
 import { describeError } from '@shared/errorText'
 import './styles.css'
 import './home/home.css'
+import './refinement.css'
 
 /**
  * Einstiegspunkt des Hauptfensters.

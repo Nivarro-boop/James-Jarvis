@@ -163,7 +163,7 @@ const windowAction = defineTool({
       .describe('Was mit dem Element geschehen soll.'),
     text: z.string().optional().describe('Nur für schreiben: der neue Inhalt des Feldes.')
   }),
-  spokenHint: 'Einen Moment.',
+  spokenHint: 'Mhm.',
   async execute({ ref, action, text }) {
     if (!refBekannt(ref)) {
       throw new Error(

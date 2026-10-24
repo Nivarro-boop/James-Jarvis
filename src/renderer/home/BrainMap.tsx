@@ -202,7 +202,6 @@ export function BrainMap({ onClose }: { onClose: () => void }): JSX.Element {
 export function WidgetTiles(): JSX.Element | null {
   const [widgets, setWidgets] = useState<Widget[]>([])
   useEffect(() => {
-    void window.jarvis.invoke('brain:widgets').then(setWidgets)
     return window.jarvis.on('brain:widgets', setWidgets)
   }, [])
   if (!widgets.length) return null

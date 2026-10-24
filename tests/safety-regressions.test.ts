@@ -52,7 +52,7 @@ describe('Einstellungen validieren', () => {
   })
   for (const patch of [null, [], { audio: null }, { wake: { threshold: NaN } },
     { companion: { port: 65535 } }, { music: { spotifyRedirectPort: 123.5 } }, { speech: { provider: 'unknown' } },
-    { audio: { outputGain: 'loud' } }, {wake:{modelName:'../bad.onnx'}}, {hermes:{baseUrl:'https://example.com'}},
+    { audio: { outputGain: 'loud' } }, {wake:{modelName:'../bad.onnx'}},
     {mcpServers:[{id:'bad',name:'Bad',enabled:'yes',command:'node',args:[]}]},
     {mcpServers:[{id:'bad',name:'Bad',enabled:true,command:'node',args:[42]}]},
     {mcpServers:[{id:'bad',name:'Bad',enabled:true,command:'node',args:[],env:{API_KEY:42}}]},

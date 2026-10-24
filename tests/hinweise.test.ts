@@ -47,7 +47,8 @@ function abschnitte(): Set<string> {
   const liste = block.slice(0, block.indexOf('] as const'))
   const namen = [...liste.matchAll(/label: '([^']+)'/g)].map((m) => m[1])
   assert.ok(namen.length > 5, 'die Abschnittsliste wurde nicht gefunden')
-  return new Set(namen)
+  // Mehrteilige Namen („Konten & Standort“) gelten auch mit ihrem ersten Wort.
+  return new Set([...namen, ...namen.filter((n) => n.includes(' & ')).map((n) => n.split(' ')[0])])
 }
 
 /** Alle Dateien, in denen solche Sätze vorkommen können. */

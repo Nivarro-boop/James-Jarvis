@@ -1,0 +1,48 @@
+{
+  "expo": {
+    "name": "James",
+    "slug": "james-jarvis-phone",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#05080c",
+    "platforms": [
+      "ios"
+    ],
+    "ios": {
+      "bundleIdentifier": "dev.void.jarvis.phone",
+      "supportsTablet": false,
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "James hört zu, solange du die Sprechtaste hältst.",
+        "NSLocalNetworkUsageDescription": "James verbindet sich mit deinem Rechner im Heimnetz und weckt ihn bei Bedarf auf.",
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
+      }
+    },
+    "plugins": [
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Zum Scannen des Kopplungs-QR-Codes vom Rechner.",
+          "microphonePermission": "James hört zu, solange du die Sprechtaste hältst.",
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-secure-store",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#05080c"
+        }
+      ]
+    ]
+  }
+}

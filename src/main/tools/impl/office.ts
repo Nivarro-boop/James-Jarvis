@@ -152,7 +152,7 @@ const presentation = defineTool({
     folder: folderField,
     open: openField
   }),
-  spokenHint: 'Ich bau die Folien.',
+  spokenHint: 'Mhm.',
   async execute({ topic, title, subtitle, count, slides, folder, open }, ctx) {
     ctx.setState('thinking')
 
@@ -237,7 +237,7 @@ const document = defineTool({
     folder: folderField,
     open: openField
   }),
-  spokenHint: 'Ich schreib das auf.',
+  spokenHint: 'Okay.',
   async execute({ topic, title, subtitle, length, blocks, folder, open }, ctx) {
     ctx.setState('thinking')
 
@@ -343,7 +343,7 @@ const spreadsheet = defineTool({
     folder: folderField,
     open: openField
   }),
-  spokenHint: 'Ich leg die Tabelle an.',
+  spokenHint: 'Mhm.',
   async execute({ topic, title, sheetName, header, rows, folder, open }, ctx) {
     ctx.setState('thinking')
 

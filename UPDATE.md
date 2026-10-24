@@ -1,3 +1,124 @@
+# Gesamtprüfung und iPhone-App – lokale Ergänzung 24.10.2026
+
+- Gesamtprüfung Desktop: Typecheck, 2.093 Tests, Produktionsbuild und sieben
+  UI-Checks (redesign, ui, workspace, context, maps, connectors, learning) grün.
+  Kein Fehler gefunden, der eine Reparatur brauchte.
+- drive_read lädt normale Drive-Dateien über 5 MiB nicht mehr komplett.
+- Neue iPhone-App unter `mobile/` (Expo SDK 58, iOS): koppeln per QR-Code,
+  Fernbedienungsseite in einer WebView, Rechner aufwecken über eigenes
+  Swift-Modul (`modules/jarvis-wake`), Offline-Bildschirm mit Weckknopf.
+  Kopplung und Weckziel im iOS-Schlüsselbund. Expo-Plugin aus dem Marketplace
+  ist im Projekt eingetragen (`mobile/.claude/settings.json`).
+- Fernbedienungsseite (`resources/companion/app.js`): meldet das Weckziel an die
+  App (`jarvisNative.remember`) und gibt die Rechneradresse beim Wecken mit.
+- Prüfung App: tsc, 4 Kopplungstests, expo-doctor 20/20, iOS-JS-Bündel gebaut,
+  Modul wird verlinkt. Nicht geprüft: Swift-Code (braucht EAS-Build auf Mac),
+  App auf echtem iPhone, Wecken. Broadcast-Wecken braucht Apples
+  Multicast-Freigabe; bis dahin direkter Versand an die letzte Rechneradresse.
+- Nichts committet, gepusht oder veröffentlicht.
+
+# Persönlicher, Tagesbriefing, Google Workspace – lokale Ergänzung 22.10.2026
+
+- Status oben: grün „Alles läuft“; bei Fehlern rot „N Fehler“ plus Knopf
+  „Beheben & senden“ (Selbstreparatur, danach anonymer Bericht, wenn erlaubt).
+- PC kennenlernen (`src/main/agent/pcProfile.ts`): beim Fokus des Hauptfensters
+  gründlich 1×/Tag, letzte Dateien alle 30 min. Programme (Startmenü), Ordner,
+  zuletzt benutzte Dateien, Textausschnitte aus .txt/.md/.docx/.csv/.rtf.
+  Sensible Dateinamen (Passwort, Schlüssel, Bank, Steuer …) übersprungen. Lokal
+  in `pc-profile.json`; Kurzfassung im Systemprompt, Werkzeug `pc_search`.
+  Schalter, „Jetzt einlesen“, „Eingelesenes löschen“ unter Gedächtnis.
+- Tagesbriefing (`src/main/agent/dailyBriefing.ts`): beim ersten Fokus am Tag
+  Karte mit Terminen, Überschneidungen, wichtigen Mails, fälligen Aufgaben und
+  nächsten Projektschritten; ohne Inhalt keine Karte. Schalter unter Gedächtnis.
+- Google Workspace: zusätzliche Rechte Drive, Docs, Sheets, Tasks, Kontakte;
+  Werkzeuge drive_search/read, docs_create/append, sheets_read/append,
+  tasks_list/add/complete, google_contacts_search. Bestehende Anmeldungen
+  müssen einmal neu verbinden (Hinweis in Verbindungen). APIs in der Google
+  Cloud Console aktivieren. Nicht mit echtem Konto geprüft.
+- Kopfzeile im Packstart-Stil: Status, „Verbunden mit ChatGPT · Abo“ (bzw.
+  Gemini/OpenAI/lokal), Uhr mit Sekunden und Datum, Menü (Neues Gespräch, Mit
+  James einrichten, Lernen & Quiz, Fähigkeiten, Gehirn, Verbindungen,
+  Einstellungen, Updates suchen, Einführung, Rechner prüfen, Hilfe, Lizenzen).
+  Neuer IPC `update:check`; `#setup` öffnet die Einrichtung.
+- Erster Start: Karte „James richtet sich ein“ mit Fortschritt für Stimme und
+  Gehör, „Mit ChatGPT verbinden“ und „WhatsApp verbinden“ (QR); verschwindet,
+  wenn alles geladen ist. Ohne anderen Zugang schaltet ein verbundenes Abo
+  James auf ChatGPT um.
+- Einstellungen: Auswahlkarten für Empfindlichkeit (Ruhig/Normal/Laut),
+  Denkweise (Automatisch + Modelle des Abos) und Stimme; deutlich kompakter,
+  Fenster 860×640. „Automatisch“ (`chatGptModel: 'auto'`, neue Voreinstellung)
+  nimmt im Gespräch ein schnelles, bei Unteragenten/Bildschirmarbeit ein
+  gründliches Modell aus dem Konto.
+- Lernen & Quiz: Werkzeuge study_add_cards/quiz/show/progress/delete; Karten
+  in `study.json`, Leitner-Fächer, Prüfen lokal ohne Modell. Quiz auf der
+  Startseite kostet keine Tokens.
+- settings_change kann mehrere Werte in einem Aufruf ändern (eine Rückfrage);
+  settings_read liefert die häufigsten Werte gleich mit.
+- check-ui, check-workspace-ui, check-context-ui an die schlanke Startseite
+  und das Menü angepasst. Prüfung: Typecheck, 2.086 Tests, alle sieben
+  UI-Checks grün. Echte Konten (ChatGPT, Google, WhatsApp) nicht geprüft.
+- Ungenutzt, noch nicht gelöscht: home/TextBar.tsx, home/ContextPanel.tsx,
+  home/Conversation.tsx (+ conversation.css, check-conversation-ui.cjs).
+
+# Aufgeräumte Oberfläche, Standort, Fehlerberichte – lokale Ergänzung 21.10.2026
+
+- Startseite: nur Kugel, „Was gibt’s Neues?“, Status-Punkt (grün = alles läuft)
+  und Einstellungen. Gesprächsverlauf, Aktionslog, Gehirn, Fertigkeiten und
+  Tastenhinweis entfernt; Gehirn, Fertigkeiten und Fehler beheben stehen unter
+  Einstellungen → Diagnose & Werkzeuge. Widgets erscheinen nur auf Anfrage.
+- Einstellungen: alle Bereiche sichtbar in fünf Gruppen, Alltagsnamen
+  (Konten & Standort, Mikrofon & Lautsprecher, Erweiterungen …). „Stimme &
+  Modelle“ bündelt Persönlichkeit, Stimme (Lokal/Piper gleichwertig) und
+  Textmodelle inkl. lokaler Hugging-Face-Modelle. Zuhören mit Tempo-Knöpfen.
+- Echter Standort: Schalter unter Konten & Standort, Windows-Ortung
+  (GeoCoordinateWatcher), Ortsname über OpenStreetMap, 10 min gemerkt.
+- Fehlerberichte: standardmäßig automatisch an den Netlify-Empfänger, einmalig
+  auch für bestehende Installationen eingeschaltet; „Jetzt senden“-Knopf.
+- Release-Skript: saubere deutsche Release-Notizen ohne Git-Zusätze.
+- Analytics-Seite: error-dashboard/public/index.html (KPIs, Verlauf pro Tag, Versionen, System, Meldungen, „Alles kopieren“); alte Liste unter liste.html. Bereitstellen per netlify-cli aus error-dashboard/, nicht per Drag-and-drop (Function muss mit).
+- Prüfung: Typecheck, 2.086 Tests, check-maps-ui und check-connectors-ui grün;
+  Installer gebaut und lokal installiert. check-ui scheitert an der
+  Wetterkarten-Prüfung, check-workspace-ui an Fertigkeiten/Aktionslog der
+  alten Startseite – beide Skripte noch an die neue Startseite anpassen.
+- Nicht auf GitHub veröffentlicht.
+# Eigene lokale Modelle, Stimmenwahl, VibeVoice entfernt – lokale Ergänzung 19.10.2026
+
+- Einrichtung: neuer Schritt „Stimme“ mit Lokal (Piper), ElevenLabs, Gemini Live,
+  ChatGPT Realtime. Cloud-Stimmen gekennzeichnet, fehlender Schlüssel wird
+  geprüft und verschlüsselt gespeichert.
+- Textaufgaben über „Jarvis lokal“: GGUF-Modelle auf Hugging Face suchen
+  (mehrere Wörter, Sortierung), Variante wählen (Q4_K_M empfohlen), laden,
+  auswählen, löschen. Gerechnet von llama.cpp (llama-server, Port 8095).
+  Ablage ~/JamesJarvis/modelle und ~/JamesJarvis/llama; fehlt llama.cpp,
+  wird die CPU-Fassung aus dem offiziellen GitHub-Release geladen.
+- VibeVoice komplett entfernt (Code, Einstellungen, Dienst). Gespeicherte
+  Einstellung „vibevoice“ wird beim Laden auf Piper umgestellt.
+- Separates Projekt JamesAI gelöscht; Projektordner um dist/win-unpacked,
+  alten Installer, out/ und Prüfreste verkleinert.
+- Prüfung: Typecheck, 2.086 Tests. llama-server mit Jarvis-Startwerten an
+  kleinem Testmodell geprüft.
+- Nicht geprüft: Einstellungsseite in der laufenden App, echter Download
+  großer Modelle, llama.cpp-Download aus GitHub, Gespräch selbst denkt
+  weiterhin über den Sprachweg (nicht über das lokale Modell).
+
+# Sprachbedienung und lokale Stimme – lokale Ergänzung 19.10.2026
+
+- Barge-in war schon vorhanden: Mikrofon läuft während der Ausgabe weiter,
+  BargeInDetector (160 ms laute Sprache, Schwelle 1,6 × über Raumruhe) stoppt
+  die Ausgabe sofort (Player-Flush) und reicht die ersten Silben an dieselbe
+  Sitzung weiter. Echo-Unterdrückung des Browsers ist standardmäßig an.
+- Neu: sichtbarer Knopf „Sprechen" auf der Startseite als verlässlicher Weg
+  ohne Weckwort. „Stoppen" (Esc) war schon da.
+- Piper: Standard jetzt ruhiger und klarer (length_scale 1,08, noise_scale 0,5,
+  noise_w 0,6), neuer Regler „Klarheit" in den Einstellungen. Stimme bleibt
+  de_DE-thorsten-medium (CC0); thorsten-high wählbar.
+- VibeVoice: auf CUDA zehn statt fünf Diffusionsschritte (weniger blechern).
+- Grenzen: keine englische Piper-Stimme (Englisch über Cloud-Stimmen);
+  Barge-in ohne Headset hängt an der Echo-Unterdrückung von Windows/Chromium,
+  bei lauten Lautsprechern kann James sich selbst unterbrechen.
+- Prüfung: Typecheck, 2.089 Tests, Installer 1.3.9 neu gebaut.
+- Nicht geprüft: echtes Mikrofon, echter Klang der neuen Werte.
+
 # Update 1.3.9 – Kalender-Link, Rechner-Check, Support-Meldung – 18.10.2026
 
 Ideen aus Packstart (Emin Simsek) selbst nachgebaut; kein fremder Code und

@@ -48,7 +48,7 @@ export function LiveStage({ snapshot }: { snapshot: ActivitySnapshot }): JSX.Ele
     <section className="live-stage" aria-label="Live-Ansicht" aria-live="polite">
       <header className="live-stage-head"><span className="live-status-dot" data-busy={busy} />
         <div className="live-status-copy"><small>{busy ? 'GERADE FÜR DICH' : engineLabel || 'JAMES IST DA'}</small><strong>{phase}</strong></div>
-        {busy && <button className="home-nav-btn live-stop" aria-label="Stoppen" title="Aktuelle Antwort und Werkzeuge stoppen (Escape)" onClick={() => window.dispatchEvent(new Event('jarvis:interrupt'))}><span aria-hidden="true">■</span> Stoppen <kbd aria-hidden="true">Esc</kbd></button>}
+        {busy && <button className="live-stop" onClick={() => window.dispatchEvent(new Event('jarvis:interrupt'))}>Stoppen <kbd>Esc</kbd></button>}
       </header>
       {lines.map((line) => (
         <p key={line.id} className={`live-line live-line-${line.who}`}>

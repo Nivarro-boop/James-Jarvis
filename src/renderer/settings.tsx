@@ -3,7 +3,10 @@ import { createRoot } from 'react-dom/client'
 import type { Settings } from '@shared/types'
 import { McpSection } from './settings/Connectors'
 import { Setup } from './settings/Setup'
+import { PcProfilePanel } from './settings/PcProfilePanel'
 import { BackupPanel } from './settings/BackupPanel'
+import { ToolsSection } from './settings/ToolsSection'
+import { LocalSection } from './settings/JarvisLocal'
 import { SettingsWriteQueue } from '@shared/settingsQueue'
 import {
   AlexaSection,
@@ -25,6 +28,7 @@ import {
 } from './settings/sections'
 import './styles.css'
 import './settings/settings.css'
+import './refinement.css'
 
 /**
  * Einstellungsfenster.
@@ -47,35 +51,37 @@ import './settings/settings.css'
  * womit er sich verbindet, dann das Feintuning. „Über" steht immer unten.
  */
 const SECTIONS = [
-  { id: 'overview', label: 'Übersicht', group: 'Für dich' },
-  { id: 'features', label: 'Funktionen', group: 'Für dich' },
-  { id: 'keys', label: 'Zugänge', group: 'Grundlagen' },
-  // Die Stimme ist eine der beiden Hauptentscheidungen und darf nicht hinter
-  // „Erweitert" verschwinden — dort würde der neue Umschalter niemandem helfen.
-  { id: 'voice', label: 'Stimme', group: 'Grundlagen' },
-  { id: 'audio', label: 'Audio', group: 'Grundlagen' },
-  { id: 'listening', label: 'Zuhören', group: 'Grundlagen' },
+  { id: 'overview', label: 'Übersicht', group: 'Start' },
+  { id: 'voice', label: 'Stimme & Modelle', group: 'Sprechen' },
+  { id: 'local', label: 'Lokale KI', group: 'Sprechen' },
+  { id: 'audio', label: 'Mikrofon & Zuhören', group: 'Sprechen' },
+  { id: 'keys', label: 'Konten & Standort', group: 'Dienste' },
   { id: 'connections', label: 'Verbindungen', group: 'Dienste' },
-  // Nicht hinter „Erweitert": James schickt Leute ausdrücklich hierher, wenn
-  // eine Adresse oder Nummer fehlt, und die Seite muss dann auch da sein.
-  { id: 'contacts', label: 'Kontakte', group: 'Dienste' },
-  { id: 'music', label: 'Musik', group: 'Dienste', advanced: true },
-  { id: 'companion', label: 'Telefon', group: 'Dienste', advanced: true },
-  { id: 'smarthome', label: 'Smart Home', group: 'Dienste', advanced: true },
-  { id: 'alexa', label: 'Alexa', group: 'Dienste', advanced: true },
-  { id: 'ears', label: 'Ohren', group: 'Feintuning', advanced: true },
-  { id: 'saver', label: 'Sparmodus', group: 'Feintuning', advanced: true },
-  { id: 'permissions', label: 'Rechte', group: 'Feintuning', advanced: true },
-  { id: 'mcp', label: 'Konnektoren', group: 'Feintuning', advanced: true },
-  { id: 'research', label: 'Recherchen', group: 'Feintuning', advanced: true },
-  { id: 'memory', label: 'Gedächtnis', group: 'Feintuning', advanced: true },
-  { id: 'audit', label: 'Aktionslog', group: 'Feintuning', advanced: true },
-  { id: 'about', label: 'Über', group: '' }
+  { id: 'mcp', label: 'Erweiterungen', group: 'Dienste' },
+  { id: 'memory', label: 'Gedächtnis', group: 'Du & Sicherheit' },
+  { id: 'audit', label: 'Aktionslog', group: 'Du & Sicherheit' },
+  { id: 'permissions', label: 'Erlaubnisse & Kosten', group: 'Du & Sicherheit' },
+  { id: 'diagnose', label: 'Diagnose & Werkzeuge', group: 'App' },
+  { id: 'about', label: 'Über', group: 'App' },
+  // Zusammengelegt: bleiben als Sprungziele für ältere Verweise und James' Hinweise.
+  { id: 'listening', label: 'Zuhören', group: 'Sprechen', hidden: true },
+  { id: 'ears', label: 'Spracherkennung', group: 'Sprechen', hidden: true },
+  { id: 'contacts', label: 'Kontakte', group: 'Dienste', hidden: true },
+  { id: 'music', label: 'Musik', group: 'Dienste', hidden: true },
+  { id: 'companion', label: 'Telefon', group: 'Dienste', hidden: true },
+  { id: 'smarthome', label: 'Smart Home', group: 'Dienste', hidden: true },
+  { id: 'alexa', label: 'Alexa', group: 'Dienste', hidden: true },
+  { id: 'research', label: 'Recherchen', group: 'Du & Sicherheit', hidden: true },
+  { id: 'saver', label: 'Sparmodus', group: 'Du & Sicherheit', hidden: true },
+  { id: 'features', label: 'Funktionen', group: 'Start', hidden: true }
 ] as const
 
 type SectionId = (typeof SECTIONS)[number]['id']
 
+const NAV_GROUPS = ['Start', 'Sprechen', 'Dienste', 'Du & Sicherheit', 'App'] as const
+
 const SECTION_KEYWORDS: Record<SectionId, string> = {
+  local: 'lokal lokale ki modell modelle offline hugging face qwen mistral llama herunterladen download',
   overview: 'start hilfe einrichtung einrichten überblick',
   features: 'funktionen fähigkeiten aufgaben helfer',
   keys: 'zugang schlüssel api key standort ort wetter fehler diagnose',
@@ -95,6 +101,7 @@ const SECTION_KEYWORDS: Record<SectionId, string> = {
   research: 'recherche suchen ergebnisse berichte',
   memory: 'gedächtnis erinnerung wissen sicherung backup wiederherstellen daten',
   audit: 'aktionslog verlauf protokoll aktivität aufgaben',
+  diagnose: 'fehler beheben diagnose reparatur gehirn fertigkeiten skills support hilfe log status',
   about: 'über version autostart windows starten kosten limit einrichtung hilfe lernen erweitert'
 }
 
@@ -142,7 +149,8 @@ function App(): JSX.Element {
    * ist das Fehlen eines Schlüssels — was ihn auf Wunsch öffnet, ist dieser
    * Knopf.
    */
-  const [forceSetup, setForceSetup] = useState(false)
+  // „Mit James einrichten“ aus dem Menü der Startseite öffnet das Fenster mit #setup.
+  const [forceSetup, setForceSetup] = useState(() => window.location.hash === '#setup')
 
   const navigate = useCallback((target: SectionId): void => {
     setSection(target)
@@ -175,18 +183,22 @@ function App(): JSX.Element {
   useEffect(() => {
     void load()
     const offNavigate = window.jarvis.onNavigate((target) => {
-      if (isSectionId(target)) navigate(target)
+      if (target === 'setup') setForceSetup(true)
+      else if (isSectionId(target)) navigate(target)
     })
     const offSettings = window.jarvis.on('settings:changed', next => {
       savedSettings.current = next
       if (!pendingWrites.current) setSettings(next)
     })
-    return () => { loadRevision.current++; offNavigate(); offSettings() }
+    // Sprungmarken wie #audio (Links, Tests) wechseln ebenfalls den Bereich.
+    const onHash = (): void => { const id = window.location.hash.slice(1); if (id === 'setup') setForceSetup(true); else if (isSectionId(id)) navigate(id) }
+    window.addEventListener('hashchange', onHash)
+    return () => { loadRevision.current++; offNavigate(); offSettings(); window.removeEventListener('hashchange', onHash) }
   }, [load, navigate])
 
   useEffect(() => {
     window.history.replaceState(null, '', `#${section}`)
-    document.title = `${SECTIONS.find(s => s.id === section)?.label ?? 'Einstellungen'} · Void James`
+    document.title = `${SECTIONS.find(s => s.id === section)?.label ?? 'Einstellungen'} · James-Jarvis`
   }, [section])
 
   useEffect(() => {
@@ -234,9 +246,6 @@ function App(): JSX.Element {
     }
   }, [])
 
-  const primaryIds = ['overview', 'voice', 'audio', 'listening', 'features', 'mcp', 'keys']
-  const primary = SECTIONS.filter(s => primaryIds.includes(s.id))
-  const extra = SECTIONS.filter(s => !primaryIds.includes(s.id))
   const searchResults = useMemo(() => {
     const terms = normalizeSearch(query).trim().split(/\s+/).filter(Boolean)
     return SECTIONS.filter(s => {
@@ -250,7 +259,7 @@ function App(): JSX.Element {
   // Assistent kurz auf, bevor die Antwort da ist und ihn wieder wegnimmt.
   if (!settings || hasKey === null) {
     return <main className="settings-loading">
-      <span className="settings-eyebrow">VOID JAMES</span>
+      <span className="settings-eyebrow">JAMES-JARVIS</span>
       <h1>{loadError ? 'Einstellungen gerade nicht erreichbar.' : 'Einstellungen werden geladen…'}</h1>
       {loadError ? <>
         <p role="alert">{loadError}</p>
@@ -283,14 +292,14 @@ function App(): JSX.Element {
   const activeSection = SECTIONS.find(s => s.id === active)!
 
   return (
-    <div className="settings-shell">
+    <div className="settings-shell james-ui">
       <a className="settings-skip" href="#settings-content" onClick={event => {
         event.preventDefault()
         mainRef.current?.focus()
       }}>Zum Inhalt springen</a>
       <nav className="settings-nav" aria-label="Einstellungen">
         <h1>
-          Void <span>James</span>
+          James<span>-Jarvis</span>
         </h1>
         <p className="settings-nav-note">Alles an einem Ort.</p>
         <div className="settings-search">
@@ -311,21 +320,19 @@ function App(): JSX.Element {
         </div>
         {searching ? <div className="settings-search-results">
           <p className="settings-search-count" role="status">{searchResults.length === 1 ? '1 Bereich gefunden' : `${searchResults.length} Bereiche gefunden`}</p>
-          {searchResults.map(s => <button key={s.id} className="nav-item" aria-current={active === s.id} onClick={() => navigate(s.id)}><span>{s.label}</span><small>{s.group || 'Hilfe & App'}</small></button>)}
+          {searchResults.map(s => <button key={s.id} className="nav-item" aria-current={active === s.id} onClick={() => navigate(s.id)}><span>{s.label}</span><small>{s.group}</small></button>)}
           {!searchResults.length && <p className="settings-search-empty">Versuch einen anderen Begriff, etwa „Stimme“, „Kosten“ oder „Backup“.</p>}
         </div> : <>
-          <p className="nav-group">Dein Alltag</p>
-          {primary.map(s => <button key={s.id} className="nav-item" aria-current={active === s.id} onClick={() => navigate(s.id)}>{s.label}</button>)}
-          <details className="settings-nav-more" open={!primaryIds.includes(active) || settings.showAdvanced}>
-            <summary>Weitere Einstellungen</summary>
-            {extra.map(s => <button key={s.id} className="nav-item" aria-current={active === s.id} onClick={() => navigate(s.id)}>{s.label}</button>)}
-          </details>
+          {NAV_GROUPS.map(group => <div key={group} className="nav-section">
+            <p className="nav-group">{group}</p>
+            {SECTIONS.filter(s => s.group === group && !('hidden' in s)).map(s => <button key={s.id} className="nav-item" aria-current={active === s.id} onClick={() => navigate(s.id)}>{s.label}</button>)}
+          </div>)}
         </>}
       </nav>
 
       <main className="settings-main" id="settings-content" ref={mainRef} tabIndex={-1} aria-label={activeSection.label}>
         <div className="settings-page-meta">
-          <span>{activeSection.group || 'Hilfe & App'} <i aria-hidden="true">/</i> {activeSection.label}</span>
+          <span>{activeSection.group} <i aria-hidden="true">/</i> {activeSection.label}</span>
           <span className={`settings-save-state ${saveError ? 'is-error' : ''}`} role="status" aria-live="polite">{saveError ? 'Nicht gespeichert' : saveState === 'saving' ? 'Wird gespeichert…' : saveState === 'saved' ? 'Änderungen gespeichert' : 'Automatisch speichern'}</span>
         </div>
         {saveError && <p role="alert" className="settings-save-error">Speichern fehlgeschlagen: {saveError}. Bitte ändere die Einstellung erneut.</p>}
@@ -335,10 +342,10 @@ function App(): JSX.Element {
           <p className="lede">Du sagst, was du brauchst. James kümmert sich darum. Hier passt du die wichtigsten Dinge an.</p>
           <div className="settings-tiles">
             {([
-              ['voice', '01', 'Mit James sprechen', 'Stimme wählen und deinen Anbieter verbinden.'],
+              ['voice', '01', 'Stimme & Modelle', 'Stimme wählen, Anbieter oder lokales Modell einrichten.'],
               ['audio', '02', 'Mikrofon und Lautsprecher', 'Prüfen, ob James dich hört und du ihn hören kannst.'],
-              ['features', '03', 'Was James für dich tun kann', 'Recherchen, Telefon, Kontakte und weitere Helfer.'],
-              ['keys', '04', 'Standort und Fehlerberichte', 'Deinen Standardort und den optionalen Fehlerversand einstellen.']
+              ['connections', '03', 'Dienste verbinden', 'Kalender, E-Mail, Musik und weitere Helfer.'],
+              ['local', '04', 'Lokale KI', 'Modell mit einem Klick laden – kostenlos und offline.']
             ] as const).map(([id, number, title, description]) => <button className="settings-tile" key={id} onClick={() => navigate(id)}><span>{number} <i>↗</i></span><strong>{title}</strong><p>{description}</p></button>)}
           </div>
           <div className="settings-help"><strong>Neu hier?</strong><p>Die geführte Einrichtung hilft dir Schritt für Schritt beim Start.</p><button className="primary" onClick={() => setForceSetup(true)}>Einrichtung öffnen</button></div>
@@ -358,7 +365,7 @@ function App(): JSX.Element {
             ] as const).map(([id, title, description]) => <button className="settings-tile" key={id} onClick={() => navigate(id)}><strong>{title}</strong><p>{description}</p><span>Öffnen ↗</span></button>)}
           </div>
         </>}
-        {active === 'connections' && <ConnectionsSection />}
+        {active === 'connections' && <><ConnectionsSection /><hr className="section-divider" /><MusicSection settings={settings} patch={patch} /><hr className="section-divider" /><SmartHomeSection settings={settings} patch={patch} /><hr className="section-divider" /><AlexaSection settings={settings} patch={patch} /><hr className="section-divider" /><CompanionSection settings={settings} patch={patch} /><hr className="section-divider" /><ContactsSection /></>}
         {active === 'smarthome' && <SmartHomeSection settings={settings} patch={patch} />}
         {active === 'music' && <MusicSection settings={settings} patch={patch} />}
         {active === 'alexa' && <AlexaSection settings={settings} patch={patch} />}
@@ -367,14 +374,16 @@ function App(): JSX.Element {
         {active === 'companion' && <CompanionSection settings={settings} patch={patch} />}
         {active === 'voice' && <VoiceSection settings={settings} patch={patch} />}
         {active === 'ears' && <EarsSection settings={settings} patch={patch} />}
-        {active === 'audio' && <AudioSection settings={settings} patch={patch} />}
+        {active === 'audio' && <><AudioSection settings={settings} patch={patch} /><hr className="section-divider" /><ListeningSection settings={settings} patch={patch} /><hr className="section-divider" /><EarsSection settings={settings} patch={patch} /></>}
         {active === 'listening' && <ListeningSection settings={settings} patch={patch} />}
         {active === 'saver' && <SaverSection settings={settings} patch={patch} />}
-        {active === 'permissions' && <PermissionsSection settings={settings} patch={patch} />}
+        {active === 'permissions' && <><PermissionsSection settings={settings} patch={patch} /><hr className="section-divider" /><SaverSection settings={settings} patch={patch} /></>}
         {active === 'mcp' && <McpSection settings={settings} patch={patch} onNavigate={navigate} />}
         {active === 'audit' && <AuditSection />}
         {active === 'research' && <ResearchSection />}
-        {active === 'memory' && <><BackupPanel settings={settings} patch={patch} /><MemorySection /></>}
+        {active === 'memory' && <><PcProfilePanel settings={settings} patch={patch} /><BackupPanel settings={settings} patch={patch} /><MemorySection /><hr className="section-divider" /><ResearchSection /></>}
+        {active === 'diagnose' && <ToolsSection settings={settings} patch={patch} />}
+        {active === 'local' && <LocalSection settings={settings} patch={patch} />}
         {active === 'about' && (
           <AboutSection settings={settings} patch={patch} onRestartSetup={() => setForceSetup(true)} />
         )}
@@ -386,6 +395,8 @@ function App(): JSX.Element {
 // ─────────────────────────────────────────────────────────────
 
 type Patch = (p: Partial<Settings>) => Promise<Settings> | void
+
+const formatUsd = (value: number): string => value.toLocaleString('de-AT', { style: 'currency', currency: 'USD' })
 
 function AboutSection({
   settings,
@@ -407,8 +418,7 @@ function AboutSection({
   return (
     <>
       <h2>Über</h2>
-      <p className="lede">Void James {version}</p>
-      <BackupPanel settings={settings} patch={patch} />
+      <p className="lede">James-Jarvis {version}</p>
 
 
       <hr className="section-divider" />
@@ -419,11 +429,11 @@ function AboutSection({
           <tbody>
             <tr>
               <td>Heute</td>
-              <td>{cost.todayUsd.toFixed(2)} $</td>
+              <td>{formatUsd(cost.todayUsd)}</td>
             </tr>
             <tr>
               <td>Diesen Monat</td>
-              <td>{cost.monthUsd.toFixed(2)} $</td>
+              <td>{formatUsd(cost.monthUsd)}</td>
             </tr>
           </tbody>
         </table>

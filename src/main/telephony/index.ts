@@ -99,7 +99,7 @@ export async function prepareConversation(to: string, opening?: string): Promise
   const settings = getSettings().telephony
   if (!settings?.conversation) {
     throw new Error(
-      'Das Gespräch am Telefon ist ausgeschaltet. In den Einstellungen unter Zugänge lässt es ' +
+      'Das Gespräch am Telefon ist ausgeschaltet. In den Einstellungen unter Konten & Standort lässt es ' +
         'sich einschalten — es macht diesen Rechner über einen Tunnel erreichbar.'
     )
   }

@@ -40,7 +40,7 @@ const selfDiagnose = defineTool({
       .optional()
       .describe('Wie weit zurück geschaut wird, in Stunden. Standard 24.')
   }),
-  spokenHint: 'Ich sehe in meinem eigenen Protokoll nach.',
+  spokenHint: 'Mhm.',
   async execute({ hours }) {
     const report = healthReport(Math.min(Math.max(hours ?? 24, 1), 24 * 14))
 
@@ -78,7 +78,7 @@ const selfReport = defineTool({
   schema: z.object({
     hours: z.number().optional().describe('Zeitraum in Stunden. Standard 24.')
   }),
-  spokenHint: 'Ich stelle den Bericht zusammen.',
+  spokenHint: 'Okay.',
   async execute({ hours }) {
     const text = codeReport(Math.min(Math.max(hours ?? 24, 1), 24 * 14))
     return {

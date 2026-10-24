@@ -197,7 +197,7 @@ export interface SpeechSettings {
    * Sprecher versuchen, sondern die Live-Sitzung selbst reden lassen — der
    * kürzeste Weg und die letzte Rückfallebene.
    */
-  provider: 'gemini' | 'elevenlabs' | 'piper' | 'vibevoice' | 'openai'
+  provider: 'gemini' | 'elevenlabs' | 'piper' | 'openai'
   /**
    * Modell für `provider: 'openai'` — die Realtime-API von OpenAI. Wie bei
    * Gemini Live hört, denkt und spricht es in einem Stück.
@@ -226,7 +226,7 @@ export interface SpeechSettings {
    * braucht dafür aber ein Modell mit Werkzeugunterstützung und eine Abschrift,
    * denn ein Textmodell hört nichts.
    */
-  thinkProvider: 'gemini' | 'ollama' | 'chatgpt' | 'hermes'
+  thinkProvider: 'gemini' | 'ollama' | 'chatgpt'
   /**
    * So lange Stille, bis ein Beitrag als beendet gilt.
    *
@@ -293,23 +293,6 @@ export interface SpeechSettings {
    */
   reserveChars: number
 
-  // ── VibeVoice, der dritte Weg ──
-  // Ein lokales Modell statt eines fremden Dienstes: Der Ton gehört dann dem
-  // Rechner, es gibt kein Kontingent und keine Leitung. Bezahlt wird das mit
-  // Wartezeit — gemessen rund zwei Sekunden bis zum ersten Wort statt einer
-  // halben — und mit einer Betonung, die aus dem Satzbau kommt statt aus dem
-  // Gespräch. Der Dienst gehört nicht zur Auslieferung: Er braucht eine
-  // Python-Umgebung mit PyTorch, gut drei Gigabyte, die niemand geschenkt
-  // bekommen will, der bei Geminis Stimme bleibt.
-
-  /** Sprecherprofil, etwa `de-Spk0_man`. */
-  speaker: string
-  /** Lokaler Port des Sprachdienstes. */
-  port: number
-  /** Python mit PyTorch. Leer heißt: unter ~/JamesAI/vibevoice/venv suchen. */
-  pythonPath: string
-  /** Verzeichnis der .pt-Sprecherprofile. Leer heißt: neben der Umgebung. */
-  voicesPath: string
 }
 
 /** Was das Konto bei ElevenLabs über sein Kontingent verrät. */
@@ -489,6 +472,13 @@ export interface PiperSettings {
    * streckt die Laute. Eins ist die Vorgabe der Stimme.
    */
   lengthScale: number
+  /**
+   * Klangschwankung der Stimme (piper `noise_scale`). Niedriger klingt
+   * klarer und ruhiger, zu niedrig flach. Null heißt Vorgabe der Stimme.
+   */
+  noiseScale: number
+  /** Schwankung der Lautlängen (piper `noise_w`). Null heißt Vorgabe der Stimme. */
+  noiseW: number
 }
 
 /** Ob piper spricht, und womit. */
@@ -573,6 +563,12 @@ export interface Personality {
 export interface Settings {
   language: 'de-DE' | 'en-US'
   homeLocation: string
+  /** Echten Standort über die Windows-Ortung verwenden (vom Nutzer erlaubt). */
+  useDeviceLocation: boolean
+  /** PC lokal einlesen (Programme, Ordner, letzte Dateien, Textausschnitte), wenn James im Vordergrund ist. */
+  pcProfile: boolean
+  /** Beim ersten Öffnen am Tag ein kurzes Briefing zeigen und sprechen. */
+  dailyBriefing: boolean
   diagnosticReporting: { enabled: boolean; automatic: boolean; url: string; capabilityGaps: boolean }
   liveModel: LiveModelId
   voice: VoiceName
@@ -598,13 +594,15 @@ export interface Settings {
    * Deshalb greift diese Einstellung genau dort, wo sie auch wirkt, und die
    * Oberfläche sagt das dazu, statt eine Wahlfreiheit vorzuspiegeln.
    */
-  brainProvider: 'gemini' | 'ollama' | 'openrouter' | 'openai' | 'anthropic' | 'chatgpt' | 'lmstudio'
+  brainProvider: 'gemini' | 'ollama' | 'openrouter' | 'openai' | 'anthropic' | 'chatgpt' | 'lmstudio' | 'jarvis'
   /** Account-specific slug returned by Sign in with ChatGPT model discovery. */
   chatGptModel: string
   /** Modell, das bei `brainProvider: 'openrouter'` benutzt wird. */
   openRouterModel: string
   /** LM Studio: lokaler OpenAI-kompatibler Server; leeres Modell = das gerade geladene. */
   lmStudio: { baseUrl: string; model: string }
+  /** Eigenes lokales Modell (GGUF unter ~/JamesJarvis/modelle), gerechnet von llama.cpp. */
+  jarvisLocal: { model: string }
   /** Modell bei `brainProvider: 'openai'`. */
   openAiModel: string
   /** Modell bei `brainProvider: 'anthropic'`. */
@@ -632,7 +630,6 @@ export interface Settings {
   confirmActions: boolean
   /** Daily local database/settings/skills snapshots; keeps seven automatic copies. */
   automaticBackups: boolean
-  hermes: { baseUrl: string; model: string }
   mcpServers: McpServerConfig[]
   /**
    * Tageslimit in Dollar für die Posten mit bekanntem Preisschild — derzeit
@@ -719,32 +716,6 @@ export interface SelfHealDashboard {
   recent: SelfHealIncidentEntry[]
   automatic: boolean
   checking: boolean
-}
-
-/** Was der Sprachdienst gerade tut. */
-export interface VoiceServiceStatus {
-  phase: 'aus' | 'startet' | 'lädt' | 'bereit' | 'fehler'
-  detail: string
-  port: number
-  voices: string[]
-  running: boolean
-  /** Kurzlebiger Schlüssel für den nur lokal erreichbaren Sprach-WebSocket. */
-  sessionToken: string
-  /**
-   * Die zwei Teile, die vorliegen müssen, einzeln beantwortet.
-   *
-   * Vorher gab es dafür nur `detail` — einen Satz mit einem Dateipfad darin,
-   * und zwar immer nur zu dem Teil, der zuerst auffiel. Wer beides nicht
-   * hatte, behob eines und bekam denselben Satz mit einem anderen Pfad. Als
-   * Liste ist auf einen Blick zu sehen, was steht und was fehlt, und die
-   * Pfade stehen dort, wo man sie hinlegen muss, statt in einer Fehlermeldung.
-   */
-  requirements: {
-    /** Python mit PyTorch. Ohne das startet der Dienst gar nicht. */
-    python: { ok: boolean; path: string }
-    /** Die Sprecherprofile, aus denen die Stimmen kommen. */
-    voices: { ok: boolean; path: string }
-  }
 }
 
 /**
@@ -1261,7 +1232,6 @@ export type SecretKey =
   | 'openrouter'
   /** ChatGPT-Schlüssel von platform.openai.com, für Textaufgaben. */
   | 'openai'
-  | 'hermes'
   /** Claude-Schlüssel aus der Anthropic Console, für Textaufgaben. */
   | 'anthropic'
   | 'higgsfield'
@@ -1317,6 +1287,8 @@ export type SecretKey =
    * einmal heraus — wer sie verliert, legt einen neuen Schlüssel an.
    */
   | 'appleMusicPrivateKey'
+  /** Öffentlicher Mapbox-Zugangsschlüssel (pk.…) für die 3D-Karten. */
+  | 'mapbox'
   /**
    * Die Kennung der Alexa-Skill, `amzn1.ask.skill.…`.
    *
@@ -1367,6 +1339,8 @@ export type ToolGroup =
   | 'gmail'
   /** Google Kalender über dieselbe Anmeldung wie Gmail. */
   | 'calendar'
+  /** Drive, Docs, Tabellen, Aufgaben und Kontakte über dieselbe Google-Anmeldung. */
+  | 'workspace'
   /** Yahoo Mail über den James-Browser. */
   | 'mail'
   /** Das Adressbuch, aus dem Empfänger aufgelöst werden. */
@@ -1647,7 +1621,13 @@ export interface BrowserHandoffCard extends CardBase {
   domain: string
   message: string
 }
-export type DisplayCard = StockCard | WeatherCard | PlacesCard | RouteCard | AgendaCard | SourcesCard | BrowserHandoffCard
+/** Tagesbriefing beim ersten Öffnen am Tag. */
+export interface BriefingCard extends CardBase {
+  kind: 'briefing'
+  greeting: string
+  sections: { title: string; items: string[] }[]
+}
+export type DisplayCard = StockCard | WeatherCard | PlacesCard | RouteCard | AgendaCard | SourcesCard | BrowserHandoffCard | BriefingCard
 export type DisplayCardKind = DisplayCard['kind']
 
 export interface ActivitySnapshot {
@@ -1895,4 +1875,52 @@ export interface ReminderEntry {
   state: 'pending' | 'notified' | 'done'
   createdAt: number
   lastNotifiedAt: number | null
+}
+
+// ─────────────────────────────────────────────────────────────
+// Eigene lokale Modelle (Hugging Face + llama.cpp)
+// ─────────────────────────────────────────────────────────────
+
+/** Ein Suchtreffer auf huggingface.co (nur GGUF). */
+export interface HubModel {
+  id: string
+  downloads: number
+  likes: number
+  license: string
+  gated: boolean
+}
+
+/** Die GGUF-Dateien eines Modells, kleinste zuerst. */
+export interface HubFiles {
+  repo: string
+  files: { path: string; size: number; quant: string; split: boolean }[]
+  /** Q4_K_M, sonst die kleinste einzelne Datei. */
+  recommended: string
+}
+
+export interface HubProgress {
+  label: string
+  received: number
+  total: number
+  done: boolean
+  error: string | null
+}
+
+export interface JarvisLocalModel {
+  path: string
+  name: string
+  /** Hugging-Face-Quelle, soweit aus dem Ordner ablesbar. */
+  source: string
+  size: number
+}
+
+export interface JarvisLocalStatus {
+  /** llama-server.exe vorhanden. */
+  runtime: boolean
+  runtimePath: string
+  modelsPath: string
+  models: JarvisLocalModel[]
+  /** Pfad des gerade laufenden Modells, sonst leer. */
+  running: string
+  downloading: boolean
 }

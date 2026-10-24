@@ -21,7 +21,6 @@ const ALL_KEYS: SecretKey[] = [
   'elevenlabs',
   'openrouter',
   'openai',
-  'hermes',
   'anthropic',
   'higgsfield',
   'googleOAuthClientId',
@@ -38,6 +37,7 @@ const ALL_KEYS: SecretKey[] = [
   'appleMusicTeamId',
   'appleMusicKeyId',
   'appleMusicPrivateKey',
+  'mapbox',
   'alexaSkillId',
   'calendarIcsUrl'
 ]

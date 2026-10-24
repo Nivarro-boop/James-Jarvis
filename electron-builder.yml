@@ -29,10 +29,6 @@ extraResources:
   # Programmsymbole für die Denkblase.
   - from: resources/app-icons.ps1
     to: app-icons.ps1
-  # Der Sprachdienst wird als eigener Python-Prozess gestartet — Python liest
-  # so wenig aus dem asar-Archiv wie PowerShell.
-  - from: resources/vibevoice-server.py
-    to: vibevoice-server.py
   # Stellt das Zertifikat für die Fernbedienung aus. Aus demselben Grund hier:
   # PowerShell liest nicht aus dem Archiv.
   - from: resources/companion-cert.ps1

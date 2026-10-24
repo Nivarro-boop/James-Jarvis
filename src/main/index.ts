@@ -1,4 +1,5 @@
 import './userDataPath'
+import { stopLocalServer } from './local/jarvisModels'
 import { app, dialog, globalShortcut, Menu, nativeImage, Tray } from 'electron'
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 import { initLogging } from './logging'
@@ -22,7 +23,6 @@ import { ensureCert } from './companion/tailscale'
 import { shutdownPublicEndpoint } from './telephony'
 import { startSip, stopSip, watchSipSettings } from './telephony/sip'
 import { startAlexa } from './alexa'
-import { applyVoiceSetting, stopVoiceService } from './voice/vibevoice'
 import { ensureLocalCert } from './companion/cert'
 import { localWakeTarget } from './companion/wol'
 import { isPaused, onPauseChanged, pauseState, setPaused, stopPauseTimer } from './store/pause'
@@ -35,10 +35,11 @@ import { clearChallenges, hasOpenChallenge } from './tools/permissions'
 import { reloadMcpServers, shutdownMcp } from './mcp/client'
 import { scheduleMemoryCare } from './agent/memoryCare'
 import { startScheduler, stopScheduler } from './scheduler/cron'
+import { watchPcProfile } from './agent/pcProfile'
+import { watchDailyBriefing } from './agent/dailyBriefing'
 import { startTimers, stopTimers } from './scheduler/timers'
 import { startReminders, stopReminders } from './scheduler/reminders'
 import { ensureLocalAssets } from './local/assets'
-import { stopHermesGateway } from './providers/hermesService'
 import { startBackups, stopBackups, flushBackups } from './store/backups'
 import { shutdownInput } from './automation/inputServer'
 import { stopLocalServices } from './local/service'
@@ -449,21 +450,19 @@ app.whenReady().then(async () => {
   startSelfHealMonitor()
 
   createCrystalWindow()
+  watchPcProfile(getCrystalWindow)
+  watchDailyBriefing(getCrystalWindow)
   buildTray()
   registerHotkeys()
   startKillSwitchWatcher()
   applyLaunchOnStartup()
 
   void applyCompanionSetting()
-  // Blockiert den Start nicht: Das Sprachmodell braucht eine halbe Minute zum
-  // Laden, und bis dahin spricht James eben mit Geminis Stimme.
-  void applyVoiceSetting()
 
   onSettingsChanged((settings) => {
     if (hotkeysOf(settings.wake) !== hotkeySignature) registerHotkeys()
     applyLaunchOnStartup()
     void applyCompanionSetting()
-    void applyVoiceSetting()
   })
 
   // MCP, Zeitplaner und Timer blockieren den Start nicht — der Kristall ist
@@ -572,7 +571,7 @@ app.on('will-quit', (event) => {
   stopLocalServices()
 
   const pending = Promise.allSettled([
-    stopHermesGateway(),
+    stopLocalServer(),
     flushBackups(),
     stopCompanion(),
     // Der Tunnel gehört unbedingt zu: Ein Funnel, der die App überlebt, zeigt
@@ -587,7 +586,6 @@ app.on('will-quit', (event) => {
     // Der Sprachdienst belegt die Grafikkarte, bis sein Prozess endet. Bliebe
     // er stehen, wäre die Karte nach dem Beenden der App weiter zu drei
     // Vierteln belegt — für ein Modell, das niemand mehr fragt.
-    stopVoiceService(),
     shutdownMcp()
   ])
   const deadline = new Promise<void>((resolve) => setTimeout(resolve, QUIT_CLEANUP_MS))

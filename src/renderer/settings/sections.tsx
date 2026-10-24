@@ -1,4 +1,5 @@
 import { WebsiteAccounts } from './WebsiteAccounts'
+import { PersonalWakeTrainer } from './PersonalWake'
 import { useEffect, useMemo, useRef, useState, type JSX } from 'react'
 import type {
   SipStatus,
@@ -29,7 +30,6 @@ import type {
   ToolGroup,
   ToolMeta,
   ToolPermission,
-  VoiceServiceStatus,
   WhisperHealth
 } from '@shared/types'
 import { PHONE_COUNTRIES, VOICES } from '@shared/types'
@@ -37,9 +37,10 @@ import type { OllamaHealth } from '@shared/types'
 import { ELEVEN, PIPER, WHISPER } from '@shared/config/defaults'
 import type { CompanionSetup, CompanionStatus, WakeReadiness } from '@shared/companion'
 import { CHATGPT_USAGE_URL, type ChatGptModel } from '@shared/chatgpt'
+import { JarvisLocalSetup } from './JarvisLocal'
+import { ChoiceCards } from './ChoiceCards'
 import { ChatGptConnection as ChatGptLogin } from './ChatGptConnection'
 import { ReminderPanel } from '../home/ReminderPanel'
-import { HermesConnection } from './HermesConnection'
 import { VoiceAccess } from './VoiceAccess'
 import { encodeQr, qrToSvgPath } from '@shared/qr'
 import { listAudioDevices } from '../audio/capture'
@@ -85,6 +86,11 @@ const SECRET_FIELDS: { key: SecretKey; label: string; hint: string; required?: b
     hint: 'Optional. Für Textaufgaben über Claude. Von console.anthropic.com, beginnt mit sk-ant-.'
   },
   {
+    key: 'mapbox',
+    label: 'Mapbox Zugangsschlüssel',
+    hint: 'Optional. Für 3D-Karten mit Gebäuden und Gelände. Öffentlicher Token (beginnt mit pk.) von account.mapbox.com. Ohne ihn zeichnet James die Karten selbst (2D, OpenStreetMap). Mit Schlüssel gehen Kartenausschnitte an Mapbox.'
+  },
+  {
     key: 'higgsfield',
     label: 'Higgsfield Zugang',
     hint: 'Format: Schlüssel:Geheimnis, mit Doppelpunkt getrennt. Braucht den Creator-Tarif.'
@@ -101,6 +107,39 @@ const SECRET_FIELDS: { key: SecretKey; label: string; hint: string; required?: b
     hint: 'Optional, nur lesen. Google: Kalender-Einstellungen, Privatadresse im iCal-Format. Outlook: Einstellungen, Kalender freigeben, ICS-Link. iCloud: Kalender teilen, öffentlicher Kalender. Beginnt mit https:// oder webcal://.'
   },
 ]
+
+/** Echter Standort: nur nach Erlaubnis, über die Windows-Ortung. */
+function DeviceLocationField({ settings, patch }: Props): JSX.Element {
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const locate = async (): Promise<boolean> => {
+    setBusy(true)
+    try {
+      const r = await window.jarvis.invoke('location:locate')
+      setNote(r.ok ? { ok: true, text: `Gefunden: ${r.name}` } : { ok: false, text: r.error ?? 'Ortung fehlgeschlagen.' })
+      return r.ok
+    } catch {
+      setNote({ ok: false, text: 'Ortung fehlgeschlagen.' })
+      return false
+    } finally { setBusy(false) }
+  }
+  return (
+    <div className="field">
+      <label style={{ fontWeight: 400 }}>
+        <input type="checkbox" checked={settings.useDeviceLocation} style={{ width: 'auto', marginRight: 8 }}
+          onChange={e => {
+            const on = e.target.checked
+            void patch({ useDeviceLocation: on })
+            if (on) void locate()
+          }} />
+        Echten Standort erlauben
+      </label>
+      <p className="hint">James fragt dann die Windows-Ortung, statt den Standardort zu nehmen. Der Ort bleibt auf deinem Rechner; nur der Ortsname wird bei OpenStreetMap nachgeschlagen.</p>
+      {settings.useDeviceLocation && <button disabled={busy} onClick={() => void locate()}>{busy ? 'Ortet …' : 'Jetzt orten'}</button>}
+      {note && <p role="status" className={note.ok ? 'hint ok' : 'hint err'}>{note.text}</p>}
+    </div>
+  )
+}
 
 export function KeysSection({ settings, patch }: Props): JSX.Element {
   const [reportBusy, setReportBusy] = useState(false)
@@ -237,18 +276,19 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
 
   return (
     <>
-      <h2>Zugänge</h2>
-      <WebsiteAccounts />
+      <h2>Konten &amp; Standort</h2>
       <p className="lede">
-        Lege deinen Standardort fest und entscheide, ob James technische Fehlerberichte senden darf.
-        Den Sprachzugang richtest du unter „Stimme“ ein. Weitere Dienste findest du unten.
+        Website-Konten, Standardort und Fehlerberichte an einem Ort.
+        Den Sprachzugang richtest du unter „Stimme“ ein.
       </p>
+      <WebsiteAccounts />
 
       <GoogleConnect />
       <div className="field"><label>Standardstandort</label>
         <input aria-label="Standardstandort" placeholder="z. B. Wien" value={settings.homeLocation} onChange={e => void patch({ homeLocation: e.target.value })} />
-        <p className="hint">Ohne Ortsangabe verwenden Wetter, Ortssuche und Routen diesen Ort. Keine heimliche GPS-Ortung. Ein ausdrücklich genannter Ort hat Vorrang.</p>
+        <p className="hint">Ohne Ortsangabe verwenden Wetter, Ortssuche und Routen diesen Ort. Ein ausdrücklich genannter Ort hat Vorrang.</p>
       </div>
+      <DeviceLocationField settings={settings} patch={patch} />
       <div className="field"><label>Optionale Fehlerberichte</label>
         {/* Eine veränderte Adresse ist eine andere Zusage: Gesendet würde nun
             an jemand anderes. Deshalb poussiert das Ändern den Versand aus —
@@ -274,207 +314,13 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
       <hr className="section-divider" />
 
       {renderFields(SECRET_FIELDS.filter(field => field.key === 'diagnosticReportToken'))}
-      <details className="settings-disclosure"><summary>Weitere Dienste und Zugänge verbinden</summary>
+      <hr className="section-divider" />
+      <h3>Weitere Dienste und Schlüssel</h3>
       {renderFields(SECRET_FIELDS.filter(field => field.key !== 'diagnosticReportToken'))}
 
       <hr className="section-divider" />
       <LinphoneSetup settings={settings} patch={patch} />
-
-      <hr className="section-divider" />
-      <TextProviderChoice
-        settings={settings}
-        patch={patch}
-        openRouterPresent={present('openrouter')}
-        present={present}
-      />
-
-      <hr className="section-divider" />
-      <LocalFallback settings={settings} patch={patch} />
-
-      <hr className="section-divider" />
-      <SpeechEngine settings={settings} patch={patch} />
-      </details>
     </>
-  )
-}
-
-/**
- * Die Innereien des lokalen Sprachdienstes.
- *
- * Gewählt wird der Weg nicht hier, sondern einmal unter Stimme — es gibt
- * genau einen Schalter dafür, und zwei Auswahlfelder für dieselbe Frage an
- * zwei Orten wären der sichere Weg zu einer Einstellung, die man für kaputt
- * hält. Was hier steht, sind die Angaben, die nur VibeVoice braucht:
- * Sprecher, Port, Pfade, und der Zustand des Dienstes.
- *
- * Die Zahl, an der die Entscheidung hängt, steht drüben: Geminis native
- * Stimme beginnt nach einer halben Sekunde zu sprechen, VibeVoice nach gut
- * zwei.
- */
-function SpeechEngine({ settings, patch }: Props): JSX.Element {
-  const speech = settings.speech ?? {
-    provider: 'gemini' as const,
-    speaker: 'de-Spk0_man',
-    port: 8791,
-    pythonPath: '',
-    voicesPath: ''
-  }
-  const [status, setStatus] = useState<VoiceServiceStatus | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [note, setNote] = useState<string | null>(null)
-
-  useEffect(() => {
-    void window.jarvis.invoke('speech:status').then(setStatus).catch(() => undefined)
-  }, [])
-
-  const update = (p: Partial<typeof speech>): void => void patch({ speech: { ...speech, ...p } })
-
-  const start = async (): Promise<void> => {
-    setBusy(true)
-    setNote(null)
-    try {
-      setStatus(await window.jarvis.invoke('speech:status', { start: true }))
-    } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const stop = async (): Promise<void> => {
-    setBusy(true)
-    setNote(null)
-    try {
-      setStatus(await window.jarvis.invoke('speech:stop'))
-    } catch (err) {
-      setNote(err instanceof Error ? err.message : String(err))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  // Die Stimmen kommen vom Dienst selbst. Läuft er nicht, bleibt wenigstens
-  // die eingestellte in der Liste — sonst stellte das Auswahlfeld beim
-  // Öffnen still auf etwas anderes um.
-  const available = status?.voices.length ? status.voices : [speech.speaker]
-
-  return (
-    <div className="field">
-      <label>VibeVoice</label>
-      {note && (
-        <div className="hint err" role="alert">
-          {note}
-        </div>
-      )}
-      {speech.provider !== 'vibevoice' && (
-        <div className="hint">
-          Der lokale Sprachdienst ist gerade nicht der gewählte Weg. Unter Stimme steht das
-          Auswahlfeld, das ihn einschaltet.
-        </div>
-      )}
-
-      {speech.provider === 'vibevoice' && (
-        <>
-          <label style={{ marginTop: 8 }}>
-            Sprecher{' '}
-            {status?.phase === 'bereit' ? (
-              <span className="badge ok">Dienst läuft</span>
-            ) : status?.phase === 'lädt' || status?.phase === 'startet' ? (
-              <span className="badge missing">startet…</span>
-            ) : (
-              <span className="badge err">aus</span>
-            )}
-          </label>
-          <select aria-label="Sprecher" value={speech.speaker} onChange={(e) => update({ speaker: e.target.value })}>
-            {available.map((v) => (
-              <option key={v} value={v}>
-                {v}
-              </option>
-            ))}
-          </select>
-
-          <div className="row" style={{ marginTop: 8 }}>
-            <button className="primary" disabled={busy} onClick={() => void start()}>
-              {busy ? 'einen Moment…' : 'Dienst starten'}
-            </button>
-            {status?.running && (
-              <button disabled={busy} onClick={() => void stop()}>
-                Dienst beenden
-              </button>
-            )}
-          </div>
-
-          {status?.detail && (
-            <div className={status.phase === 'fehler' ? 'hint err' : 'hint'} style={{ marginTop: 8 }}>
-              {status.detail}
-            </div>
-          )}
-
-          {/*
-            Was vorliegen muss, einzeln abgehakt.
-
-            Vorher stand hier nur der Fehlersatz zu dem Teil, der zuerst
-            auffiel — wer beides nicht hatte, behob eines und bekam denselben
-            Satz mit einem anderen Pfad. Und der Pfad steckte mitten im Text,
-            wo er sich schlecht kopieren lässt, obwohl genau das der nächste
-            Schritt ist: dorthin gehört die Umgebung.
-          */}
-          {status && !status.running && (
-            <table style={{ marginTop: 10, marginBottom: 4 }}>
-              <tbody>
-                {(
-                  [
-                    ['Python mit PyTorch', status.requirements.python],
-                    ['Sprecherprofile', status.requirements.voices]
-                  ] as const
-                ).map(([label, req]) => (
-                  <tr key={label}>
-                    <td style={{ width: 150 }}>{label}</td>
-                    <td style={{ width: 80 }}>
-                      {req.ok ? (
-                        <span className="badge ok">liegt vor</span>
-                      ) : (
-                        <span className="badge err">fehlt</span>
-                      )}
-                    </td>
-                    <td>
-                      <code>{req.path}</code>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-
-          <label style={{ marginTop: 8 }}>Python mit PyTorch</label>
-          <input aria-label="Python mit PyTorch"
-            type="text"
-            value={speech.pythonPath}
-            placeholder="leer lassen für ~/JamesAI/vibevoice/venv"
-            onChange={(e) => update({ pythonPath: e.target.value })}
-          />
-          <label style={{ marginTop: 8 }}>Sprecherprofile</label>
-          <input aria-label="Sprecherprofile"
-            type="text"
-            value={speech.voicesPath}
-            placeholder="leer lassen für ~/JamesAI/vibevoice/voices"
-            onChange={(e) => update({ voicesPath: e.target.value })}
-          />
-        </>
-      )}
-
-      <div className="hint">
-        Gemini erzeugt den Ton selbst, mit Betonung und Tempo aus dem Gespräch heraus, und beginnt
-        nach etwa einer halben Sekunde zu sprechen. VibeVoice läuft auf dieser Grafikkarte: Der Ton
-        gehört dir, kostet kein Kontingent — braucht aber gut zwei Sekunden bis zum ersten Wort, und
-        die Betonung kommt dann aus dem Satzbau statt aus der Lage.
-        <br />
-        <br />
-        Gesprochen wird satzweise. Am Stück wären es sechzehn Sekunden Stille vor dem ersten Ton,
-        gemessen auf diesem Rechner; satzweise sind es gut zwei, und danach läuft es lückenlos.
-        Fällt der Dienst aus, spricht James mit Geminis Stimme weiter, statt zu verstummen.
-      </div>
-    </div>
   )
 }
 
@@ -667,21 +513,7 @@ function LocalFallback({ settings, patch }: Props): JSX.Element {
       )}
 
       <div className="hint">
-        Greift beim Übersetzen, wenn Gemini gerade nicht erreichbar oder das Kontingent leer ist.
-        Nicht mehr: Websuche, Seitenabruf und Preisvergleich hängen an Googles Grounding, die
-        Bildschirmarbeit am Bildeingang, die Sprachschleife an nativem Audio der Live-API — dafür
-        gibt es lokal kein Gegenstück. Antwortet auch das lokale Modell nicht, meldet James den
-        ursprünglichen Gemini-Fehler, statt ihn zu verschlucken.
-        <br />
-        <br />
-        „Nachsehen“ holt das Modell gleich in den Speicher und hält es dort. Das lohnt sich: kalt
-        braucht ein Achtmilliarden-Modell über eine Minute bis zum ersten Wort, warm ein paar
-        Sekunden.
-        <br />
-        <br />
-        Unabhängig von diesem Schalter: Liegt in Ollama ein Einbettungsmodell — etwa{' '}
-        <code>nomic-embed-text</code> —, benutzt das Gedächtnis es von selbst für seine Vektoren,
-        sobald Gemini nicht antwortet. Dafür muss hier nichts eingestellt werden.
+        Springt ein, wenn Gemini nicht erreichbar oder das Kontingent leer ist. Websuche, Bildschirm und Live-Gespräch brauchen weiter das Netz. „Nachsehen“ lädt das Modell vor, dann antwortet es in Sekunden statt nach einer Minute.
       </div>
     </div>
   )
@@ -930,13 +762,14 @@ function TextProviderChoice({
 
   return (
     <div className="field">
-      <label>Textaufgaben über</label>
-      <select aria-label="Textaufgaben über"
+      <label>Modell für Textaufgaben</label>
+      <select aria-label="Modell für Textaufgaben"
         value={chosen}
         onChange={(e) => patch({ brainProvider: e.target.value as never })}
       >
         <option value="gemini">Gemini — schnell, braucht Netz</option>
         <option value="ollama">Ollama — lokal, kostet nichts, langsamer</option>
+        <option value="jarvis">Jarvis lokal — eigenes Modell von Hugging Face</option>
         <option value="lmstudio">LM Studio — lokal, kostet nichts</option>
         <option value="openrouter">OpenRouter</option>
         <option value="openai">OpenAI API — separate API-Abrechnung</option>
@@ -952,7 +785,7 @@ function TextProviderChoice({
           {!present(chosen) && (
             <div className="hint err" style={{ marginTop: 8 }}>
               Es ist kein {chosen === 'openai' ? 'OpenAI' : 'Anthropic'}-Schlüssel hinterlegt. Trag
-              ihn oben ein — bis dahin läuft es über Gemini weiter.
+              ihn in den Einstellungen unter Konten & Standort ein — bis dahin läuft es über Gemini weiter.
             </div>
           )}
           <input
@@ -982,10 +815,12 @@ function TextProviderChoice({
 
       {chosen === 'lmstudio' && <LmStudioSetup settings={settings} patch={patch} />}
 
+      {chosen === 'jarvis' && <JarvisLocalSetup settings={settings} patch={patch} />}
+
       {chosen === 'openrouter' && !openRouterPresent && (
         <div className="hint err" style={{ marginTop: 8 }}>
-          Es ist kein OpenRouter-Schlüssel hinterlegt. Trag ihn oben ein — bis dahin läuft es
-          über Gemini weiter.
+          Es ist kein OpenRouter-Schlüssel hinterlegt. Trag ihn in den Einstellungen unter Konten & Standort ein —
+          bis dahin läuft es über Gemini weiter.
         </div>
       )}
 
@@ -1011,14 +846,9 @@ function TextProviderChoice({
       )}
 
       <div className="hint">
-        Betrifft alles, wo Text hinein- und Text herausgeht — heute das Übersetzen, und alles,
-        was künftig dazukommt. Den Sprachweg und seinen Denkmotor wählst du unter Stimme
-        getrennt. Websuche, Preisvergleich, Seitenabruf und Bildschirmarbeit verwenden
-        weiterhin die dafür eingerichteten Werkzeuge und Zugänge.
-        <br />
-        <br />
-        Antwortet der Gewählte nicht, springt der nächste ein, statt dass die Aufgabe
-        fehlschlägt. James sagt in dem Fall dazu, von wem die Antwort kam.
+        Für Textaufgaben wie Übersetzen und Zusammenfassen. Lokale Modelle laufen auf deinem
+        Rechner, kosten nichts und senden nichts ins Netz. Antwortet das gewählte Modell nicht,
+        springt automatisch das nächste ein.
       </div>
     </div>
   )
@@ -1036,6 +866,8 @@ function GoogleConnect(): JSX.Element {
   const [connected, setConnected] = useState(false)
   /** Ob die bestehende Anmeldung auch den Kalender abdeckt. */
   const [calendar, setCalendar] = useState(true)
+  /** Ob die Anmeldung auch Drive, Docs, Tabellen, Aufgaben und Kontakte abdeckt. */
+  const [workspace, setWorkspace] = useState(true)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   /** Ob die Meldung ein Fehlschlag ist — grau gesetzt liest sich einer wie ein Hinweis. */
@@ -1047,6 +879,7 @@ function GoogleConnect(): JSX.Element {
       .then((s) => {
         setConnected(s.connected)
         setCalendar(s.calendar)
+        setWorkspace(s.workspace)
       })
       .catch(() => undefined)
   }, [])
@@ -1065,6 +898,7 @@ function GoogleConnect(): JSX.Element {
       // ist die Anmeldung erfolgreich und der Kalender trotzdem nicht dabei.
       const status = await window.jarvis.invoke('google:status')
       setCalendar(status.calendar)
+      setWorkspace(status.workspace)
     } catch (err) {
       setFailed(true)
       setMessage(err instanceof Error ? err.message : 'Die Anmeldung ging nicht.')
@@ -1076,11 +910,11 @@ function GoogleConnect(): JSX.Element {
   return (
     <div className="field">
       <label>
-        Gmail und Kalender über die Google-Schnittstelle{' '}
-        {connected && calendar ? (
+        Google Workspace: Gmail, Kalender, Drive, Docs, Tabellen, Aufgaben, Kontakte{' '}
+        {connected && calendar && workspace ? (
           <span className="badge ok">verbunden</span>
         ) : connected ? (
-          <span className="badge missing">ohne Kalender</span>
+          <span className="badge missing">{calendar ? 'neu verbinden' : 'ohne Kalender'}</span>
         ) : (
           <span className="badge missing">optional</span>
         )}
@@ -1097,6 +931,14 @@ function GoogleConnect(): JSX.Element {
           Diese Anmeldung ist älter als der Kalender und deckt ihn nicht ab. Einmal auf „Mit
           Google verbinden" drücken — danach kann James Termine nachsehen, eintragen,
           verschieben und absagen. Für Mails ändert sich nichts.
+        </div>
+      )}
+
+      {connected && calendar && !workspace && (
+        <div className="hint err" style={{ marginBottom: 10 }}>
+          Neu dabei: Drive, Docs, Tabellen, Aufgaben und Kontakte. Einmal auf „Mit Google verbinden“
+          drücken und im Google-Dialog alle Häkchen setzen. In der Google Cloud Console müssen dafür
+          die Drive-, Docs-, Sheets-, Tasks- und People-API aktiviert sein.
         </div>
       )}
 
@@ -1248,7 +1090,15 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
     <>
       <div className="field">
         <label>Stimme</label>
-        <div className="choice-switch three" role="group" aria-label="Stimme auswählen">
+        <div className="choice-switch four" role="group" aria-label="Stimme auswählen">
+          <button
+            className={local ? 'active' : ''}
+            aria-pressed={local}
+            onClick={() => patch({ speech: { ...speech, provider: 'piper' } })}
+          >
+            Lokal (Piper)
+            <small>kostenlos · offline</small>
+          </button>
           <button
             className={speech.provider === 'gemini' ? 'active' : ''}
             aria-pressed={speech.provider === 'gemini'}
@@ -1271,27 +1121,13 @@ function ElevenVoicePicker({ settings, patch }: Props): JSX.Element {
             onClick={() => patch({ speech: { ...speech, provider: 'openai' } })}
           >
             OpenAI Realtime
-            <small>OpenAI Realtime · Schlüssel</small>
+            <small>schnell · OpenAI-Schlüssel</small>
           </button>
         </div>
         <div className="hint">
-          Gemini hört, denkt und spricht in einem Weg. ElevenLabs klingt natürlicher; Denken und
-          Stimme bleiben dabei getrennt, damit auch Ollama Werkzeuge verwenden kann.
+          Lokal läuft ohne Internet und kostet nichts. Gemini und OpenAI reagieren am schnellsten,
+          ElevenLabs klingt am natürlichsten. Cloud-Stimmen brauchen einen Schlüssel.
         </div>
-        <details className="advanced-choice" open={speech.provider === 'piper' || speech.provider === 'vibevoice'}>
-          <summary>Lokale Stimmen</summary>
-          <select
-            aria-label="Lokale Stimmen"
-            value={speech.provider === 'piper' || speech.provider === 'vibevoice' ? speech.provider : ''}
-            onChange={(e) => {
-              if (e.target.value) patch({ speech: { ...speech, provider: e.target.value as never } })
-            }}
-          >
-            <option value="">Lokale Stimme wählen…</option>
-            <option value="piper">piper — schnell und kostenlos</option>
-            <option value="vibevoice">VibeVoice — natürlicher, aber langsamer</option>
-          </select>
-        </details>
       </div>
 
       {/* Der Denkmotor gehört zu beiden fremden Sprechern: Es ist derselbe
@@ -1725,11 +1561,7 @@ function BrainPicker({ settings, patch }: Props): JSX.Element {
           </>
         ) : (
           <div className="hint">
-            Auf diesem Weg denkt nicht das Live-Modell, sondern ein gewöhnliches: Kein Live-Modell
-            gibt Text aus, sie sprechen alle selbst. Damit ist aber gleichgültig, wer den Text
-            geschrieben hat — auch ein Modell auf diesem Rechner kann das. Hier wartet jemand mit
-            offenem Mund; ein klügeres Modell, das eine Sekunde länger braucht, ist an dieser
-            Stelle das schlechtere.
+            Hier antwortet ein normales Textmodell, auch ein lokales ist möglich. Schnelle Modelle wirken im Gespräch natürlicher als große, langsame.
           </div>
         )}
       </div>
@@ -1745,10 +1577,7 @@ function BrainPicker({ settings, patch }: Props): JSX.Element {
           onChange={(e) => patch({ speech: { ...speech, endpointMs: Number(e.target.value) } })}
         />
         <div className="hint">
-          So lange muss es still sein, bis dein Satz als beendet gilt. Der Regler, an dem man „zu
-          langsam" merkt: Alles, was hier steht, wartest du vor jeder Antwort. Zu kurz gesetzt
-          fällt er dir ins Wort, sobald du mitten im Satz überlegst. Gilt nur für diesen Weg — die
-          Live-Sitzung entscheidet das selbst und hört dabei schon beim Reden zu.
+          So lange wartet James nach deinem letzten Wort. Unterbricht er dich, erhöhen; wirkt er träge, senken.
         </div>
       </div>
     </>
@@ -1823,18 +1652,17 @@ function PiperPicker({ settings, patch }: Props): JSX.Element {
             <span className="badge err">geht nicht</span>
           )}
         </label>
-        <select aria-label="Stimme"
+        <ChoiceCards
+          title="Stimme"
+          intro="James spricht mit einer Stimme, die nur auf diesem Rechner läuft. Die Stimme ist künstlich erzeugt."
           value={chosen}
           disabled={fetching}
-          onChange={(e) => void choose(e.target.value)}
-        >
-          {chosen === '' && <option value="">— noch keine Stimme geholt —</option>}
-          {PIPER.voices.map((v) => (
-            <option key={v.id} value={v.id}>
-              {v.label}
-            </option>
-          ))}
-        </select>
+          options={PIPER.voices.map((v) => {
+            const [name, hint] = v.label.split(' — ')
+            return { value: v.id, label: name, hint }
+          })}
+          onChange={(id) => void choose(id)}
+        />
         {fetching && <div className="hint">Die Stimme wird geholt — das dauert je nach Größe einen Moment.</div>}
         {fetchError && (
           <div className="hint err" role="alert">
@@ -1869,9 +1697,25 @@ function PiperPicker({ settings, patch }: Props): JSX.Element {
           onChange={(e) => patch({ piper: { ...piper, lengthScale: Number(e.target.value) } })}
         />
         <div className="hint">
-          Achtung, der Wert läuft andersherum als man denkt: Er streckt die Laute, über eins wird
-          es also <strong style={{ color: 'var(--text)' }}>langsamer</strong>, nicht schneller.
-          Eins ist die Vorgabe der Stimme und meistens richtig.
+          Über 1 spricht James langsamer, unter 1 schneller. 1 ist die Vorgabe der Stimme.
+        </div>
+      </div>
+
+      <div className="field">
+        <label>Klarheit — {(piper.noiseScale ?? 0).toFixed(2)}</label>
+        <input aria-label="Klarheit"
+          type="range"
+          min={0.2}
+          max={0.8}
+          step={0.05}
+          value={piper.noiseScale || 0.667}
+          onChange={(e) => {
+            const noiseScale = Number(e.target.value)
+            patch({ piper: { ...piper, noiseScale, noiseW: Math.min(0.9, Math.round(noiseScale * 120) / 100) } })
+          }}
+        />
+        <div className="hint">
+          Weniger heißt ruhiger und klarer, mehr heißt lebendiger, aber auch wackliger. 0,5 ist ein guter Wert.
         </div>
       </div>
 
@@ -1886,17 +1730,12 @@ function PiperPicker({ settings, patch }: Props): JSX.Element {
           <option value="python">Nur die gepflegte Python-Fassung</option>
         </select>
         <div className="hint">
-          piper gibt es unter Windows zweimal, und keine Fassung ist ohne Haken. Die eigenständige
-          piper.exe stammt vom November 2023 aus einem inzwischen archivierten Projekt und stürzt
-          auf manchen Windows-Ständen beim Laden des Modells ab. Die gepflegte gibt es nur als
-          Python-Paket und braucht deshalb ein Python auf diesem Rechner. Darum die Vorgabe: erst
-          die schnelle versuchen, und wenn sie stirbt, die andere nehmen. Was wirklich läuft,
-          steht oben in der Auskunft — geraten wird nichts.
+          Die Vorgabe passt fast immer: erst die schnelle Fassung, bei Problemen automatisch die Python-Fassung.
         </div>
       </div>
 
       <hr className="section-divider" />
-      <h2>Was piper dafür braucht</h2>
+      <h3 className="settings-step">Dateien für die lokale Stimme</h3>
       <LocalAssets
         only={['piper-runtime', 'piper-voice']}
         choices={{ 'piper-voice': PIPER.voices.map((v) => ({ value: v.id, label: v.label })) }}
@@ -2075,7 +1914,7 @@ function LocalAssets({
  *
  * Ein eigener Abschnitt und nicht ein Feld unter „Zuhören", weil hier die
  * Fehlermeldungen des Dienstes hinzeigen: whisper schickt den Nutzer wörtlich
- * „in die Einstellungen unter Ohren", wenn ihm eine Datei fehlt. Ein Verweis auf
+ * „in die Einstellungen unter Spracherkennung", wenn ihm eine Datei fehlt. Ein Verweis auf
  * einen Abschnitt, den es nicht gibt, ist schlimmer als gar keiner.
  */
 export function EarsSection({ settings, patch }: Props): JSX.Element {
@@ -2111,7 +1950,7 @@ export function EarsSection({ settings, patch }: Props): JSX.Element {
 
   return (
     <>
-      <h2>Ohren</h2>
+      <h2>Spracherkennung</h2>
       <p className="lede">
         Wer den Ton in Wortlaut übersetzt. Das ist der Schalter, der aus „lokal" endlich lokal
         macht: Solange die Abschrift über Google lief, verließ jeder Satz die Wohnung, auch wenn
@@ -2322,20 +2161,40 @@ function PersonalityControls({ settings, patch }: Props): JSX.Element {
 }
 
 export function VoiceSection({ settings, patch }: Props): JSX.Element {
+  const [status, setStatus] = useState<SecretStatus[]>([])
+  useEffect(() => {
+    void window.jarvis.invoke('secrets:status').then(setStatus).catch(() => undefined)
+  }, [])
+  const present = (key: SecretKey): boolean => status.find((s) => s.key === key)?.present ?? false
+
   return (
     <>
-      <h2>Stimme</h2>
+      <h2>Stimme &amp; Modelle</h2>
       <p className="lede">
-        Wähle eine Stimme und verbinde den passenden Anbieter. Die Einrichtung findest du direkt darunter.
+        Drei Schritte: wie James sich gibt, wer spricht und wer denkt. Alles auf einer Seite.
       </p>
 
+      <h3 className="settings-step">1 · Persönlichkeit</h3>
       <PersonaPicker settings={settings} patch={patch} />
       <PersonalityControls settings={settings} patch={patch} />
-      <hr className="section-divider" />
 
+      <hr className="section-divider" />
+      <h3 className="settings-step">2 · Wer spricht</h3>
       <ElevenVoicePicker settings={settings} patch={patch} />
 
-      <details className="settings-disclosure"><summary>Stimme und Modelle genauer einstellen</summary>
+      <hr className="section-divider" />
+      <h3 className="settings-step">3 · Wer denkt – Cloud oder lokale Modelle</h3>
+      <p className="hint">Lokale Modelle mit einem Klick: Einstellungen → Lokale KI.</p>
+      <TextProviderChoice
+        settings={settings}
+        patch={patch}
+        openRouterPresent={present('openrouter')}
+        present={present}
+      />
+      <LocalFallback settings={settings} patch={patch} />
+
+      <hr className="section-divider" />
+      <h3 className="settings-step">Sprache und Feinheiten</h3>
       <div className="field">
         <label>Gemini-Stimme</label>
         <select aria-label="Gemini-Stimme" value={settings.voice} onChange={(e) => patch({ voice: e.target.value as never })}>
@@ -2413,16 +2272,6 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
       </div>
 
       <div className="field">
-        <label>Agent — Hermes</label>
-        <div className="hint">
-          Hermes ist immer der Agent hinter James: Aufträge, Unteragenten, Fertigkeiten und
-          Werkzeuge laufen über den lokalen Hermes-Gateway. Ist er nicht erreichbar, startet James
-          ihn selbst und übernimmt notfalls mit dem gewählten Denkmotor.
-        </div>
-        <HermesConnection settings={settings} patch={patch} />
-      </div>
-
-      <div className="field">
         <label>Recherche-Agent</label>
         <select aria-label="Recherche-Agent"
           value={settings.researchAgent}
@@ -2449,7 +2298,6 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
           <option value="en-US">Englisch</option>
         </select>
       </div>
-      </details>
     </>
   )
 }
@@ -2577,7 +2425,7 @@ export function AudioSection({ settings, patch }: Props): JSX.Element {
 
   return (
     <>
-      <h2>Audio</h2>
+      <h2>Mikrofon &amp; Lautsprecher</h2>
       <p className="lede">
         Die drei Schalter unter Verarbeitung sind der Unterschied zwischen brauchbar und
         unbenutzbar. Ohne Echounterdrückung hört James seine eigene Ausgabe und unterbricht sich
@@ -2785,10 +2633,19 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
     <>
       <h2>Zuhören</h2>
       <p className="lede">
-        Der wichtigste Wert der ganzen App steht gleich oben. Ist die Sprechpause zu kurz
-        eingestellt, schneidet James dich ab, sobald du mitten im Satz kurz überlegst.
+        Wie lange James wartet, bevor er antwortet. Unterbricht er dich, wähle „Geduldig“.
       </p>
 
+      <div className="field">
+        <label>Antwort-Tempo</label>
+        <div className="settings-choice" role="radiogroup" aria-label="Antwort-Tempo">
+          {([['Geduldig', 1000, 'Lässt dich in Ruhe ausreden'], ['Normal', 700, 'Empfohlen'], ['Flott', 450, 'Antwortet schnell']] as const).map(([label, ms, note]) =>
+            <button key={label} type="button" role="radio" aria-checked={vad.silenceDurationMs === ms} className={vad.silenceDurationMs === ms ? 'is-active' : ''}
+              onClick={() => void patch({ vad: { ...vad, silenceDurationMs: ms } })}><strong>{label}</strong><small>{note}</small></button>)}
+        </div>
+      </div>
+
+      <h3 className="settings-step">Genau einstellen</h3>
       <div className="field">
         <label>Sprechpause bis er antwortet: {vad.silenceDurationMs} ms</label>
         <input aria-label="Sprechpause bis er antwortet:"
@@ -2856,6 +2713,8 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
       </div>
 
       <hr className="section-divider" />
+      <h3 className="settings-step">Eigenes Weckwort einlernen</h3>
+      <PersonalWakeTrainer settings={settings} patch={patch} />
 
       <div className="field">
         <label style={{ fontWeight: 400 }}>
@@ -2870,7 +2729,7 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
         <div className="hint" style={{ marginLeft: 24 }}>
           {wakeError
             ? 'Prüfen ging nicht: ' + wakeError + ' — Bitte Zuhören erneut öffnen.'
-            : wakeAssets?.installed ? `Aktiv: ${wakeAssets.model === 'jarvis.onnx' ? '„Hey Jarvis“' : wakeAssets.model === 'hey_james.onnx' ? '„Hey James“' : wakeAssets.model}. Die Erkennung läuft lokal.`
+            : wakeAssets?.installed ? `Aktiv: ${wakeAssets.model === 'personal.onnx' ? 'dein eingelerntes Wort' : wakeAssets.model === 'jarvis.onnx' ? '„Hey Jarvis“' : wakeAssets.model === 'hey_james.onnx' ? '„Hey James“' : wakeAssets.model}. Die Erkennung läuft lokal.`
               : wakeAssets ? `Noch nicht verfügbar: ${wakeAssets.missing.join(', ')} fehlt. Verwende Klick oder Hotkey.`
                 : 'Prüft die lokalen Modelldateien …'}
         </div>
@@ -2878,24 +2737,20 @@ export function ListeningSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Weckwort</label>
-        <div className="hint">Geladenes Modell: {wakeAssets?.model ?? wake.modelName}. „James“ allein ist kein bestätigtes Weckwort. Für ein anderes Weckwort ist ein passender Klassifikator erforderlich.</div>
+        <div className="hint">Sag „Hey Jarvis“, um James ohne Klick zu rufen. Andere Weckwörter werden noch nicht unterstützt.</div>
       </div>
 
-      <div className="field">
-        <label>Empfindlichkeit des Weckworts: {wake.threshold.toFixed(2)}</label>
-        <input aria-label="Empfindlichkeit des Weckworts:"
-          type="range"
-          min={0.2}
-          max={0.9}
-          step={0.05}
-          value={wake.threshold}
-          onChange={(e) => patch({ wake: { ...wake, threshold: Number(e.target.value) } })}
-        />
-        <div className="hint">
-          Niedriger heißt, er springt leichter an — auch mal fälschlich. Höher heißt, du musst
-          deutlicher sprechen.
-        </div>
-      </div>
+      <ChoiceCards
+        title="Empfindlichkeit"
+        intro="Wie laut ist es meistens um dich herum? Je lauter, desto näher und deutlicher musst du sprechen, damit James reagiert."
+        value={wake.threshold <= 0.42 ? 'quiet' : wake.threshold >= 0.62 ? 'loud' : 'normal'}
+        options={[
+          { value: 'quiet', label: 'Ruhig', hint: 'Hört auch leises Sprechen. Gut, wenn du meist allein im Raum bist.' },
+          { value: 'normal', label: 'Normal', hint: 'Für die meisten Räume. Empfohlen.' },
+          { value: 'loud', label: 'Laut', hint: 'Fernseher, Musik oder Leute im Raum: James reagiert nur, wenn du nah und deutlich sprichst.' }
+        ]}
+        onChange={(v) => patch({ wake: { ...wake, threshold: v === 'quiet' ? 0.35 : v === 'loud' ? 0.7 : 0.5 } })}
+      />
 
       <div className="field">
         <label>Tastenkürzel zum Aufwecken</label>
@@ -2978,6 +2833,7 @@ const GROUP_LABELS: Record<ToolGroup, string> = {
   shopping: 'Einkaufen',
   gmail: 'Gmail',
   calendar: 'Kalender',
+  workspace: 'Google Drive, Docs, Tabellen, Aufgaben',
   mail: 'Yahoo Mail',
   contacts: 'Kontakte',
   media: 'Bilder und Videos',
@@ -3017,7 +2873,7 @@ export function PermissionsSection({ settings, patch }: Props): JSX.Element {
 
   return (
     <>
-      <h2>Rechte</h2>
+      <h2>Erlaubnisse</h2>
       <p className="lede">
         Im autonomen Profil führt James erlaubte Aktionen direkt aus. Explizit gesperrte
         Werkzeuge bleiben gesperrt. Bei eingeschalteten Bestätigungen wartet er auf dein Ja.
@@ -5129,6 +4985,12 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
 
   const pairingUrl =
     status?.urls[0] && status.token ? `${status.urls[0]}#host=${status.urls[0].replace(/^https?:\/\//, '').replace(/\/$/, '')}&token=${status.token}` : null
+  // Dieselbe Kopplung für die eigenständige iPhone-App (github.com/Nivarro-boop/jarvis-iphone).
+  // Die kommt über HTTPS und darf deshalb nur verschlüsselt verbinden.
+  const appPairingUrl =
+    status?.secure && status.urls[0] && status.token
+      ? `https://nivarro-boop.github.io/jarvis-iphone/#pc=${status.urls[0].replace(/^https?:\/\//, '').replace(/\/$/, '')}&token=${status.token}`
+      : null
 
   return (
     <>
@@ -5292,6 +5154,7 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
           </table>
 
           {pairingUrl && <PairingCode url={pairingUrl} />}
+          {appPairingUrl && <PairingCode url={appPairingUrl} label="Mit der James-App koppeln" />}
 
           <div className="row">
             <button onClick={() => void rotate()} disabled={busy}>

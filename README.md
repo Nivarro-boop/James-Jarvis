@@ -1,5 +1,10 @@
 # James-Jarvis
 
+Lokale Überarbeitung **23.10.2026**: neue Gestaltung von Startseite und Einstellungen,
+Texteingabe mit erhaltenem Entwurf, Gesprächsansicht, Tastaturmenü und fokussierter Lernmodus.
+Lernkarten werden validiert und mitgesichert; PC-Einlesen und Einrichtung sind robuster.
+Details, Screenshots und Prüfgrenzen: [GUI und Stabilität](docs/GUI-und-Stabilitaet-2026-10-23.md).
+
 Lokale Verbesserungen **16.10.2026**: aufgeräumte Startseite, mehrzeilige
 Texteingabe mit sicherem Entwurf, besserer Gesprächsverlauf und durchsuchbare
 Einstellungen. Abbruch und paralleles Dateispeichern sind zusätzlich abgesichert.
@@ -102,7 +107,7 @@ Während ein Spiel läuft, lassen sich die Tests mit `npm test -- --low-resource
 einzeln und mit niedriger Prozesspriorität ausführen. Der Modus begrenzt auch
 die Parallelität des Test-Builds.
 
-### Unterbrechen, Erinnerungen und Hermes
+### Unterbrechen, Erinnerungen und Agent
 
 **Stopp** auf der Startseite oder **einmal Escape** unterbricht die aktuelle
 Antwort und fordert den Abbruch ihrer laufenden Werkzeuge an. Mit aktivem
@@ -122,33 +127,10 @@ Erledigen und Verschieben funktionieren über Sprache oder die Texteingabe.
 James muss für die Zustellung laufen; verpasste Termine werden beim nächsten
 Start nachgeholt. Eine pausierte Stimme verhindert die Windows-Benachrichtigung nicht.
 
-Unter **Stimme → Denken → Hermes** arbeitet der vollständige Hermes-Agent
-aus dem bereitgestellten ZIP als zusätzlicher lokaler Motor. James übernimmt
-Ohren und Stimme. Die separate Installation liegt unter
-`%LOCALAPPDATA%\Void James Hermes`, ihr eigenes Profil unter `profile`.
-Der Gateway startet bei Auswahl automatisch; unter den Einstellungen kann
-man ihn auch gezielt starten und prüfen. Antworten werden bereits während
-der Bearbeitung weitergegeben; Werkzeugfortschritte erscheinen auf der Startseite.
-Beim Beenden erhält der eigene Gateway Zeit zum Speichern seines Zustands.
-Modellkonten, MCP-Server, Skills
-und zusätzliche Hermes-Kanäle werden im Hermes-Profil eingerichtet.
-Der Installer enthält die James-Anbindung; die Hermes-Python-Umgebung ist
-eine separate Installation auf diesem Rechner.
-
-Zum erneuten Installieren aus der Projektwurzel:
-
-```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File scripts/install-hermes.ps1 -Archive "$env:USERPROFILE\Downloads\hermes-agent-main.zip"
-```
-
-Die Einrichtung braucht Python und uv. Mit `-Repair` lassen sich die Pakete
-der separaten Installation reparieren. Sicherheitsaktualisierungen gegenüber
-den Pins im ZIP sind im Skript festgehalten. Zum Einrichten eines Hermes-Kontos:
-
-```powershell
-$env:HERMES_HOME = "$env:LOCALAPPDATA\Void James Hermes\profile"
-& "$env:LOCALAPPDATA\Void James Hermes\venv\Scripts\hermes.exe" setup
-```
+James arbeitet als eigener Agent: Er plant größere Aufträge, verteilt Teile an
+Unteragenten, lernt aus erledigten Aufgaben eigene Fertigkeiten und kürzt seinen
+Verlauf sparsam, ohne Wichtiges zu vergessen. Die Ideen dafür stammen aus
+Hermes Agent (siehe unten); es läuft kein separates Hermes-Programm.
 
 Der [aktuelle Nachprüfbericht](docs/James-Nachpruefung-2026-10-04.md) beschreibt
 die getesteten Funktionen und die noch offenen Konto- und Gerätetests.
@@ -159,8 +141,7 @@ Unter **Über → Datensicherung** sind tägliche lokale Sicherungen standardmä
 aktiv. James behält sieben automatische Kopien; **Jetzt sichern** erstellt
 eine zusätzliche manuelle Kopie. Gesichert werden die konsistente SQLite-Datenbank,
 Einstellungen und Fertigkeiten. Die Kopien enthalten persönliche Gesprächsdaten.
-Keystore, Anmeldetokens, MCP-Umgebungswerte, Sprachmodelle und das separate
-Hermes-Profil sind ausgenommen. Details zur manuellen Wiederherstellung stehen
+Keystore, Anmeldetokens, MCP-Umgebungswerte und Sprachmodelle sind ausgenommen. Details zur manuellen Wiederherstellung stehen
 im [Nachprüfbericht](docs/James-Nachpruefung-2026-10-04.md).
 
 Die Startseite zeigt den tatsächlich verwendeten Sprachweg. Fehlt der
@@ -465,8 +446,10 @@ einmal das dazugehörige Root vor — kein Konto, keine Fremdsoftware, dafür nu
 Hause gültig. Wer die Fernbedienung auch unterwegs will, stellt dort auf
 Tailscale um. Ein Weckwort gibt es auf dem Telefon nicht — iOS lässt nichts
 dauerhaft mithören —, dafür eine Sprechtaste.
-Einzelheiten und der Weg zu einer echten `.ipa` ohne Mac stehen in
-[`resources/companion/README.md`](resources/companion/README.md).
+Einzelheiten stehen in
+[`resources/companion/README.md`](resources/companion/README.md). Die native
+iPhone-App mit Weckknopf liegt in [`mobile/`](mobile/README.md) und wird ohne
+Mac über EAS Build gebaut.
 
 ---
 

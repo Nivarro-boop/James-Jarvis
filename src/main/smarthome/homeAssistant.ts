@@ -47,7 +47,7 @@ async function call<T>(path: string, init?: RequestInit): Promise<T> {
   if (!token) {
     throw new Error(
       'Für Home Assistant ist kein Token hinterlegt. Sag dem Nutzer, er soll ihn in den ' +
-        'Einstellungen unter Zugänge eintragen.'
+        'Einstellungen unter Konten & Standort eintragen.'
     )
   }
 

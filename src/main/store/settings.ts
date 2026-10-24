@@ -59,7 +59,7 @@ function merge<T>(base: T, patch: unknown): T {
  * "Zurücksetzen" stellte danach den verbogenen Stand wieder her.
  */
 /** Voreinstellung bis 1.3.4; dort war die Function nie bereitgestellt. */
-const LEGACY_REPORT_URL = 'https://aimarketer-electronics.netlify.app/api/error-report'
+const LEGACY_REPORT_URLS = ['https://aimarketer-electronics.netlify.app/api/error-report', 'https://fastidious-pastelito-1f1564.netlify.app/api/error-report']
 
 function freshDefaults(): Settings {
   return structuredClone(DEFAULT_SETTINGS)
@@ -71,15 +71,26 @@ export function getSettings(): Settings {
   if (existsSync(file)) {
     try {
       const saved: unknown = JSON.parse(readFileSync(file, 'utf-8'))
+      // Hermes gibt es nicht mehr: alte Wahl und alte Felder vor der Prüfung entfernen.
+      if (saved && typeof saved === 'object') {
+        const old = saved as { hermes?: unknown; speech?: { thinkProvider?: string } }
+        delete old.hermes
+        if (old.speech?.thinkProvider === 'hermes') old.speech.thinkProvider = 'chatgpt'
+      }
       validateSettingsPatch(saved)
       current = merge(freshDefaults(), saved)
-      // Hermes ist kein Denkmotor zur Auswahl mehr, sondern immer der Agent
-      // hinter Aufträgen und Unteragenten. Alte Wahl auf ChatGPT zurückführen.
-      if ((current.speech.thinkProvider as string) === 'hermes') current.speech.thinkProvider = 'chatgpt'
+      // VibeVoice gibt es nicht mehr; die lokale Stimme ist piper.
+      if ((current.speech.provider as string) === 'vibevoice') current.speech.provider = 'piper'
       // Der frühere Empfänger lief nie: Die Fehlerwebseite liegt auf dem
       // Host des Dashboards. Nur die alte Voreinstellung umstellen, eigene
       // Adressen bleiben.
-      if (current.diagnosticReporting.url === LEGACY_REPORT_URL) current.diagnosticReporting.url = DEFAULT_SETTINGS.diagnosticReporting.url
+      if (LEGACY_REPORT_URLS.includes(current.diagnosticReporting.url)) current.diagnosticReporting.url = DEFAULT_SETTINGS.diagnosticReporting.url
+      // Einmalig beim Update, an dem der Standort-Schalter dazukam: Fehlerberichte
+      // gehen ab jetzt standardmäßig automatisch an den eingetragenen Empfänger.
+      // Abschalten unter Diagnose & Werkzeuge bleibt jederzeit möglich.
+      if (saved && typeof saved === 'object' && !('useDeviceLocation' in saved)) {
+        current.diagnosticReporting = { ...current.diagnosticReporting, enabled: true, automatic: true }
+      }
     } catch (err) {
       console.error('[settings] Datei unlesbar, nutze Standardwerte:', err)
       // Die kaputte Datei beiseitelegen, bevor die nächste Änderung sie mit

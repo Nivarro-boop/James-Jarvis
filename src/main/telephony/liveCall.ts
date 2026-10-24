@@ -236,7 +236,7 @@ export class LiveCall {
           'wieder am Rechner ist.' +
           (this.owner
             ? ' Will der Nutzer am Telefon alles können, muss er in den Einstellungen unter ' +
-              'Zugänge eine Telefon-PIN einrichten — mit PIN hat er vollen Zugriff.'
+              'Konten & Standort eine Telefon-PIN einrichten — mit PIN hat er vollen Zugriff.'
             : '')
         : 'Du hast hier keine Werkzeuge: keine Websuche, keinen Bildschirm, keine Mails. ' +
           'Wirst du nach etwas gefragt, das du nur am Rechner könntest, sag das offen und ' +

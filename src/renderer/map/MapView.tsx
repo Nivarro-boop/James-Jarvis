@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type JSX } from 'react'
+import { lazy, Suspense, useEffect, useRef, useState, type JSX } from 'react'
 import type { GeoBounds, LatLon, LonLat } from '@shared/types'
 import { MAP_ATTRIBUTION } from '@shared/geo'
 import { decodeTile, project, type TileShape } from '@shared/mapVector'
@@ -12,7 +12,7 @@ function tile(z: number, x: number, y: number): Promise<TileShape[]> {
   if (!cache.has(key)) { const request = window.jarvis.invoke('maps:tile', { z, x, y }).then(bytes => { if (!bytes) { cache.delete(key); return [] }; return decodeTile(new Uint8Array(bytes)) }).catch(() => { cache.delete(key); return [] }); cache.set(key, request); if (cache.size > 160) cache.delete(cache.keys().next().value!) }
   return cache.get(key)!
 }
-export function MapView({ center, zoom = 13, bounds, markers = EMPTY_MARKERS, path = EMPTY_PATH, height = 200, interactive = false, className, label }: MapViewProps): JSX.Element {
+function OwnMapView({ center, zoom = 13, bounds, markers = EMPTY_MARKERS, path = EMPTY_PATH, height = 200, interactive = false, className, label }: MapViewProps): JSX.Element {
   const canvas = useRef<HTMLCanvasElement>(null), holder = useRef<HTMLDivElement>(null)
   const [width, setWidth] = useState(400), [offset, setOffset] = useState({ x: 0, y: 0, zoom: 0 }), [status, setStatus] = useState('Karte lädt …')
   const drag = useRef<{ x: number; y: number } | null>(null)
@@ -78,3 +78,25 @@ export function MapView({ center, zoom = 13, bounds, markers = EMPTY_MARKERS, pa
   </div>
 }
 
+
+/**
+ * Mit Mapbox-Schlüssel: 3D-Karte (gekippt, Gebäude, Gelände). Ohne Schlüssel
+ * oder bei Fehlern: der eigene 2D-Zeichner oben.
+ */
+let tokenRequest: Promise<string | null> | null = null
+function mapboxToken(): Promise<string | null> {
+  tokenRequest ??= window.jarvis.invoke('secrets:getMapboxForMap').catch(() => null)
+  return tokenRequest
+}
+const Mapbox3D = lazy(() => import('./Mapbox3D'))
+
+export function MapView(props: MapViewProps): JSX.Element {
+  const [token, setToken] = useState<string | null | undefined>(undefined)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => { void mapboxToken().then(setToken) }, [])
+  if (token && !failed) {
+    const fallback = <OwnMapView {...props} />
+    return <Suspense fallback={fallback}><Mapbox3D {...props} token={token} onFail={() => { tokenRequest = null; setFailed(true) }} /></Suspense>
+  }
+  return <OwnMapView {...props} />
+}

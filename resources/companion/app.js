@@ -526,6 +526,9 @@ function handleMessage(msg) {
     if (msg.state === 'listening') playback.flush()
   } else if (msg.t === 'wake') {
     wakeTarget = msg
+    // Die App merkt sich das Ziel selbst: Schläft der Rechner, lädt diese
+    // Seite gar nicht erst, und geweckt werden muss trotzdem.
+    window.jarvisNative?.remember?.({ mac: msg.mac, broadcast: msg.broadcast, address: msg.address })
   } else if (msg.t === 'note') {
     ui.note.textContent = msg.text
   } else if (msg.t === 'error') {
@@ -564,7 +567,7 @@ async function wakeComputer() {
   }
   ui.note.textContent = 'Zauberpaket unterwegs…'
   try {
-    await native.wake({ mac: wakeTarget.mac, broadcast: wakeTarget.broadcast })
+    await native.wake({ mac: wakeTarget.mac, broadcast: wakeTarget.broadcast, address: wakeTarget.address })
     ui.note.textContent = 'Geweckt. Er braucht einen Moment.'
     reconnectDelay = 1000
     scheduleReconnect()

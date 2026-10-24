@@ -17,8 +17,8 @@ export function BackupPanel({settings, patch}: {settings: Settings; patch: (p: P
     <label><input type="checkbox" checked={settings.automaticBackups} style={{width:'auto', marginRight:8}}
       onChange={e => { void patch({automaticBackups:e.target.checked}).catch(err => setError(String(err))) }} />
       Täglich lokal sichern · sieben automatische Sicherungen behalten</label>
-    <p className="hint">Sichert James’ Datenbank, Erinnerungen, Einstellungen und Fertigkeiten.
-      Keystore, Anmeldetokens, MCP-Umgebungswerte und das separate Hermes-Profil sind ausgenommen.
+    <p className="hint">Sichert James’ Datenbank, Erinnerungen, Einstellungen, Fertigkeiten und Lernkarten mit Lernfortschritt.
+      Keystore, Anmeldetokens, und MCP-Umgebungswerte sind ausgenommen.
       Die Dateien enthalten persönliche Gesprächsdaten. Wiederherstellung erfolgt derzeit manuell.</p>
     <button disabled={busy} onClick={() => {
       setBusy(true); setError('')

@@ -279,7 +279,7 @@ const systemCheck = defineTool({
     '"prüf meinen Rechner". Nur lesen. Lies dem Nutzer den Gesamtsatz und nur die Punkte mit Problem vor.',
   schema: z.object({}),
   readOnly: true,
-  spokenHint: 'Ich schau mir kurz deinen Rechner an.',
+  spokenHint: 'Okay.',
   async execute() {
     const [internetMs, audio, disk] = await Promise.all([
       pingInternet(),

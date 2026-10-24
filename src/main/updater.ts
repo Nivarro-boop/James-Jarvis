@@ -22,6 +22,7 @@ const SIX_HOURS = 6 * 60 * 60 * 1000
 let status: UpdateStatus = { state: 'idle', current: app.getVersion() }
 let lastProgressAt = 0
 let started = false
+let check: (() => void) | null = null
 
 function publish(next: Partial<UpdateStatus>): void {
   status = { ...status, ...next }
@@ -78,13 +79,20 @@ export function startAutoUpdate(): void {
     // Ein bereits geladenes Update bleibt gültig, auch wenn die nächste Prüfung scheitert.
     if (status.state !== 'ready') publish({ state: 'error', error: err.message })
   })
-  const check = (): void => {
+  check = (): void => {
     // Ohne Netz oder bei GitHub-Aussetzern einfach beim nächsten Mal.
     if (status.state === 'downloading' || status.state === 'ready' || status.state === 'installing') return
     autoUpdater.checkForUpdates().catch(() => undefined)
   }
   check()
   setInterval(check, SIX_HOURS).unref()
+}
+
+/** „Nach Updates suchen“ aus dem Menü. In der Entwicklungsversion gibt es nichts zu prüfen. */
+export function checkForUpdateNow(): UpdateStatus {
+  if (!check) return { ...status, state: 'idle' }
+  check()
+  return status
 }
 
 /** Jetzt einspielen und James danach wieder starten. */

@@ -177,7 +177,7 @@ const aborted = new Set<number>()
 
 function configSignature(settings: Settings): string {
   const p = settings.piper
-  return [p.backend, piperExe(settings), p.pythonPath, piperVoicePath(settings), p.lengthScale].join(
+  return [p.backend, piperExe(settings), p.pythonPath, piperVoicePath(settings), p.lengthScale, p.noiseScale, p.noiseW].join(
     '|'
   )
 }
@@ -715,6 +715,8 @@ function exeArgs(settings: Settings, voice: string): string[] {
   if (settings.piper.lengthScale !== 1) {
     args.push('--length_scale', String(settings.piper.lengthScale))
   }
+  if (settings.piper.noiseScale > 0) args.push('--noise_scale', String(settings.piper.noiseScale))
+  if (settings.piper.noiseW > 0) args.push('--noise_w', String(settings.piper.noiseW))
   return args
 }
 
@@ -723,6 +725,8 @@ function hostArgs(settings: Settings, voice: string): string[] {
   if (settings.piper.lengthScale !== 1) {
     args.push('--length-scale', String(settings.piper.lengthScale))
   }
+  if (settings.piper.noiseScale > 0) args.push('--noise-scale', String(settings.piper.noiseScale))
+  if (settings.piper.noiseW > 0) args.push('--noise-w', String(settings.piper.noiseW))
   return args
 }
 

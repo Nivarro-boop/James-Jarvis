@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type JSX } from 'react'
+import { WakeStep } from './WakeStep'
 import type { Settings } from '@shared/types'
 import { listAudioDevices } from '../audio/capture'
 import { ChatGptConnection } from './ChatGptConnection'
@@ -19,7 +20,7 @@ import { ChatGptConnection } from './ChatGptConnection'
  * die Kugel beim ersten Ansprechen wortlos wieder ausgeht.
  */
 
-const STEPS = ['Willkommen', 'Schlüssel', 'Mikrofon', 'Für wen', 'Fertig'] as const
+const STEPS = ['Willkommen', 'Schlüssel', 'Stimme', 'Mikrofon', 'Weckwort', 'Für wen', 'Fertig'] as const
 
 /**
  * Tagesgrenze für den vorsichtigen Fall.
@@ -85,12 +86,18 @@ export function Setup({ settings, patch, hasKey, onSkip }: Props): JSX.Element {
           />
         )}
         {step === 2 && (
-          <MicStep settings={settings} patch={patch} onNext={() => setStep(3)} />
+          <VoiceStep settings={settings} patch={patch} onNext={() => setStep(3)} />
         )}
         {step === 3 && (
-          <OwnerStep settings={settings} patch={patch} onNext={() => setStep(4)} />
+          <MicStep settings={settings} patch={patch} onNext={() => setStep(4)} />
         )}
-        {step === 4 && <DoneStep settings={settings} patch={patch} onFinish={() => { void finish() }} busy={finishing} />}
+        {step === 4 && (
+          <WakeStep settings={settings} patch={patch} onNext={() => setStep(5)} />
+        )}
+        {step === 5 && (
+          <OwnerStep settings={settings} patch={patch} onNext={() => setStep(6)} />
+        )}
+        {step === 6 && <DoneStep settings={settings} patch={patch} onFinish={() => { void finish() }} busy={finishing} />}
         {finishError && <p className="setup-note err">{finishError}</p>}
 
         <button className="setup-escape" onClick={onSkip}>
@@ -108,8 +115,8 @@ function Welcome({ onNext }: { onNext: () => void }): JSX.Element {
     <>
       <h1>Willkommen bei James</h1>
       <p className="setup-lede">
-        James ist ein Assistent, mit dem man spricht statt tippt. Es gibt kein Chatfenster — nur
-        eine leuchtende Kugel auf dem Bildschirm. Du sprichst ihn an, er antwortet laut.
+        James ist dein persönlicher Assistent. Sprich ihn an oder schreib ihm eine Nachricht.
+        Die Kugel zeigt dir, ob er zuhört, nachdenkt oder antwortet. Deine Gespräche kannst du nachlesen.
       </p>
       <p className="setup-lede">
         Wähle zuerst deinen Zugang: Gemini, OpenAI API oder dein ChatGPT-Abo mit lokalen
@@ -272,6 +279,146 @@ function KeyStep({ hasKey, onDone, settings, patch }: {
         Der Schlüssel wird verschlüsselt in deinem Windows-Benutzerkonto abgelegt und zur
         Anmeldung beim Anbieter verwendet. Die Prüfung erzeugt keine Modellantwort.
       </p>
+    </>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────
+
+type VoiceChoice = 'piper' | 'elevenlabs' | 'gemini' | 'openai'
+
+const VOICES: { id: VoiceChoice; title: string; text: string; cloud: boolean }[] = [
+  { id: 'piper', title: 'Lokal · Piper', text: 'Spricht auf deinem Rechner, kostenlos und offline. Stimme Thorsten, klar und ruhig.', cloud: false },
+  { id: 'elevenlabs', title: 'ElevenLabs', text: 'Die natürlichste Stimme. Cloud-Dienst, braucht einen eigenen Schlüssel und kostet Kontingent.', cloud: true },
+  { id: 'gemini', title: 'Gemini Live', text: 'Google hört, denkt und spricht in einem Stück. Schnellste Antworten, braucht den Gemini-Schlüssel.', cloud: true },
+  { id: 'openai', title: 'ChatGPT Realtime', text: 'OpenAI Realtime-Sprache. Braucht einen OpenAI-API-Schlüssel mit Guthaben.', cloud: true }
+]
+
+/**
+ * Wer spricht.
+ *
+ * Lokal, ElevenLabs, Gemini Live oder OpenAI Realtime. Cloud-Stimmen sind als
+ * solche gekennzeichnet; ein fehlender Schlüssel wird hier gleich geprüft und
+ * verschlüsselt abgelegt, bevor die Wahl gilt.
+ */
+function VoiceStep({ settings, patch, onNext }: {
+  settings: Settings; patch: (p: Partial<Settings>) => Promise<Settings>; onNext: () => void
+}): JSX.Element {
+  const current: VoiceChoice = settings.speech.provider
+  const [choice, setChoice] = useState<VoiceChoice>(current)
+  const [secrets, setSecrets] = useState<Record<string, boolean>>({})
+  const [value, setValue] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [note, setNote] = useState('')
+  const [error, setError] = useState('')
+
+  useEffect(() => {
+    void window.jarvis.invoke('secrets:status').then((list) =>
+      setSecrets(Object.fromEntries(list.map((s) => [s.key, s.present]))))
+  }, [])
+
+  // Piper und ElevenLabs sprechen nur — gedacht wird über Gemini oder das ChatGPT-Abo.
+  const thinker = settings.speech.thinkProvider === 'chatgpt' ? 'chatgpt' : secrets.gemini ? 'gemini' : null
+  const keyFor: Partial<Record<VoiceChoice, 'gemini' | 'elevenlabs' | 'openai'>> = {
+    elevenlabs: 'elevenlabs', gemini: 'gemini', openai: 'openai'
+  }
+  const wanted = keyFor[choice]
+  const missingKey = wanted && !secrets[wanted] ? wanted : null
+  const missingThinker = (choice === 'piper' || choice === 'elevenlabs') && !thinker
+
+  const checkKey = async (): Promise<boolean> => {
+    if (!missingKey) return true
+    const result = missingKey === 'gemini'
+      ? await window.jarvis.invoke('secrets:checkGemini', { value })
+      : missingKey === 'openai'
+        ? await window.jarvis.invoke('secrets:checkOpenai', { value })
+        : await window.jarvis.invoke('secrets:checkEleven', { value })
+    if (!result.ok) {
+      setError(result.error ?? 'Der Schlüssel wurde nicht angenommen.')
+      return false
+    }
+    setSecrets((s) => ({ ...s, [missingKey]: true }))
+    setValue('')
+    return true
+  }
+
+  const ensurePiper = async (): Promise<boolean> => {
+    const health = await window.jarvis.invoke('piper:health')
+    if (health.ok) return true
+    const assets = await window.jarvis.invoke('local:assets')
+    for (const asset of assets) {
+      if (asset.present) continue
+      setNote(`${asset.label} wird geladen …`)
+      await window.jarvis.invoke('local:install', { id: asset.id })
+    }
+    setNote('')
+    const again = await window.jarvis.invoke('piper:health')
+    if (!again.ok) setError(again.detail || 'Piper ist noch nicht bereit.')
+    return again.ok
+  }
+
+  const confirm = async (): Promise<void> => {
+    if (busy) return
+    setBusy(true)
+    setError('')
+    try {
+      if (!(await checkKey())) return
+      if (choice === 'piper' && !(await ensurePiper())) return
+      const speech = { ...settings.speech, provider: choice }
+      if ((choice === 'piper' || choice === 'elevenlabs') && thinker) {
+        speech.thinkProvider = thinker
+        if (thinker === 'chatgpt') speech.hearProvider = 'whisper'
+      }
+      await patch({ speech })
+      onNext()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Die Stimme ließ sich nicht einrichten.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return (
+    <>
+      <h1>Welche Stimme soll James haben?</h1>
+      <p className="setup-lede">Später jederzeit unter Stimme und Ohren änderbar.</p>
+      <div className="voice-choices" role="radiogroup" aria-label="Stimme auswählen">
+        {VOICES.map((v) => (
+          <button key={v.id} type="button" role="radio" aria-checked={choice === v.id} disabled={busy}
+            className={`voice-choice${choice === v.id ? ' active' : ''}`}
+            onClick={() => { setChoice(v.id); setError(''); setValue('') }}>
+            <strong>{v.title}</strong>
+            <span className="voice-tag" data-cloud={v.cloud}>{v.cloud ? 'Cloud' : 'Lokal'}</span>
+            <small>{v.text}</small>
+          </button>
+        ))}
+      </div>
+
+      {missingThinker && (
+        <p className="setup-note err">
+          Diese Stimme spricht nur. Zum Denken braucht James einen Gemini-Schlüssel oder das ChatGPT-Abo.
+          Geh einen Schritt zurück oder wähle Gemini Live bzw. ChatGPT Realtime.
+        </p>
+      )}
+      {missingKey && (
+        <div className="field">
+          <input aria-label={missingKey === 'gemini' ? 'Gemini-Schlüssel' : missingKey === 'openai' ? 'OpenAI-API-Schlüssel' : 'ElevenLabs-Schlüssel'}
+            type="password" autoFocus value={value}
+            placeholder={`${missingKey === 'gemini' ? 'Gemini' : missingKey === 'openai' ? 'OpenAI-API' : 'ElevenLabs'}-Schlüssel hier einfügen…`}
+            onChange={(e) => { setValue(e.target.value); setError('') }}
+            onKeyDown={(e) => { if (e.key === 'Enter') void confirm() }} />
+          <p className="hint">Wird geprüft und verschlüsselt in deinem Windows-Konto abgelegt. Bei Cloud-Stimmen gehen die gesprochenen Texte an diesen Dienst.</p>
+        </div>
+      )}
+      {note && <p className="hint">{note}</p>}
+      {error && <p className="setup-note err">{error}</p>}
+
+      <div className="setup-actions">
+        <button className="primary setup-go" disabled={busy || missingThinker || (Boolean(missingKey) && !value.trim())}
+          onClick={() => void confirm()}>
+          {busy ? 'Wird eingerichtet …' : 'Diese Stimme nehmen'}
+        </button>
+      </div>
     </>
   )
 }

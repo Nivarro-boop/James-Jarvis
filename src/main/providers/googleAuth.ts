@@ -34,11 +34,25 @@ const CALENDAR_SCOPES = [
   'https://www.googleapis.com/auth/calendar.readonly'
 ]
 
+/**
+ * Der Rest von Google Workspace: Drive, Docs, Tabellen, Aufgaben, Kontakte.
+ * Wer vor diesem Update verbunden war, hat diese Rechte nicht und sieht in den
+ * Einstellungen den Hinweis, einmal neu zu verbinden.
+ */
+const WORKSPACE_SCOPES = [
+  'https://www.googleapis.com/auth/drive',
+  'https://www.googleapis.com/auth/documents',
+  'https://www.googleapis.com/auth/spreadsheets',
+  'https://www.googleapis.com/auth/tasks',
+  'https://www.googleapis.com/auth/contacts.readonly'
+]
+
 const SCOPES = [
   'https://www.googleapis.com/auth/gmail.readonly',
   'https://www.googleapis.com/auth/gmail.compose',
   'https://www.googleapis.com/auth/gmail.modify',
-  ...CALENDAR_SCOPES
+  ...CALENDAR_SCOPES,
+  ...WORKSPACE_SCOPES
 ]
 
 /** Spiegelt googleapis' Credentials wider — dort sind die Felder nullbar. */
@@ -115,6 +129,12 @@ export function hasGoogleAuth(): boolean {
 export function hasCalendarAuth(): boolean {
   const granted = loadTokens()?.scope?.split(/\s+/) ?? []
   return CALENDAR_SCOPES.every((needed) => granted.includes(needed))
+}
+
+/** Ob die Anmeldung Drive, Docs, Tabellen, Aufgaben und Kontakte abdeckt. */
+export function hasWorkspaceAuth(): boolean {
+  const granted = loadTokens()?.scope?.split(/\s+/) ?? []
+  return WORKSPACE_SCOPES.every((needed) => granted.includes(needed))
 }
 
 /** Text, der in die Rückseite der Anmeldung eingesetzt wird — nie als HTML. */
@@ -303,7 +323,7 @@ const FAULTS: Record<GoogleFaultCode, { agent: string; user: string }> = {
       'ein Client für Web-Anwendungen führt genau zu diesem Fehler.'
   },
   'client-falsch': {
-    agent: 'Client-ID oder Geheimnis stimmen nicht. Beides steht in den Einstellungen unter Zugänge.',
+    agent: 'Client-ID oder Geheimnis stimmen nicht. Beides steht in den Einstellungen unter Konten & Standort.',
     user: 'Client-ID oder Geheimnis stimmen nicht. Beides steht weiter unten auf dieser Seite.'
   },
   abgelehnt: {

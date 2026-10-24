@@ -22,10 +22,10 @@ export function createSettingsWindow(section?: string): BrowserWindow {
   }
 
   win = new BrowserWindow({
-    width: 1040,
-    height: 760,
-    minWidth: 820,
-    minHeight: 600,
+    width: 860,
+    height: 640,
+    minWidth: 640,
+    minHeight: 480,
     title: 'James-Jarvis — Einstellungen',
     backgroundColor: '#0B0420',
     autoHideMenuBar: true,

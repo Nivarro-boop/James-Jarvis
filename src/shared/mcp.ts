@@ -117,7 +117,24 @@ export const MCP_PRESETS: McpPreset[] = [
     secretEnv: ['BRAVE_API_KEY'],
     keyUrl: 'https://brave.com/search/api/',
     category: 'Suche & Medien'
-  }
+  },
+  // Gehostete Server der Anbieter: Anmeldung im Browser, nichts zu installieren.
+  { id: 'canva', name: 'Canva', description: 'Designs, Präsentationen und Grafiken in deinem Canva-Konto.', command: '', args: [], url: 'https://mcp.canva.com/mcp', category: 'Suche & Medien' },
+  { id: 'huggingface', name: 'Hugging Face', description: 'Modelle, Datensätze und Spaces finden und ausprobieren.', command: '', args: [], url: 'https://huggingface.co/mcp', category: 'Wissen & Planung' },
+  { id: 'atlassian', name: 'Jira & Confluence', description: 'Tickets und Wiki-Seiten aus deinem Atlassian-Konto.', command: '', args: [], url: 'https://mcp.atlassian.com/v1/mcp', category: 'Wissen & Planung' },
+  { id: 'asana', name: 'Asana', description: 'Aufgaben und Projekte in Asana.', command: '', args: [], url: 'https://mcp.asana.com/mcp', category: 'Wissen & Planung' },
+  { id: 'monday', name: 'monday.com', description: 'Boards, Aufgaben und Status in monday.com.', command: '', args: [], url: 'https://mcp.monday.com/mcp', category: 'Wissen & Planung' },
+  { id: 'paypal', name: 'PayPal', description: 'Rechnungen, Zahlungen und Umsätze ansehen. Zahlen gibst du selbst frei.', command: '', args: [], url: 'https://mcp.paypal.com/mcp', category: 'Wissen & Planung' },
+  { id: 'stripe', name: 'Stripe', description: 'Kunden, Zahlungen und Abos deines Stripe-Kontos.', command: '', args: [], url: 'https://mcp.stripe.com', category: 'Entwicklung' },
+  { id: 'sentry', name: 'Sentry', description: 'Fehlerberichte deiner Apps lesen und auswerten.', command: '', args: [], url: 'https://mcp.sentry.dev/mcp', category: 'Entwicklung' },
+  { id: 'supabase', name: 'Supabase', description: 'Datenbanken und Projekte in Supabase.', command: '', args: [], url: 'https://mcp.supabase.com/mcp', category: 'Entwicklung' },
+  { id: 'vercel', name: 'Vercel', description: 'Deployments und Projekte auf Vercel.', command: '', args: [], url: 'https://mcp.vercel.com', category: 'Entwicklung' },
+  // Lokale Server über npx.
+  { id: 'memory', name: 'Wissensgraph', description: 'Merkt sich Personen, Dinge und Zusammenhänge dauerhaft.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-memory'], category: 'Wissen & Planung' },
+  { id: 'thinking', name: 'Schritt-für-Schritt-Denken', description: 'Hilft bei kniffligen Aufgaben, sauber in Schritten zu planen.', command: 'npx', args: ['-y', '@modelcontextprotocol/server-sequential-thinking'], category: 'Wissen & Planung' },
+  { id: 'context7', name: 'Context7', description: 'Aktuelle Dokumentation zu Programmier-Bibliotheken.', command: 'npx', args: ['-y', '@upstash/context7-mcp'], category: 'Entwicklung' },
+  { id: 'exa', name: 'Exa Suche', description: 'Gründliche Websuche mit Seiteninhalten.', command: 'npx', args: ['-y', 'exa-mcp-server'], secretEnv: ['EXA_API_KEY'], keyUrl: 'https://dashboard.exa.ai/api-keys', category: 'Suche & Medien' },
+  { id: 'firecrawl', name: 'Firecrawl', description: 'Webseiten zuverlässig auslesen, auch große Seiten.', command: 'npx', args: ['-y', 'firecrawl-mcp'], secretEnv: ['FIRECRAWL_API_KEY'], keyUrl: 'https://www.firecrawl.dev/app/api-keys', category: 'Suche & Medien' }
 ]
 
 /** Erlaubte Namen für Umgebungsvariablen — alles andere wäre ein Tippfehler oder Absicht. */

@@ -11,7 +11,7 @@ const source = build({ entryPoints: [resolve('src/renderer/live/brain.ts')], bun
 
 async function flush(): Promise<void> { for (let i = 0; i < 20; i++) await Promise.resolve() }
 
-for (const provider of ['chatgpt', 'hermes'] as const) {
+for (const provider of ['chatgpt'] as const) {
   it(`${provider}: beendet eine hängende IPC-Anfrage bei Abbruch und entfernt alle Zuhörer`, async () => {
     let requestId = 0, timerId = 0, hangs = true
     let complete!: (value: any) => void
@@ -90,24 +90,4 @@ it('startet keine ChatGPT-Anfrage, wenn der vorher wartende Systemprompt bereits
   complete('Veralteter Prompt')
   await flush()
   assert.deepEqual(requests, ['agent:systemPrompt'])
-})
-
-it('startet Hermes nach einem abgebrochenen Zustandsabruf nicht verspätet im Hintergrund', async () => {
-  let complete!: (value: unknown) => void
-  const health = new Promise(resolve => { complete = resolve })
-  const abort = new AbortController()
-  const requests: string[] = []
-  const module = { exports: {} as any }
-  runInNewContext(await source, { module, exports: module.exports, require, console, AbortSignal, AbortController,
-    crypto: { randomUUID: () => 'session' }, window: { jarvis: {
-      invoke: async (channel: string) => { requests.push(channel); return health }
-    } } })
-  const brain = new module.exports.HermesBrain(structuredClone(DEFAULT_SETTINGS))
-  const pending = brain.prepare(abort.signal)
-  const rejected = assert.rejects(pending)
-  abort.abort()
-  await rejected
-  complete({ ok: false, detail: 'gestoppt' })
-  await flush()
-  assert.deepEqual(requests, ['hermes:health'])
 })

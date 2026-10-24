@@ -31,7 +31,7 @@ const findBestPrice = defineTool({
     product: z.string().describe('Das Produkt, so genau wie möglich benannt.'),
     maxResults: z.number().optional().describe('Wie viele Angebote, Standard fünf.')
   }),
-  spokenHint: 'Ich vergleiche gerade die Preise.',
+  spokenHint: 'Mhm.',
   async execute({ product, maxResults }) {
     // Nach unten begrenzen, nicht nur nach oben: `maxResults: 0` kommt vom
     // Modell durchaus vor, kam durch das Schema (eine Zahl ist es ja) und

@@ -108,6 +108,8 @@ function spellEmail(address: string): string {
   return address.replace(/@/g, ' at ').replace(/\./g, ' punkt ')
 }
 
+const MONTHS = ['Januar', 'Februar', 'März', 'April', 'Mai', 'Juni', 'Juli', 'August', 'September', 'Oktober', 'November', 'Dezember']
+
 export function toSpeakable(input: string): string {
   if (!input) return ''
   let text = input
@@ -171,6 +173,17 @@ export function toSpeakable(input: string): string {
    * setzt es an die richtige Stelle; wer es übersieht, macht daraus "vierzehn
    * Uhr dreißig Uhr".
    */
+  /**
+   * Datum. "21.10.2026" klingt sonst wie drei Zahlen mit Punkten dazwischen;
+   * mit Monatsnamen wird daraus "21. Oktober 2026". Vor dem Tausenderpunkt,
+   * damit "21.10." nicht als Zahl zusammengezogen wird.
+   */
+  text = text.replace(/\b(\d{1,2})\.(\d{1,2})\.(\d{4}|\d{2}(?!\d))?(?![\d.])/g, (all, d: string, m: string, y?: string) => {
+    const month = MONTHS[Number(m) - 1]
+    if (!month || Number(d) < 1 || Number(d) > 31) return all
+    return `${Number(d)}. ${month}${y ? ` ${y.length === 2 ? `20${y}` : y}` : ''}`
+  })
+
   const clock = (h: string, m: string): string => (m === '00' ? `${h} Uhr` : `${h} Uhr ${m}`)
   text = text.replace(/\b([01]?\d|2[0-3]):([0-5]\d)\s?Uhr\b/g, (_all, h, m) => clock(h, m))
   text = text.replace(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g, (_all, h, m) => clock(h, m))

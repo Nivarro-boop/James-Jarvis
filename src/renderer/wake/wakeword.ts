@@ -52,7 +52,26 @@ export interface WakeWordHandle {
   setEnabled(enabled: boolean): void
   setThreshold(value: number): void
   readonly available: boolean
+  /** Ganze Aufnahme der Reihe nach verarbeiten (Einlernen); wartet, bis alles durch ist. */
+  analyze(pcm: Float32Array): Promise<void>
   destroy(): void
+}
+
+/** Kennung des eingelernten Worts statt eines Klassifikator-Dateinamens. */
+export const PERSONAL_MODEL = 'personal.onnx'
+
+/** Mittlere Kosinus-Ähnlichkeit zweier gleich langer Embedding-Folgen. */
+export function sequenceSimilarity(a: ArrayLike<number>[], b: ArrayLike<number>[]): number {
+  const n = Math.min(a.length, b.length)
+  if (!n) return 0
+  let sum = 0
+  for (let f = 0; f < n; f++) {
+    const x = a[a.length - n + f], y = b[b.length - n + f]
+    let dot = 0, nx = 0, ny = 0
+    for (let i = 0; i < x.length; i++) { dot += x[i] * y[i]; nx += x[i] * x[i]; ny += y[i] * y[i] }
+    sum += nx && ny ? dot / Math.sqrt(nx * ny) : 0
+  }
+  return sum / n
 }
 
 export interface WakeWordOptions {
@@ -70,6 +89,10 @@ export interface WakeWordOptions {
    */
   enabled?: boolean
   onDetected(score: number): void
+  /** Jedes neue Embedding samt Blocknummer – fürs Einlernen. */
+  onEmbedding?(embedding: Float32Array, chunk: number): void
+  /** Nur Merkmale liefern, nichts erkennen (Einlernen). */
+  captureOnly?: boolean
 }
 
 /** Jede Meldung dieses Moduls höchstens einmal je Fensterstart. */
@@ -113,7 +136,7 @@ class RollingBuffer {
 }
 
 export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHandle> {
-  const inactive: WakeWordHandle = { available: false, feed() {}, setEnabled() {}, setThreshold() {}, destroy() {} }
+  const inactive: WakeWordHandle = { available: false, feed() {}, setEnabled() {}, setThreshold() {}, async analyze() {}, destroy() {} }
   let assets: IpcInvokeMap['wake:status']['res']
   try {
     assets = await window.jarvis.invoke('wake:status')
@@ -123,7 +146,8 @@ export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHan
     tell('warn', '[wakeword] Modelle nicht geladen — Status nicht lesbar:', errorText(err))
     return inactive
   }
-  if (!assets.installed) {
+  const personal = opts.captureOnly || assets.model === PERSONAL_MODEL
+  if (!assets.installed && !(opts.captureOnly && !assets.missing.some(m => m.startsWith('melspectrogram') || m.startsWith('embedding')))) {
     const missing = assets.missing.join(', ')
     if (opts.enabled === false) tell('info', '[wakeword] Weckwort ist aus, Modelldateien fehlen:', missing)
     else tell('warn', '[wakeword] Modelldateien fehlen:', missing)
@@ -134,6 +158,8 @@ export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHan
   let embedModel: OrtNS.InferenceSession | null = null
   let wakeModel: OrtNS.InferenceSession | null = null
   let available = false
+  let patterns: { templates: number[][][]; threshold: number } | null = null
+  let chunkNo = 0
 
   try {
     // Hier wird onnxruntime tatsächlich geholt — ein eigenes Bündel, das
@@ -181,8 +207,14 @@ export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHan
       load('melspectrogram.onnx'),
       load('embedding_model.onnx'),
       // Models must be supplied locally; no third-party classifier is downloaded here.
-      load(assets.model || opts.modelName || 'hey_james.onnx')
+      // Beim eingelernten Wort gibt es keinen Klassifikator, nur Muster.
+      personal ? Promise.resolve(null) : load(assets.model || opts.modelName || 'hey_james.onnx')
     ])
+    if (personal && !opts.captureOnly) {
+      const saved = await window.jarvis.invoke('wake:personal')
+      if (!saved) throw loadError(PERSONAL_MODEL, new Error('Kein eingelerntes Weckwort gespeichert'))
+      patterns = saved
+    }
     available = true
   } catch (err) {
     // Einmal und laut: So steht im Protokoll, *welche* Datei woran scheiterte —
@@ -216,7 +248,8 @@ export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHan
     // Über ein `await` hinweg hilft eine Prüfung auf die veränderliche
     // Variable dem Typprüfer nicht weiter.
     const runtime = ort
-    if (!runtime || !melModel || !embedModel || !wakeModel) return
+    if (!runtime || !melModel || !embedModel || (!wakeModel && !personal)) return
+    chunkNo++
 
     // ── Stufe 1: Mel-Spektrogramm ──────────────────────────
     const audio = new Float32Array(overlap.length + chunk.length)
@@ -251,9 +284,27 @@ export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHan
       ])
     })
     const embedding = embedOut[embedModel.outputNames[0]].data as Float32Array
-    embedBuffer.push(new Float32Array(embedding.subarray(0, EMBED_DIM)))
+    const vector = new Float32Array(embedding.subarray(0, EMBED_DIM))
+    embedBuffer.push(vector)
+    opts.onEmbedding?.(vector, chunkNo)
+    if (opts.captureOnly) return
 
-    if (!embedBuffer.ready) return
+    if (personal) {
+      // Eingelerntes Wort: die letzten Frames mit jedem Muster vergleichen.
+      if (!patterns) return
+      const raw = embedBuffer.raw
+      const recent = Array.from({ length: EMBED_WINDOW }, (_, r) => raw.subarray(r * EMBED_DIM, (r + 1) * EMBED_DIM))
+      const best = Math.max(...patterns.templates.map(tpl => sequenceSimilarity(recent, tpl)))
+      if (best >= patterns.threshold && Date.now() > cooldownUntil) {
+        cooldownUntil = Date.now() + 2000
+        melBuffer.reset()
+        embedBuffer.reset()
+        opts.onDetected(best)
+      }
+      return
+    }
+
+    if (!embedBuffer.ready || !wakeModel) return
 
     // ── Stufe 3: Klassifikator ─────────────────────────────
     const wakeOut = await wakeModel.run({
@@ -334,6 +385,14 @@ export async function createWakeWord(opts: WakeWordOptions): Promise<WakeWordHan
     },
     setThreshold(value) {
       threshold = value
+    },
+    async analyze(pcm) {
+      if (!available || destroyed) return
+      for (let i = 0; i < pcm.length; i++) pending.push(pcm[i])
+      while (pending.length >= CHUNK_SAMPLES && available) {
+        await drain()
+        if (busy) await new Promise(r => setTimeout(r, 5))
+      }
     },
     destroy() {
       destroyed = true

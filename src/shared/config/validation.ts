@@ -60,9 +60,9 @@ export function validateSettingsPatch(patch: unknown): void {
   visit(patch, DEFAULT_SETTINGS, '')
   const p = patch as Record<string, unknown>
   const enums: Record<string, string[]> = {
-    brainProvider: ['gemini', 'ollama', 'openrouter', 'openai', 'anthropic', 'chatgpt', 'lmstudio'],
-    'speech.provider': ['gemini', 'elevenlabs', 'piper', 'vibevoice', 'openai'],
-    'speech.thinkProvider': ['gemini', 'ollama', 'chatgpt', 'hermes'],
+    brainProvider: ['gemini', 'ollama', 'openrouter', 'openai', 'anthropic', 'chatgpt', 'lmstudio', 'jarvis'],
+    'speech.provider': ['gemini', 'elevenlabs', 'piper', 'openai'],
+    'speech.thinkProvider': ['gemini', 'ollama', 'chatgpt'],
     'speech.hearProvider': ['gemini', 'whisper'],
     'piper.backend': ['auto', 'exe', 'python'],
     persona: ['jarvis', 'sachlich', 'herzlich'],
@@ -79,7 +79,7 @@ export function validateSettingsPatch(patch: unknown): void {
     'audio.jitterBufferMs': [0, 5000], 'wake.threshold': [0, 1],
     'vad.localGateThreshold': [0, 1], 'vad.silenceDurationMs': [100, 10_000],
     'vad.prefixPaddingMs': [0, 5000], 'companion.port': [1, 65533],
-    'speech.port': [1, 65535], 'whisper.port': [1, 65535],
+    'whisper.port': [1, 65535],
     'music.spotifyRedirectPort': [1, 65535]
   }
   for (const [path, [min, max]] of Object.entries(ranges)) {
@@ -98,17 +98,5 @@ export function validateSettingsPatch(patch: unknown): void {
   const wakeModel = get('wake.modelName')
   if (wakeModel !== undefined && (typeof wakeModel !== 'string' || !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*\.onnx$/.test(wakeModel))) {
     throw new Error('Weckwort-Modell muss ein ONNX-Dateiname ohne Pfad sein.')
-  }
-  const hermesModel = get('hermes.model')
-  if (hermesModel !== undefined && (typeof hermesModel !== 'string' || !hermesModel.trim() || hermesModel.length > 256)) {
-    throw new Error('Hermes-Modellroute fehlt oder ist zu lang.')
-  }
-  const hermesUrl = get('hermes.baseUrl')
-  if (hermesUrl !== undefined) {
-    try {
-      const url = new URL(String(hermesUrl))
-      if (!['http:', 'https:'].includes(url.protocol) || !['127.0.0.1', 'localhost', '[::1]'].includes(url.hostname) ||
-        url.username || url.password || url.search || url.hash) throw new Error()
-    } catch { throw new Error('Hermes braucht eine gültige lokale HTTP-Adresse.') }
   }
 }

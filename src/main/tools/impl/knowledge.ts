@@ -116,7 +116,7 @@ const wikipedia = defineTool({
       .optional()
       .describe('Den vollen Einleitungsabsatz statt der ersten zwei Sätze. Standard nein.')
   }),
-  spokenHint: 'Ich schlage das nach.',
+  spokenHint: 'Okay.',
   async execute({ begriff, ausfuehrlich }) {
     const lang = languageCode()
 
@@ -237,7 +237,7 @@ const newsHeadlines = defineTool({
       .describe('Worum es gehen soll, z.B. "Formel 1" oder "Wien". Ohne Angabe die Topmeldungen.'),
     anzahl: z.number().optional().describe('Wie viele Schlagzeilen, Standard fünf, höchstens zehn.')
   }),
-  spokenHint: 'Ich sehe nach, was es Neues gibt.',
+  spokenHint: 'Mhm.',
   async execute({ thema, anzahl }) {
     const lang = languageCode()
     const region = getSettings().telephony?.country ?? 'AT'

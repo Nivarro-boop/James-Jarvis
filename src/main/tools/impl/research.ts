@@ -43,7 +43,7 @@ const deepResearch = defineTool({
         'normal dauert etwa zehn Minuten, maximal deutlich länger und kostet spürbar mehr. Standard ist normal.'
       )
   }),
-  spokenHint: 'Ich fange an zu recherchieren, das dauert ein paar Minuten.',
+  spokenHint: 'Mhm.',
   async execute({ query, depth }, ctx) {
     const settings = getSettings()
     const agent =

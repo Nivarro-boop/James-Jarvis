@@ -73,11 +73,11 @@ function baseUrl(settings: Settings): string {
  */
 function missingPiece(settings: Settings): string | null {
   if (!existsSync(whisperServerExe(settings))) {
-    return `whisper liegt nicht in ${whisperDir(settings)}. Hol es in den Einstellungen unter Ohren.`
+    return `whisper liegt nicht in ${whisperDir(settings)}. Hol es in den Einstellungen unter Spracherkennung.`
   }
   const model = whisperModelPath(settings)
   if (!existsSync(model)) {
-    return `Das Sprachmodell ${baseName(model)} fehlt. Hol es in den Einstellungen unter Ohren.`
+    return `Das Sprachmodell ${baseName(model)} fehlt. Hol es in den Einstellungen unter Spracherkennung.`
   }
   if (settings.whisper.vad && !existsSync(whisperVadPath(settings))) {
     return `Die Spracherkennung ${baseName(whisperVadPath(settings))} fehlt. Ohne sie erfindet whisper bei Stille Sätze.`

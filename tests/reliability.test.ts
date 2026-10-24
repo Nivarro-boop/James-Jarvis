@@ -79,7 +79,6 @@ it('gibt das Mikrofon nach einem Fehler mitten in der Ausgabe wieder frei und be
     '../audio/player': 'export const createPlayer=()=>{}',
     '../audio/elevenVoice': 'export const createVoiceStream=()=>{};export const planVoice=()=>{}',
     '../audio/piperVoice': 'export const createPiperStream=()=>{};export const planPiperVoice=()=>{}',
-    '../audio/vibeVoice': 'export const createVibeVoiceStream=()=>{};export const planVibeVoice=()=>{}'
   }
   let fail = true, voiceAborts = 0
   const timers = new Map<number, { fn: () => void; ms: number }>()
@@ -171,7 +170,6 @@ it('puffert den Satzanfang während des Aufbaus und reicht ihn nach dem Aufwache
     '../audio/player': 'export const createPlayer=()=>{}',
     '../audio/elevenVoice': 'export const createVoiceStream=()=>{};export const planVoice=()=>{}',
     '../audio/piperVoice': 'export const createPiperStream=()=>{};export const planPiperVoice=async()=>({voice:"test",backend:"local",sampleRate:16000})',
-    '../audio/vibeVoice': 'export const createVibeVoiceStream=()=>{};export const planVibeVoice=()=>{}'
   }
   const window = { setTimeout, clearTimeout, setInterval: () => 1, clearInterval() {}, testBrain: { needsText: true, prepare: () => preparing },
     jarvis: { invoke: async () => '' } }

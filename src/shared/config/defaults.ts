@@ -4,7 +4,10 @@ import type { Settings } from '../types'
 export const DEFAULT_SETTINGS: Settings = {
   language: 'de-DE',
   homeLocation: '',
-  diagnosticReporting: { enabled: false, automatic: false, capabilityGaps: false, url: 'https://fastidious-pastelito-1f1564.netlify.app/api/error-report' },
+  useDeviceLocation: false,
+  pcProfile: true,
+  dailyBriefing: true,
+  diagnosticReporting: { enabled: true, automatic: true, capabilityGaps: false, url: 'https://jocular-otter-624907.netlify.app/api/error-report' },
 
   // Current documented Live model. Existing model choices remain selectable.
   liveModel: 'gemini-3.8-live',
@@ -98,15 +101,7 @@ export const DEFAULT_SETTINGS: Settings = {
     speed: 0.96,
     // Ungefähr zwei gesprochene Antworten Vorrat. Genau bei null umzuschalten
     // hieße, mitten im Satz zu verstummen.
-    reserveChars: 600,
-
-    // VibeVoice, falls jemand den dritten Weg wählt: lokal, ohne Kontingent,
-    // dafür mit gut zwei Sekunden bis zum ersten Wort. Der Dienst wird nur
-    // gestartet, wenn `provider` darauf steht.
-    speaker: 'de-Spk0_man',
-    port: 8791,
-    pythonPath: '',
-    voicesPath: ''
+    reserveChars: 600
   },
 
   brainModel: 'gemini-3.6-flash',
@@ -115,9 +110,10 @@ export const DEFAULT_SETTINGS: Settings = {
   // Anbieter, den man erst einrichten muss, wäre als Voreinstellung nur eine
   // zusätzliche Fehlerquelle.
   brainProvider: 'gemini',
-  chatGptModel: '',
+  chatGptModel: 'auto',
   openRouterModel: 'anthropic/claude-3.5-haiku',
   lmStudio: { baseUrl: 'http://127.0.0.1:1234/v1', model: '' },
+  jarvisLocal: { model: '' },
   // Jeweils das kleine, günstige Modell — Textaufgaben sind Übersetzen und
   // Verdichten, dafür braucht es kein Spitzenmodell.
   openAiModel: 'gpt-5-mini',
@@ -164,7 +160,11 @@ export const DEFAULT_SETTINGS: Settings = {
     exeDir: '',
     pythonPath: '',
     voicePath: '',
-    lengthScale: 1
+    // Etwas ruhiger und klarer als die Vorgabe der Stimmen (0,667 / 0,8):
+    // weniger Rauschen im Klang, gleichmäßigere Lautlängen, kein Leiern.
+    lengthScale: 1.08,
+    noiseScale: 0.5,
+    noiseW: 0.6
   },
 
   researchAgent: 'deep-research-preview-04-2026',
@@ -223,7 +223,6 @@ export const DEFAULT_SETTINGS: Settings = {
   gamingMode: false,
   confirmActions: false,
   automaticBackups: true,
-  hermes: { baseUrl: 'http://127.0.0.1:8642', model: 'hermes-agent' },
   mcpServers: [],
   dailyCostLimitUsd: 0,
   launchOnStartup: false,
@@ -557,7 +556,8 @@ export const PIPER = {
       label: 'Kerstin, low — heller, 16 kHz'
     }
   ],
-  defaultVoice: 'de_DE-thorsten-medium',
+  // „high" klingt deutlich voller; der längere Kaltstart fällt nur beim ersten Satz an.
+  defaultVoice: 'de_DE-thorsten-high',
   /**
    * So lange darf ein Satz brauchen, bevor der Prozess als hängend gilt.
    *

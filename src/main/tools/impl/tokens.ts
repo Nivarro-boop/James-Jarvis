@@ -53,7 +53,7 @@ const connections = defineTool({
     'Prüft, was gerade verbunden ist: Chrome, Gmail, Amazon, Maus und Tastatur. ' +
     'Nutze das, wenn etwas nicht geht und du wissen musst, woran es liegt.',
   schema: z.object({}),
-  spokenHint: 'Ich schaue kurz nach.',
+  spokenHint: 'Mhm.',
   async execute() {
     const status = await checkConnections()
     const broken = status.filter((s) => !s.ok)

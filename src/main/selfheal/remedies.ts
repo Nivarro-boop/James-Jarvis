@@ -1,7 +1,6 @@
 import { registerRemedy } from './index'
 import { getSecret } from '../secrets/keystore'
 import { getSettings, setSettings } from '../store/settings'
-import { startVoiceService, stopVoiceService } from '../voice/vibevoice'
 import {
   forgetOllamaReachability,
   listOllamaModels,
@@ -82,53 +81,6 @@ export function registerAllRemedies(hooks: RuntimeRepairHooks = {}): void {
   })
 
   /**
-   * Der Sprachdienst ist weg.
-   *
-   * Neu starten ist hier wirklich die Reparatur und nicht bloß ein Verschieben
-   * des Problems: Die häufigste Ursache ist ausgegangener Grafikspeicher, weil
-   * gemma4 sich dieselbe Karte teilt — und nach dem Ende des einen Prozesses
-   * ist der Speicher wieder da.
-   */
-  registerRemedy({
-    name: 'sprachdienst-neustart',
-    maxPerHour: 3,
-    applies: (i) => i.area === 'stimme' && i.code === 'dienst-beendet',
-    async apply() {
-      // Nur starten, nicht vorher stoppen: Der Prozess ist bereits beendet —
-      // genau das ist ja die Störung. `stopVoiceService` würde zusätzlich den
-      // Neustartzähler zurücksetzen, und dann liefe der Neustart endlos,
-      // gebremst allein von der Stundengrenze hier.
-      const status = await startVoiceService()
-      return status.running
-    },
-    describe: (healed) =>
-      healed ? 'Der Sprachdienst wurde neu gestartet.' : 'Der Sprachdienst ließ sich nicht neu starten.'
-  })
-
-  /**
-   * Der Sprachdienst geht gar nicht mehr.
-   *
-   * Dann zurück auf Geminis Stimme. Das ist kein Notbehelf, sondern die
-   * richtige Antwort: Eine stumme App ist schlechter als eine, die anders
-   * klingt als gewünscht — und der Nutzer erfährt es aus dem Bericht.
-   */
-  registerRemedy({
-    name: 'stimme-auf-gemini',
-    maxPerHour: 2,
-    applies: (i) => i.area === 'stimme' && i.code === 'dienst-unbrauchbar',
-    async apply() {
-      const speech = getSettings().speech
-      if (speech.provider !== 'vibevoice') return true
-      setSettings({ speech: { ...speech, provider: 'gemini' } })
-      await stopVoiceService()
-      return true
-    },
-    describe: () =>
-      'Die Stimme wurde auf Gemini zurückgestellt, damit James nicht verstummt. ' +
-      'In den Einstellungen lässt sie sich wieder auf VibeVoice legen.'
-  })
-
-  /**
    * Der Port ist belegt.
    *
    * Passiert nach einem harten Ende der App: Der alte Prozess hält den Port
@@ -140,12 +92,6 @@ export function registerAllRemedies(hooks: RuntimeRepairHooks = {}): void {
     maxPerHour: 5,
     applies: (i) => i.code === 'port-belegt',
     async apply(i) {
-      if (i.area === 'stimme') {
-        const speech = getSettings().speech
-        setSettings({ speech: { ...speech, port: speech.port + 1 } })
-        const status = await startVoiceService()
-        return status.running
-      }
       if (i.area === 'telefonie') {
         const telephony = getSettings().telephony
         // Der öffentliche Eingang probiert fünf Ports. Sind wirklich alle

@@ -58,6 +58,11 @@ describe('toSpeakable', () => {
     strictEqual(toSpeakable('Um 9:00 Uhr los.'), 'Um 9 Uhr los.')
   })
 
+  it('liest ein Datum mit Monatsnamen', () => {
+    strictEqual(toSpeakable('Am 21.10.2026 geht es los.'), 'Am 21. Oktober 2026 geht es los.')
+    strictEqual(toSpeakable('Version 1.3.9 ist da.'), 'Version 1.3.9 ist da.')
+  })
+
   it('liest keinen Quelltext vor', () => {
     strictEqual(toSpeakable('Fertig.\n```js\nconst x = 1\n```'), 'Fertig.')
   })

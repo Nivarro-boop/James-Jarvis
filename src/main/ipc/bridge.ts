@@ -1,4 +1,10 @@
 import { getSettingsWindow } from '../windows/settings'
+import { deleteDeck, listDecks, quizAnswer, quizNext } from '../study/store'
+import { deckStats } from '@shared/study'
+import { clearPcProfile, readPcProfile, refreshPcProfile, type PcProfile } from '../agent/pcProfile'
+import type { PcProfileStatus } from '@shared/ipc'
+import { clearPersonalWake, readPersonalWake, savePersonalWake } from '../providers/wakePersonal'
+import { locateDevice } from '../location'
 import { websiteAccounts, saveWebsiteAccount, removeWebsiteAccount } from '../secrets/keystore'
 import { listSkills } from '../agent/skills'
 import { clearPlan } from '../agent/activity'
@@ -63,6 +69,7 @@ import { buildSystemPrompt } from '../agent/prompt'
 import { checkConnections } from '../agent/connections'
 import { openForLogin } from '../automation/chromeCdp'
 import { listLmStudioModels } from '../providers/lmstudio'
+import { cancelHubDownload, hubFiles, installHubModel, installRuntime, jarvisLocalStatus, removeLocalModel, searchHub } from '../local/jarvisModels'
 import { deliverCameraFrame } from '../automation/camera'
 import { smartHomeStatus } from '../smarthome/homeAssistant'
 import { connectSpotify, disconnectSpotify, forgetMusicCaches, musicStatus } from '../music'
@@ -75,12 +82,10 @@ import { activitySnapshot } from '../agent/activity'
 import { reloadSchedules } from '../scheduler/cron'
 import { listReminders } from '../db'
 import { completeReminder, createReminder, snoozeReminder } from '../scheduler/reminders'
-import { hermesHealth, hermesRun } from '../providers/hermes'
-import { startHermesGateway } from '../providers/hermesService'
 import { cancelChatGptSignIn, chatGptStatus, connectChatGpt, disconnectChatGpt } from '../providers/chatgptAuth'
 import { chatGptModels, chatGptResponse, chatGptTools } from '../providers/chatgptResponses'
 import { consumeModelCall, withModelBudget } from '../agent/modelBudget'
-import { connectGoogle, disconnectGoogle, hasCalendarAuth, hasGoogleAuth } from '../providers/googleAuth'
+import { connectGoogle, disconnectGoogle, hasCalendarAuth, hasGoogleAuth, hasWorkspaceAuth } from '../providers/googleAuth'
 import { listModels as listOpenRouterModels } from '../providers/openrouter'
 import {
   forgetOllamaReachability,
@@ -91,8 +96,7 @@ import {
 } from '../providers/ollama'
 import { shutdownTelephony, startIncoming, telephonyStatus, testTelephonySetup } from '../telephony'
 import { callUser, sipStatus, startSip } from '../telephony/sip'
-import { installUpdateNow, postponeUpdate, updateStatus } from '../updater'
-import { startVoiceService, stopVoiceService, voiceServiceStatus } from '../voice/vibevoice'
+import { installUpdateNow, postponeUpdate, updateStatus, checkForUpdateNow } from '../updater'
 import {
   elevenBestModel,
   elevenPreview,
@@ -123,7 +127,6 @@ import { capabilityGaps } from '../agent/capabilityGaps'
 
 /** Laufende ChatGPT-Runden, damit Dazwischenreden sie abbrechen kann. */
 const chatGptRequests = new Map<string, AbortController>()
-const hermesRequests = new Map<string, AbortController>()
 
 type Handler<C extends keyof IpcInvokeMap> = (
   payload: IpcInvokeMap[C]['req']
@@ -194,6 +197,9 @@ export function registerIpcHandlers(version: string): void {
   // ── Einstellungen ──────────────────────────────────────────
   handle('settings:get', () => getSettings())
   handle('wake:status', () => wakeStatus())
+  handle('wake:personal', () => readPersonalWake())
+  handle('wake:personalSave', (data) => savePersonalWake(data))
+  handle('wake:personalClear', () => clearPersonalWake())
   handle('wake:asset', (payload) => readWakeAsset(String(payload?.name ?? '')))
   // Die Zahlen kommen aus dem Renderer und landen in Adresse und Dateiname —
   // geprüft wird deshalb hier, an der Grenze, und noch einmal in `readTile`.
@@ -375,6 +381,12 @@ export function registerIpcHandlers(version: string): void {
     if (!crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return null
     return getSecret('gemini')
   })
+  // Mapbox-Schlüssel sind öffentliche Browser-Token (pk.…); trotzdem nur an den Kristall.
+  ipcMain.handle('secrets:getMapboxForMap', (event) => {
+    const crystal = getCrystalWindow()
+    if (!crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return null
+    return getSecret('mapbox')
+  })
   ipcMain.handle('secrets:getElevenForLive', (event) => {
     const crystal = getCrystalWindow()
     if (!crystal || !trustedSender(event) || event.sender.id !== crystal.webContents.id) return null
@@ -440,6 +452,30 @@ export function registerIpcHandlers(version: string): void {
     return dashboard
   })
   handle('selfheal:clear', () => clearIncidents())
+  const pcStatus = (p: PcProfile | null): PcProfileStatus => ({
+    scannedAt: p?.scannedAt ?? null,
+    programs: p?.programs.length ?? 0,
+    files: p ? p.recent.length + p.folders.reduce((n, f) => n + f.entries.length, 0) : 0,
+    documents: p?.documents.length ?? 0
+  })
+  handle('study:decks', () => listDecks().map(d => ({ id: d.id, title: d.title, stats: deckStats(d) })))
+  handle('study:next', ({ deckId, skip }) => quizNext(deckId, skip))
+  handle('study:answer', ({ deckId, cardId, answer }) => {
+    const r = quizAnswer(deckId, cardId, answer)
+    return { correct: r.correct, solution: r.solution, stats: r.stats }
+  })
+  handle('study:delete', ({ deckId }) => deleteDeck(deckId))
+  handle('pc:status', () => pcStatus(readPcProfile()))
+  handle('pc:rescan', async () => pcStatus(await refreshPcProfile(true)))
+  handle('pc:clear', () => { clearPcProfile(); return pcStatus(null) })
+  handle('location:locate', async () => {
+    try {
+      const spot = await locateDevice()
+      return { ok: true, name: spot.name, lat: spot.lat, lon: spot.lon }
+    } catch (error) {
+      return { ok: false, error: error instanceof Error ? error.message : String(error) }
+    }
+  })
   handle('diagnostics:send', async () => {
     const config = getSettings().diagnosticReporting
     if (!config.enabled) return { ok: false, detail: 'Versand ist deaktiviert.' }
@@ -487,29 +523,6 @@ export function registerIpcHandlers(version: string): void {
   // die laufenden Cron-Jobs aber nur im Speicher.
   handle('schedule:list', () => listSchedules())
   handle('reminder:list', () => listReminders())
-  handle('hermes:health', () => hermesHealth())
-  handle('hermes:start', () => startHermesGateway())
-  handle('hermes:cancel', ({ requestId }) => { hermesRequests.get(requestId)?.abort() })
-  handle('hermes:run', async ({ requestId, sessionId, input }) => {
-    if (!/^[a-zA-Z0-9_-]{1,128}$/.test(requestId) || hermesRequests.has(requestId)) return { ok: false, error: 'Ungültige oder laufende Auftragskennung.' }
-    const abort = new AbortController()
-    hermesRequests.set(requestId, abort)
-    activityStart({ id: requestId, label: 'Hermes arbeitet', source: 'agent', tool: 'hermes' })
-    try {
-      const text = await hermesRun(input, sessionId, abort.signal, {
-        onText: text => sendToCrystal('hermes:delta', { requestId, text }),
-        onProgress: thought => activityAnnotate(requestId, { thought })
-      })
-      activityEnd(requestId, true)
-      return { ok: true, text }
-    }
-    catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      activityEnd(requestId, false, message)
-      return { ok: false, error: message }
-    }
-    finally { hermesRequests.delete(requestId) }
-  })
   handle('reminder:create', (input) => createReminder(input))
   handle('reminder:done', ({ id }) => completeReminder(id))
   handle('reminder:snooze', ({ id, minutes }) => snoozeReminder(id, minutes))
@@ -593,17 +606,6 @@ export function registerIpcHandlers(version: string): void {
   handle('companion:wakeReadiness', () => wakeReadiness())
   handle('companion:armWake', () => armWake())
 
-
-  // ── Stimme ─────────────────────────────────────────────────
-  handle('speech:status', async (req) => {
-    if (req?.start) return startVoiceService()
-    return voiceServiceStatus()
-  })
-  handle('speech:stop', async () => {
-    await stopVoiceService()
-    return voiceServiceStatus()
-  })
-
   // ── Telefongespräch ────────────────────────────────────────
   handle('telephony:test', async () => testTelephonySetup())
   handle('telephony:stop', async () => {
@@ -615,6 +617,7 @@ export function registerIpcHandlers(version: string): void {
   handle('sip:status', () => sipStatus())
   handle('sip:restart', () => startSip())
   handle('update:get', () => updateStatus())
+  handle('update:check', () => checkForUpdateNow())
   handle('update:installNow', () => installUpdateNow())
   handle('update:postpone', () => postponeUpdate())
   handle('sip:testCall', async () => {
@@ -810,7 +813,7 @@ export function registerIpcHandlers(version: string): void {
     }
   })
   handle('google:disconnect', () => disconnectGoogle())
-  handle('google:status', () => ({ connected: hasGoogleAuth(), calendar: hasCalendarAuth() }))
+  handle('google:status', () => ({ connected: hasGoogleAuth(), calendar: hasCalendarAuth(), workspace: hasWorkspaceAuth() }))
 
   // ── ChatGPT-Abo ────────────────────────────────────────────
   handle('chatgpt:connect', async () => {
@@ -860,6 +863,21 @@ export function registerIpcHandlers(version: string): void {
   })
 
   handle('ollama:health', () => ollamaHealth())
+
+  // ── Eigene lokale Modelle (Hugging Face + llama.cpp) ───────
+  handle('hub:search', ({ query, sort }) => searchHub(query, sort))
+  handle('hub:files', ({ repo }) => hubFiles(repo))
+  handle('hub:install', ({ repo, file }) => installHubModel(repo, file))
+  handle('hub:cancel', () => cancelHubDownload())
+  handle('hub:remove', async ({ path }) => {
+    await removeLocalModel(path)
+    return jarvisLocalStatus()
+  })
+  handle('hub:runtime', async () => {
+    await installRuntime()
+    return jarvisLocalStatus()
+  })
+  handle('jarvisLocal:status', () => jarvisLocalStatus())
 
   // ── Ohren und Mund auf diesem Rechner ──────────────────────
   //

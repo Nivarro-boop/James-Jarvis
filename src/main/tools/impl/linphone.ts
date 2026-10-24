@@ -23,7 +23,7 @@ const callMe = defineTool({
       .string()
       .describe('Der erste Satz, sobald er abnimmt, z. B. „Die Recherche zu den Flügen ist fertig.“')
   }),
-  spokenHint: 'Ich rufe dich an.',
+  spokenHint: 'Okay.',
   async execute({ message }) {
     if (sipStatus().inCall) return { fehler: 'Es läuft schon ein Gespräch.' }
     await callUser(message)

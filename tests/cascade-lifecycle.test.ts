@@ -13,7 +13,6 @@ const source = build({ entryPoints: [resolve('src/renderer/live/CascadeSession.t
       '../audio/player': 'export const createPlayer=()=>window.createTestPlayer()',
       '../audio/piperVoice': 'export const planPiperVoice=async()=>({voice:"test",backend:"local",sampleRate:16000}); export const createPiperStream=()=>window.testVoice',
       '../audio/elevenVoice': 'export const planVoice=()=>{}; export const createVoiceStream=()=>{}',
-      '../audio/vibeVoice': 'export const planVibeVoice=()=>{}; export const createVibeVoiceStream=()=>{}'
     }
     b.onResolve({ filter: /.*/ }, args => args.path in fixtures ? { path: args.path, namespace: 'fixture' } : undefined)
     b.onLoad({ filter: /.*/, namespace: 'fixture' }, args => ({ contents: fixtures[args.path] }))
