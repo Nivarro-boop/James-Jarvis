@@ -18,7 +18,10 @@ import { join } from 'node:path'
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
 const repo = 'Nivarro-boop/James-Jarvis'
 const tag = `v${version}`
-const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32' })
+// npx ist unter Windows ein .cmd und braucht die Shell. gh ist eine echte .exe
+// und läuft ohne — sonst zerteilt die Shell Argumente mit Leerzeichen, etwa
+// den Titel „James-Jarvis 1.3.10“, und gh hält „1.3.10“ für eine Datei.
+const run = (cmd, args) => execFileSync(cmd, args, { stdio: 'inherit', shell: process.platform === 'win32' && cmd !== 'gh' })
 
 /**
  * Release-Seite für Nutzer: Commit-Titel als Überschrift, Text ohne
@@ -41,7 +44,7 @@ function releaseNotes(message) {
 }
 
 try {
-  execFileSync('gh', ['release', 'view', tag, '--repo', repo], { stdio: 'ignore', shell: process.platform === 'win32' })
+  execFileSync('gh', ['release', 'view', tag, '--repo', repo], { stdio: 'ignore' })
 } catch {
   // Als Datei, nicht als Argument: Eine mehrzeilige Commit-Nachricht mit
   // Anführungszeichen übersteht die Windows-Shell sonst nicht heil.
