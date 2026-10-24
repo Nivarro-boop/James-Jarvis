@@ -5,12 +5,11 @@ directories:
   buildResources: resources
 
 files:
-  - out/**/*
-  - '!out/tests/**/*'
-  - '!out/audit/**/*'
-  # Während des Packens geschriebene Logs würden die ASAR-Dateigrößen verändern.
-  - '!out/**/*.log'
-  - '!out/tsc/**/*'
+  # Nur Laufzeitdateien einpacken: UI-Prüfungen erzeugen kurzlebige Wrapper
+  # neben diesen Ordnern, die während des Packens wieder verschwinden können.
+  - out/main/**/*
+  - out/preload/**/*
+  - out/renderer/**/*
   - package.json
 
 # Die beiden PowerShell-Skripte und das Tray-Symbol werden zur Laufzeit über

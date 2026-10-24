@@ -4,7 +4,7 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-native-webview'
-import { canWake, wake, type WakeTarget } from './modules/jarvis-wake'
+import { canWake, configureWatch, watchStatus, wake, type WakeTarget } from './modules/jarvis-wake'
 import { parsePairing, sameOrigin, type Pairing } from './src/pairing'
 import { asWakeTarget, forget, loadPairing, loadWake, savePairing, saveWake } from './src/storage'
 
@@ -57,19 +57,23 @@ export default function App() {
 
   useEffect(() => {
     loadPairing()
-      .then(pairing => setPhase(pairing ? { kind: 'remote', pairing } : { kind: 'pair' }))
+      .then(pairing => {
+        void configureWatch(pairing?.secure ? pairing.url : null).catch(() => undefined)
+        setPhase(pairing ? { kind: 'remote', pairing } : { kind: 'pair' })
+      })
       .catch(() => setPhase({ kind: 'pair' }))
   }, [])
 
   const paired = useCallback(async (pairing: Pairing) => {
     await savePairing(pairing)
+    await configureWatch(pairing.secure ? pairing.url : null).catch(() => undefined)
     setPhase({ kind: 'remote', pairing })
   }, [])
 
   const unpair = useCallback(() => {
     Alert.alert('Kopplung lösen?', 'Danach muss der QR-Code am Rechner neu gescannt werden.', [
       { text: 'Abbrechen', style: 'cancel' },
-      { text: 'Lösen', style: 'destructive', onPress: () => void forget().then(() => setPhase({ kind: 'pair' })) }
+      { text: 'Lösen', style: 'destructive', onPress: () => void configureWatch(null).then(() => forget()).then(() => setPhase({ kind: 'pair' })) }
     ])
   }, [])
 
@@ -81,6 +85,7 @@ export default function App() {
       {phase.kind === 'remote' && (
         <RemoteScreen
           pairing={phase.pairing}
+          onUnpair={unpair}
           onOffline={reason => setPhase({ kind: 'offline', pairing: phase.pairing, reason })}
         />
       )}
@@ -99,21 +104,25 @@ export default function App() {
 // Koppeln
 // ─────────────────────────────────────────────────────────────
 
-function PairScreen({ onPaired }: { onPaired: (pairing: Pairing) => void }) {
+function PairScreen({ onPaired }: { onPaired: (pairing: Pairing) => Promise<void> }) {
   const [permission, requestPermission] = useCameraPermissions()
   const [scanning, setScanning] = useState(false)
   const [link, setLink] = useState('')
   const [error, setError] = useState<string | null>(null)
   const handled = useRef(false)
+  const accepting = useRef(false)
 
-  const accept = (text: string) => {
+  const accept = async (text: string) => {
+    if (accepting.current) return false
     const result = parsePairing(text)
     if (!result.ok) {
       setError(result.error)
       return false
     }
-    onPaired(result.pairing)
-    return true
+    accepting.current = true
+    try { await onPaired(result.pairing); return true }
+    catch (err) { setError(err instanceof Error ? err.message : 'Kopplung konnte nicht gespeichert werden.'); setScanning(false); return false }
+    finally { accepting.current = false }
   }
 
   if (scanning) {
@@ -126,10 +135,7 @@ function PairScreen({ onPaired }: { onPaired: (pairing: Pairing) => void }) {
           onBarcodeScanned={({ data }) => {
             if (handled.current) return
             handled.current = true
-            if (!accept(data)) {
-              setScanning(false)
-              handled.current = false
-            }
+            void accept(data).then(ok => { if (!ok) { setScanning(false); handled.current = false } })
           }}
         />
         <SafeAreaView style={styles.scanOverlay} edges={['bottom']}>
@@ -141,18 +147,21 @@ function PairScreen({ onPaired }: { onPaired: (pairing: Pairing) => void }) {
 
   const startScan = async () => {
     setError(null)
-    const granted = permission?.granted || (await requestPermission()).granted
-    if (granted) setScanning(true)
-    else setError('Ohne Kamera bitte den Link unten einfügen.')
+    try {
+      const granted = permission?.granted || (await requestPermission()).granted
+      if (granted) setScanning(true)
+      else setError('Ohne Kamera bitte den Link unten einfügen.')
+    } catch { setError('Kamera konnte nicht geöffnet werden. Bitte den Kopplungslink einfügen.') }
   }
 
   return (
     <SafeAreaView style={styles.screen}>
-      <Text style={styles.title}>James koppeln</Text>
+      <Text style={styles.title}>James. Auch an deinem Handgelenk.</Text>
       <Text style={styles.body}>
         Am Rechner Einstellungen → Telefon öffnen und den Kopplungs-QR-Code scannen. Rechner und
         iPhone müssen im selben WLAN oder im selben Tailnet sein.
       </Text>
+      <Text style={styles.body}>Apple Watch: Die gebaute App überträgt die Kopplung automatisch. Anmeldedaten bleiben auf dem iPhone.</Text>
       <Button label="QR-Code scannen" onPress={startScan} />
       <Text style={styles.label}>Oder Link einfügen</Text>
       <TextInput
@@ -164,9 +173,9 @@ function PairScreen({ onPaired }: { onPaired: (pairing: Pairing) => void }) {
         autoCapitalize="none"
         autoCorrect={false}
         keyboardType="url"
-        onSubmitEditing={() => accept(link)}
+        onSubmitEditing={() => { void accept(link) }}
       />
-      <Button label="Verbinden" onPress={() => accept(link)} subtle />
+      <Button label="Verbinden" onPress={() => { void accept(link) }} subtle />
       {error && <Text style={styles.error}>{error}</Text>}
     </SafeAreaView>
   )
@@ -176,8 +185,15 @@ function PairScreen({ onPaired }: { onPaired: (pairing: Pairing) => void }) {
 // Fernbedienung
 // ─────────────────────────────────────────────────────────────
 
-function RemoteScreen({ pairing, onOffline }: { pairing: Pairing; onOffline: (reason: string) => void }) {
+function RemoteScreen({ pairing, onOffline, onUnpair }: { pairing: Pairing; onOffline: (reason: string) => void; onUnpair: () => void }) {
   const web = useRef<WebViewHandle>(null)
+  const [watch, setWatch] = useState<ReturnType<typeof watchStatus>>({ supported: false })
+  useEffect(() => {
+    const refresh = () => setWatch(watchStatus())
+    refresh()
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') refresh() })
+    return () => subscription.remove()
+  }, [])
 
   const settle = (id: number, error: string | null) => {
     web.current?.injectJavaScript(`window.__jarvisSettle(${id}, ${JSON.stringify(error)}); true;`)
@@ -208,6 +224,8 @@ function RemoteScreen({ pairing, onOffline }: { pairing: Pairing; onOffline: (re
 
   return (
     <View style={styles.web}>
+      {watch.paired && !watch.installed && <Text style={styles.body}>Watch gekoppelt · James-Watch-App über die Watch-App installieren.</Text>}
+      <Pressable accessibilityRole="button" onPress={onUnpair}><Text style={styles.body}>Rechner wechseln · neuen QR-Code scannen</Text></Pressable>
       <JamesWebView
         ref={web}
         source={{ uri: pairing.url }}

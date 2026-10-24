@@ -8,6 +8,8 @@ import { join, normalize, resolve, sep } from 'node:path'
 import type { CrystalState } from '@shared/types'
 import {
   AUDIO_TAG,
+  isPhoneMessage,
+  isCaptionMessage,
   COMPANION_DEFAULT_PORT,
   COMPANION_PATH,
   type CompanionStatus,
@@ -17,7 +19,7 @@ import {
   type ServerMessage
 } from '@shared/companion'
 import { resourceFile } from '../resources'
-import { accept, type WsSocket } from './websocket'
+import { accept, guardSocket, type WsSocket } from './websocket'
 import { localWakeTarget } from './wol'
 
 /**
@@ -252,7 +254,9 @@ export async function startCompanion(
         )
       : createServer(handler)
 
+  outward.on('clientError', (_error, socket) => socket.destroy())
   outward.on('upgrade', (req, socket, head) => {
+    guardSocket(socket)
     const url = new URL(req.url ?? '/', `http://${req.headers.host ?? 'localhost'}`)
     const address = req.socket.remoteAddress ?? 'unbekannt'
 
@@ -280,7 +284,9 @@ export async function startCompanion(
 
   // ── Der innere Zuhörer: nur der Kristall ────────────────
   const inward = createServer((_req, res) => res.writeHead(404).end())
+  inward.on('clientError', (_error, socket) => socket.destroy())
   inward.on('upgrade', (req, socket, head) => {
+    guardSocket(socket)
     const url = new URL(req.url ?? '/', 'http://127.0.0.1')
     if (url.pathname !== COMPANION_PATH.host) {
       socket.end('HTTP/1.1 404 Not Found\r\n\r\n')
@@ -426,14 +432,20 @@ function attachHost(ws: WsSocket): void {
   // vielleicht noch nicht abgeräumt — der neue gewinnt.
   host?.close(1000, 'Ersetzt')
   host = ws
+  broadcastToPhones({ t: 'availability', ready: true })
 
   ws.onText = (raw) => {
+    if (host !== ws) return
     const msg = parse<HostMessage>(raw)
     if (!msg) return
     if (msg.t === 'state') {
       lastState = { state: msg.state, paused: msg.paused, until: msg.until }
       broadcastToPhones(msg)
-    } else if (msg.t === 'note') {
+    } else if (msg.t === 'note' && typeof msg.text === 'string') {
+      broadcastToPhones(msg)
+    } else if (msg.t === 'text-result' && typeof msg.requestId === 'string' && msg.requestId.length <= 80 && typeof msg.ok === 'boolean') {
+      broadcastToPhones(msg)
+    } else if (isCaptionMessage(msg)) {
       broadcastToPhones(msg)
     }
   }
@@ -441,12 +453,16 @@ function attachHost(ws: WsSocket): void {
   // Stimme vom Kristall an alle Telefone. Hier wird nichts umgerechnet und
   // nichts zwischengespeichert — der Rahmen geht durch, wie er kam.
   ws.onBinary = (data) => {
-    if (data.length < 1 || data[0] !== AUDIO_TAG.voice) return
+    if (host !== ws || data.length < 3 || data.length % 2 !== 1 || data[0] !== AUDIO_TAG.voice) return
     for (const phone of phones) phone.socket.sendBinary(data)
   }
 
   ws.onClose = () => {
-    if (host === ws) host = null
+    if (host === ws) {
+      host = null
+      broadcastToPhones({ t: 'availability', ready: false })
+      broadcastToPhones({ t: 'state', state: 'offline', paused: false, until: null })
+    }
   }
 
   ws.sendText(JSON.stringify({ t: 'phones', count: phones.length } satisfies HostCommand))
@@ -476,11 +492,15 @@ function attachPhone(ws: WsSocket): void {
       port
     })
   }
-  send(ws, { t: 'state', ...lastState })
+  send(ws, host ? { t: 'state', ...lastState } : { t: 'state', state: 'offline', paused: false, until: null })
+  send(ws, { t: 'availability', ready: host !== null })
 
   ws.onText = (raw) => {
     const msg = parse<PhoneMessage>(raw)
-    if (!msg) return
+    if (!isPhoneMessage(msg)) {
+      send(ws, { t: 'error', message: 'Ungültige Nachricht. Texte dürfen höchstens 8000 Zeichen enthalten.' })
+      return
+    }
 
     if (msg.t === 'hello') {
       phone.name = String(msg.name ?? 'Telefon').slice(0, 40)
@@ -495,6 +515,7 @@ function attachPhone(ws: WsSocket): void {
       return
     }
     if (!host) {
+      if (msg.t === 'text' && msg.requestId) send(ws, { t: 'text-result', requestId: msg.requestId, ok: false })
       send(ws, { t: 'error', message: 'Das James-Fenster am Rechner ist gerade nicht offen.' })
       return
     }
@@ -506,7 +527,7 @@ function attachPhone(ws: WsSocket): void {
   }
 
   ws.onBinary = (data) => {
-    if (data.length < 1 || data[0] !== AUDIO_TAG.mic) return
+    if (data.length < 3 || data.length % 2 !== 1 || data[0] !== AUDIO_TAG.mic) return
     host?.sendBinary(data)
   }
 
@@ -601,6 +622,8 @@ async function serveStatic(req: IncomingMessage, res: ServerResponse): Promise<v
       'content-security-policy':
         "default-src 'self'; connect-src 'self' ws://* wss://*; img-src 'self' data:; style-src 'self' 'unsafe-inline'",
       'x-frame-options': 'DENY',
+      'x-content-type-options': 'nosniff',
+      'referrer-policy': 'no-referrer',
       'cache-control': 'no-cache'
     })
     res.end(body)

@@ -48,6 +48,7 @@ export function Clock(): JSX.Element {
 interface MenuItem { label: string; run: () => void }
 
 export function MainMenu({ onBrain }: { onBrain: () => void }): JSX.Element {
+  const paused = useCrystal(s => s.paused)
   const [open, setOpen] = useState(false)
   const [note, setNote] = useState('')
   const root = useRef<HTMLDivElement>(null)
@@ -84,6 +85,9 @@ export function MainMenu({ onBrain }: { onBrain: () => void }): JSX.Element {
         setNote('Neues Gespräch begonnen.')
       }).catch(() => setNote('Gespräch konnte nicht zurückgesetzt werden.'))
     } },
+    { label: paused ? 'Mikrofon aktivieren' : 'Mikrofon pausieren', run: () => window.dispatchEvent(new Event('jarvis:togglePause')) },
+    { label: 'Gespräch & Schreiben', run: () => window.dispatchEvent(new Event('jarvis:conversation')) },
+    { label: 'iPhone & Apple Watch', run: () => openSettings('companion') },
     { label: 'Mit James einrichten', run: () => openSettings('setup') },
     { label: 'Lernen & Quiz', run: () => window.dispatchEvent(new Event('jarvis:learn')) },
     { label: 'Deine Fähigkeiten', run: () => window.dispatchEvent(new Event('jarvis:skills')) },

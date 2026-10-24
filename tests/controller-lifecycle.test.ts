@@ -212,3 +212,16 @@ it('lässt den Abschluss eines alten Schlafbefehls den neuen Verbindungszustand 
   await sleeping
   assert.equal(h.wishes.at(-1)[1], 'listening')
 })
+
+
+it('öffnet das Fernmikrofon nach Loslassen während des Aufweckens nicht erneut', async () => {
+  const h = await harness()
+  const opening = deferred()
+  h.controller.paused = true
+  h.controller.setPaused = async () => { await opening.promise; h.controller.paused = false }
+  const pressing = h.controller.setRemoteMic(true)
+  await h.controller.setRemoteMic(false)
+  opening.resolve()
+  await pressing
+  assert.equal(h.controller.remoteMicOpen, false)
+})

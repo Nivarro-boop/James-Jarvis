@@ -8,6 +8,8 @@ export interface WakeTarget {
 }
 
 interface NativeWake {
+  configureWatch?(link: string | null): Promise<void>
+  watchStatus?(): { supported: boolean; paired?: boolean; installed?: boolean; reachable?: boolean; configured?: boolean }
   wake(mac: string, broadcast: string, address: string): Promise<void>
 }
 
@@ -19,4 +21,11 @@ export const canWake = native !== null
 export async function wake(target: WakeTarget): Promise<void> {
   if (!native) throw new Error('Wecken geht nur in der gebauten App, nicht in Expo Go.')
   await native.wake(target.mac, target.broadcast, target.address ?? '')
+}
+
+export async function configureWatch(link: string | null): Promise<void> {
+  if (native?.configureWatch) await native.configureWatch(link)
+}
+export function watchStatus() {
+  return native?.watchStatus?.() ?? { supported: false }
 }

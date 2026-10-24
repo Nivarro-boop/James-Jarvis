@@ -353,3 +353,68 @@ footer {
 footer .ghost {
   flex: 1;
 }
+
+/* Telefon-Update: klare Karten, lesbarer Verlauf und kompakte Bedienung. */
+[hidden] { display: none !important; }
+:root { color-scheme: dark; --bg: #080c14; --fg: #eef4ff; --dim: #a0afc5; --line: #243248; --glow: #79b5ff; }
+body { background: radial-gradient(ellipse at 80% 0%, #142641 0%, transparent 55%), var(--bg); }
+.screen { width: 100%; max-width: 680px; margin: auto; min-height: 100svh; gap: 16px; }
+#pairing { justify-content: center; max-width: 480px; }
+.eyebrow, .connection-tools > span { font-size: 10px; font-weight: 700; letter-spacing: .14em; color: #8ba8cc; }
+#pairing h1 { font-size: clamp(32px, 8vw, 44px); line-height: 1.12; letter-spacing: -.04em; margin: 10px 0; }
+.intro { color: var(--dim); margin: 0 0 20px; }
+.primary { color: #091323; }
+.brand { display: flex; flex-direction: column; gap: 2px; }
+.brand strong { color: var(--fg); font-size: 22px; letter-spacing: -.04em; }
+.brand span { font-size: 12px; }
+header { padding: 4px 0 10px; }
+header .ghost { min-width: 44px; min-height: 44px; font-size: 24px; }
+.connection-tools { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.connection-tools .ghost { font-size: 12px; padding: 8px 10px; }
+.note:empty { display: none; }
+.note { border-left: 2px solid var(--glow); padding: 10px 12px; background: #112036; border-radius: 0 10px 10px 0; overflow-wrap: anywhere; }
+.audio-panel { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 16px; background: #111c2d; }
+.audio-panel strong { display: block; font-size: 13px; }
+.audio-panel span { display: block; color: var(--dim); font-size: 11px; margin-top: 4px; }
+.audio-panel .ghost { font-size: 12px; white-space: nowrap; border-color: #3c5a7b; color: #bcd9ff; }
+.stage { flex: none; padding: 24px 0 6px; gap: 12px; text-align: center; }
+.crystal { width: 100px; height: 100px; margin-bottom: 12px; }
+h2 { margin: 0; font-size: 20px; letter-spacing: -.025em; }
+.stage p { color: var(--dim); margin: 0; font-size: 13px; }
+.conversation { background: #0d1522; border: 1px solid var(--line); border-radius: 18px; padding: 14px; }
+.section-heading { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.section-heading h2 { font-size: 13px; letter-spacing: 0; }
+.section-heading .ghost { font-size: 11px; padding: 6px 10px; }
+#messages { max-height: 260px; overflow-y: auto; overscroll-behavior: contain; }
+.empty-chat { color: var(--dim); font-size: 13px; margin: 10px 0; }
+.message { margin: 10px 0; padding: 12px; border-radius: 12px; background: #15243a; overflow-wrap: anywhere; }
+.message[data-who="user"] { background: #1d3452; margin-left: 24px; }
+.message strong { display: block; font-size: 10px; letter-spacing: .08em; color: #9bbde5; margin-bottom: 5px; }
+.message p { margin: 0; font-size: 14px; white-space: pre-wrap; }
+.talk { display: grid; grid-template-columns: 30px 1fr; text-align: left; padding: 18px; border-radius: 18px; background: linear-gradient(120deg, #19385a, #122239); }
+.talk-icon { grid-row: span 2; align-self: center; font-size: 24px; color: #9ccaff; }
+.talk small { font-size: 11px; color: #b3c9e4; font-weight: 400; margin-top: 3px; }
+.say { align-items: stretch; }
+.say textarea { resize: vertical; max-height: 160px; min-height: 58px; min-width: 0; flex: 1; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: #0d1420; color: var(--fg); font: inherit; font-size: 16px; }
+.say button { width: 52px; background: #84bcff; color: #071321; font-size: 24px; }
+footer { padding-top: 2px; }
+footer .ghost { font-size: 12px; min-height: 44px; }
+button { min-height: 44px; }
+button:disabled { opacity: .45; cursor: default; }
+button:focus-visible, textarea:focus-visible, input:focus-visible, .crystal:focus-visible { outline: 2px solid #95c8ff; outline-offset: 3px; }
+.sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; }
+@media (max-height: 740px) { .stage { padding-top: 12px; } .crystal { width: 72px; height: 72px; margin-bottom: 4px; } .screen { gap: 12px; } }
+
+
+
+/* Dieselbe ruhige Orb-Bühne wie am Rechner. */
+#main { gap: 12px; }
+#main .stage { flex: 1; min-height: 250px; padding: 18px 0; }
+#main .crystal { width: clamp(190px, 52vw, 300px); height: clamp(190px, 52vw, 300px); margin-bottom: 16px; box-shadow: 0 0 100px -12px var(--orb-dim), inset -20px -18px 45px #00112699; }
+#main .stage h2 { font-size: 22px; }
+.conversation { max-height: 32dvh; }
+#main .connection-tools > span { display: none; }
+#main .connection-tools { justify-content: flex-end; }
+.audio-panel { padding: 10px 12px; }
+#main.has-messages .stage { min-height: 230px; }
+@media (max-height: 740px) { #main .crystal { width: 160px; height: 160px; } #main .stage { min-height: 210px; } }

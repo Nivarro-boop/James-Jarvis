@@ -42,7 +42,26 @@
           "resizeMode": "contain",
           "backgroundColor": "#05080c"
         }
-      ]
-    ]
+      ],
+      "@bacons/apple-targets"
+    ],
+    "extra": {
+      "eas": {
+        "build": {
+          "experimental": {
+            "ios": {
+              "appExtensions": [
+                {
+                  "bundleIdentifier": "dev.void.jarvis.phone.watch",
+                  "targetName": "JamesWatch"
+                }
+              ]
+            }
+          }
+        },
+        "projectId": "d94e23c5-6e21-41a6-bed7-f2f3cd7496a7"
+      }
+    },
+    "owner": "fabioxx"
   }
 }

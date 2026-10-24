@@ -29,7 +29,8 @@ const assert = require('node:assert/strict')
     })()
     const errors = []
     page.on('pageerror', error => errors.push(error.message))
-    await page.locator('.home-mute').waitFor()
+    await page.getByRole('button', { name: 'Menü', exact: true }).waitFor()
+    await page.getByRole('button', { name: 'Menü', exact: true }).click(); await page.getByRole('menuitem', { name: 'Gespräch & Schreiben', exact: true }).click()
     assert.equal(await page.getByRole('textbox', { name: 'Nachricht an James', exact: true }).count(), 1)
     await page.evaluate(() => {
       window.uiRequests = []

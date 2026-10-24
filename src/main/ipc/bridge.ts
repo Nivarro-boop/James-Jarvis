@@ -82,7 +82,7 @@ import { activitySnapshot } from '../agent/activity'
 import { reloadSchedules } from '../scheduler/cron'
 import { listReminders } from '../db'
 import { completeReminder, createReminder, snoozeReminder } from '../scheduler/reminders'
-import { cancelChatGptSignIn, chatGptStatus, connectChatGpt, disconnectChatGpt } from '../providers/chatgptAuth'
+import { cancelChatGptSignIn, chatGptPendingSignIn, submitChatGptCallback, chatGptStatus, connectChatGpt, disconnectChatGpt } from '../providers/chatgptAuth'
 import { chatGptModels, chatGptResponse, chatGptTools } from '../providers/chatgptResponses'
 import { consumeModelCall, withModelBudget } from '../agent/modelBudget'
 import { connectGoogle, disconnectGoogle, hasCalendarAuth, hasGoogleAuth, hasWorkspaceAuth } from '../providers/googleAuth'
@@ -825,6 +825,8 @@ export function registerIpcHandlers(version: string): void {
     }
   })
   handle('chatgpt:disconnect', async () => { await disconnectChatGpt() })
+  handle('chatgpt:pendingSignIn', () => chatGptPendingSignIn())
+  handle('chatgpt:submitCallback', ({ url }) => submitChatGptCallback(url))
   handle('chatgpt:cancelSignIn', () => cancelChatGptSignIn())
   handle('chatgpt:status', () => chatGptStatus())
   handle('chatgpt:models', () => chatGptModels())

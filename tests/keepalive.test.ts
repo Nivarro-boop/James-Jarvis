@@ -179,3 +179,15 @@ describe('Lebenszeichen', () => {
     strictEqual(frames[0].opcode, OPCODE.close)
   })
 })
+
+
+describe('Abgewiesene WebSocket-Verbindungen', () => {
+  it('fängt einen Verbindungsreset auch vor dem erfolgreichen Handshake ab', () => {
+    const socket = new FakeSocket()
+    const req = request()
+    req.headers['sec-websocket-version'] = '12'
+    strictEqual(accept(req, socket as unknown as Duplex), null)
+    socket.emit('error', Object.assign(new Error('read ECONNRESET'), { code: 'ECONNRESET' }))
+    strictEqual(socket.destroyed, true)
+  })
+})

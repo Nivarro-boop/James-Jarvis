@@ -150,3 +150,38 @@
 @media (prefers-reduced-motion: reduce) {
   .james-ui.home *, .james-ui.settings-shell * { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* Orb-Ansicht: das Gespräch öffnet sich erst auf Wunsch. */
+[hidden] { display: none !important; }
+.james-ui.home .home-main { flex: 1; display: flex; overflow-y: auto; }
+.james-ui.home .home-center { flex: 1; justify-content: center; align-items: center; width: min(100%, 1000px); }
+.james-ui.home .home-stage, .james-ui.home[data-compact='true'] .home-stage { display: flex; flex-direction: column; text-align: center; align-items: center; gap: 20px; margin: auto 0; }
+.james-ui.home .home-stage .orb, .james-ui.home[data-compact='true'] .home-stage .orb { width: clamp(230px, 43vh, 460px); filter: saturate(.85); }
+.james-ui.home .home-orb-wrap::before { border: 0; }
+.james-ui.home .home-stage h1 { font-size: clamp(23px, 3vw, 32px); letter-spacing: -1px; }
+.james-ui.home .home-hint { font-size: 11px; text-align: center; max-width: 48ch; margin: auto; color: #8da9a5; }
+.orb-actions { display: flex; justify-content: center; gap: 12px; margin-top: 24px; }
+.orb-actions button { width: 46px; height: 46px; padding: 0; border-radius: 50%; background: #1c2b2d; border: 1px solid #355153; color: #c1dbd6; font-size: 20px; }
+.orb-actions button:hover { background: #2b4243; border-color: #88bdb3; }
+.james-ui.home .home-dock { max-height: 48vh; overflow-y: auto; background: #152123; border: 1px solid #365052; border-radius: 22px 22px 0 0; width: min(100%, 880px); padding: 16px 24px; }
+.drawer-heading { display: flex; justify-content: space-between; align-items: center; color: #cbe2dc; font-size: 13px; }
+.drawer-heading button { width: 36px; height: 36px; background: transparent; border: 0; color: inherit; font-size: 24px; }
+.james-ui.home[data-writing='true'] .home-stage .orb { width: clamp(100px, 21vh, 200px); }
+.james-ui.home[data-writing='true'] .home-stage { gap: 6px; }
+.james-ui.home[data-writing='true'] .orb-actions { margin-top: 12px; }
+@media (max-height: 570px) {
+  .james-ui.home .home-stage .orb, .james-ui.home[data-compact='true'] .home-stage .orb { width: clamp(120px, 32vh, 200px); }
+  .james-ui.home .home-stage { gap: 8px; }
+  .orb-actions { margin-top: 10px; }
+  .james-ui.home[data-writing='true'] .home-stage { display: none; }
+  .james-ui.home .home-dock { max-height: 80vh; }
+}
+.settings-fold { margin: 14px 0; padding: 16px; border: 1px solid #344749; border-radius: 14px; background: #172325; }
+.settings-fold > summary { cursor: pointer; font-weight: 600; color: #cfe4df; }
+.settings-fold[open] > summary { margin-bottom: 20px; }
+.connection-tabs { display: flex; flex-wrap: wrap; gap: 8px; margin: 20px 0 24px; }
+.connection-tabs button { padding: 10px 14px; border: 1px solid #365052; border-radius: 12px; background: #172325; color: #bed3ce; }
+.connection-tabs button[aria-pressed='true'] { background: #b8dac7; color: #102923; }
+
+.james-ui.home .home-center { justify-content: safe center; }
+.james-ui.home .home-center > * { flex-shrink: 0; }

@@ -24,6 +24,17 @@ export function ChatGptConnection({ onChange, model, onModelChange }: Props): JS
   const [busy, setBusy] = useState(false)
   const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState('')
+  const [pending, setPending] = useState<{ url: string; browserError?: string } | null>(null)
+  const [callback, setCallback] = useState('')
+  const [callbackBusy, setCallbackBusy] = useState(false)
+  useEffect(() => {
+    if (!signingIn) { setPending(null); setCallback(''); return }
+    let alive = true
+    const load = (): void => { void window.jarvis.invoke('chatgpt:pendingSignIn').then(value => { if (alive) setPending(value) }).catch(() => {}) }
+    load()
+    const timer = window.setInterval(load, 600)
+    return () => { alive = false; window.clearInterval(timer) }
+  }, [signingIn])
 
   const refresh = async (): Promise<void> => {
     const status = await window.jarvis.invoke('chatgpt:status')
@@ -83,10 +94,21 @@ export function ChatGptConnection({ onChange, model, onModelChange }: Props): JS
     {signingIn && <button type="button" onClick={() => {
       void window.jarvis.invoke('chatgpt:cancelSignIn').catch((e) => setError(String(e)))
     }}>Anmeldung abbrechen</button>}
-    <p className="hint"><a href={CHATGPT_USAGE_URL} target="_blank" rel="noreferrer">Nutzung und Limits in ChatGPT verwalten</a>.
-      {' '}James zeigt keine geschätzten Abo-Prozente an. OpenAI setzt die Konto-Limits durch.
-      Direkte OpenAI-Live-Sprache benötigt einen separat abgerechneten API-Schlüssel.
-      Mit lokalen Ohren und einer lokalen Stimme kann das Abo den Text-Denkmotor einer Sprachunterhaltung versorgen.</p>
+    {signingIn && pending && <details className="settings-fold" open>
+      <summary>Remote Play oder Browser auf einem anderen Gerät?</summary>
+      <p className="hint">Öffne den Anmeldelink. Falls der Browser am Ende 127.0.0.1 nicht erreicht, kopiere die komplette Adresse aus seiner Adresszeile hierher. James prüft sie auf diesem Rechner.</p>
+      {pending.browserError && <p className="hint err">{pending.browserError}</p>}
+      <button type="button" onClick={() => { void navigator.clipboard.writeText(pending.url).catch(() => setError('Kopieren fehlgeschlagen. Bitte den Link markieren.')) }}>Anmeldelink kopieren</button>
+      <input aria-label="Anmeldelink" readOnly value={pending.url} onFocus={event => event.target.select()} />
+      <label htmlFor="chatgpt-callback">Rückleitungsadresse aus dem Browser</label>
+      <textarea id="chatgpt-callback" aria-label="Rückleitungsadresse" value={callback} onChange={event => setCallback(event.target.value)} placeholder="http://127.0.0.1:…/auth/callback?code=…" autoComplete="off" spellCheck={false} />
+      <button type="button" disabled={callbackBusy || !callback.trim()} onClick={() => {
+        setCallbackBusy(true); setError('')
+        void window.jarvis.invoke('chatgpt:submitCallback', { url: callback }).then(() => setCallback(''))
+          .catch(err => setError(err instanceof Error ? err.message : String(err))).finally(() => setCallbackBusy(false))
+      }}>Anmeldung abschließen</button>
+    </details>}
+    <p className="hint"><a href={CHATGPT_USAGE_URL} target="_blank" rel="noreferrer">Nutzung und Limits in ChatGPT</a> · Live-Sprache über die OpenAI API wird separat abgerechnet.</p>
     {error && <><p className="hint err">{error}</p><button type="button" disabled={busy} onClick={() => {
       setBusy(true); setError('')
       void refresh().catch(e => setError(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false))

@@ -40,6 +40,8 @@ export function startCompanionBridge(
   // Ohne diesen Schlüssel weist der innere Zuhörer ab — er ist das Einzige,
   // was den Kristall von einer beliebigen Webseite im Browser unterscheidet.
   let hostKey: string | null = null
+  let lastCaptions: unknown = null
+  let lastState = ''
 
   const open = (): void => {
     if (stopped) return
@@ -75,6 +77,8 @@ export function startCompanionBridge(
     ws.onopen = () => {
       if (!mine()) return
       delay = 1000
+      lastCaptions = null
+      lastState = ''
       pushState()
     }
 
@@ -90,7 +94,9 @@ export function startCompanionBridge(
       } catch {
         return
       }
-      void handleCommand(command)
+      void handleCommand(command).catch((err) => {
+        send({ t: 'note', text: `Auftrag fehlgeschlagen: ${err instanceof Error ? err.message : String(err)}` })
+      })
     }
 
     ws.onclose = () => {
@@ -129,9 +135,12 @@ export function startCompanionBridge(
       case 'mic':
         await controller.setRemoteMic(command.on)
         break
-      case 'text':
-        await controller.speakPrompt(command.text, true)
+      case 'text': {
+        const ok = await controller.sendTyped(command.text)
+        if (command.requestId) send({ t: 'text-result', requestId: command.requestId, ok })
+        if (!ok) send({ t: 'note', text: 'Die Nachricht konnte nicht verarbeitet werden. Bitte erneut senden.' })
         break
+      }
       case 'pause':
         await controller.setPaused(command.paused)
         break
@@ -150,12 +159,13 @@ export function startCompanionBridge(
 
   const pushState = (): void => {
     const crystal = useCrystal.getState()
-    send({
-      t: 'state',
-      state: crystal.state,
-      paused: controller.isPaused(),
-      until: null
-    })
+    const state = { t: 'state' as const, state: crystal.state, paused: controller.isPaused(), until: crystal.pauseUntil }
+    const key = JSON.stringify(state)
+    if (key !== lastState) { send(state); lastState = key }
+    if (crystal.captions !== lastCaptions) {
+      lastCaptions = crystal.captions
+      send({ t: 'captions', items: crystal.captions.slice(-30).map(({ id, who, text }) => ({ id, who, text: text.slice(-16000) })) })
+    }
   }
 
   // Zustandswechsel weiterreichen. Der Store ist die einzige Stelle, an der

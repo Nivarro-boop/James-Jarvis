@@ -110,7 +110,7 @@ export type PhoneMessage =
    */
   | { t: 'mic'; on: boolean }
   /** Getippt statt gesprochen — im Zug oder wenn jemand danebensitzt. */
-  | { t: 'text'; text: string }
+  | { t: 'text'; text: string; requestId?: string }
   | { t: 'pause'; paused: boolean }
   /**
    * Steht die Leitung noch? Wird beantwortet, ohne den Kristall zu behelligen —
@@ -120,8 +120,13 @@ export type PhoneMessage =
    */
   | { t: 'ping' }
 
+export interface CompanionCaption { id: number; who: 'user' | 'james'; text: string }
+
 /** Was das Telefon bekommt. */
 export type ServerMessage =
+  | { t: 'text-result'; requestId: string; ok: boolean }
+  | { t: 'availability'; ready: boolean }
+  | { t: 'captions'; items: CompanionCaption[] }
   | { t: 'state'; state: CrystalState; paused: boolean; until: number | null }
   /** Einmal beim Verbinden: alles, was das Telefon zum Wecken braucht. */
   | { t: 'wake'; mac: string; broadcast: string; address: string; port: number }
@@ -135,6 +140,8 @@ export type ServerMessage =
 
 /** Was der Kristall dem Server meldet. */
 export type HostMessage =
+  | { t: 'text-result'; requestId: string; ok: boolean }
+  | { t: 'captions'; items: CompanionCaption[] }
   | { t: 'state'; state: CrystalState; paused: boolean; until: number | null }
   | { t: 'note'; text: string }
 
@@ -142,7 +149,7 @@ export type HostMessage =
 export type HostCommand =
   | { t: 'press' }
   | { t: 'mic'; on: boolean }
-  | { t: 'text'; text: string }
+  | { t: 'text'; text: string; requestId?: string }
   | { t: 'pause'; paused: boolean }
   /** Ein Telefon ist gekommen oder gegangen; der Kristall zeigt es an. */
   | { t: 'phones'; count: number }
@@ -231,4 +238,26 @@ export interface CompanionStatus {
    */
   caUrl: string | null
   wake: { mac: string; broadcast: string } | null
+}
+
+/** Laufzeitprüfung für das öffentlich erreichbare Telefonprotokoll. */
+export function isPhoneMessage(value: unknown): value is PhoneMessage {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const msg = value as Record<string, unknown>
+  switch (msg.t) {
+    case 'hello': return typeof msg.name === 'string' && msg.name.length <= 80
+    case 'press': case 'ping': return true
+    case 'mic': return typeof msg.on === 'boolean'
+    case 'pause': return typeof msg.paused === 'boolean'
+    case 'text': return (msg.requestId === undefined || (typeof msg.requestId === 'string' && msg.requestId.length <= 80)) && typeof msg.text === 'string' && msg.text.trim().length > 0 && msg.text.length <= 8000
+    default: return false
+  }
+}
+
+export function isCaptionMessage(value: unknown): value is { t: 'captions'; items: CompanionCaption[] } {
+  if (!value || typeof value !== 'object') return false
+  const msg = value as Record<string, unknown>
+  return msg.t === 'captions' && Array.isArray(msg.items) && msg.items.length <= 30 && msg.items.every(item =>
+    item && Number.isSafeInteger(item.id) && (item.who === 'user' || item.who === 'james') &&
+    typeof item.text === 'string' && item.text.length <= 16000)
 }

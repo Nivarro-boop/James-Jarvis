@@ -192,6 +192,19 @@ export function issuedClientId(requested: string, issued: string | null): string
   return requested
 }
 interface Callback { code: string; issuedClientId: string | null; redirectUri: string }
+interface PendingBrowser { url: string; expiresAt: number; browserError?: string }
+let pendingBrowser: PendingBrowser | null = null
+let submitCallback: ((value: string) => void) | null = null
+
+/** No ID-token hints or credentials cross into the remote sign-in controls. */
+export function chatGptPendingSignIn(): PendingBrowser | null {
+  return pendingBrowser ? { ...pendingBrowser } : null
+}
+export function submitChatGptCallback(value: unknown): void {
+  if (typeof value !== 'string' || value.length > 12000) throw new Error('Bitte die vollständige Rückleitungsadresse einfügen.')
+  if (!submitCallback) throw new Error('Keine Anmeldung offen. Bitte zuerst Continue with ChatGPT wählen.')
+  submitCallback(value.trim())
+}
 function awaitCallback(authUrl: (redirectUri: string) => URL, state: string, signal: AbortSignal): Promise<Callback> {
   return new Promise((resolve, reject) => {
     let settled = false
@@ -201,24 +214,41 @@ function awaitCallback(authUrl: (redirectUri: string) => URL, state: string, sig
       settled = true
       clearTimeout(timeout)
       signal.removeEventListener('abort', abort)
+      if (submitCallback === manual) { submitCallback = null; pendingBrowser = null }
       server.close()
       server.closeIdleConnections()
       fn()
     }
-    const abort = (): void => done(() => reject(new Error('Die ChatGPT-Anmeldung wurde abgebrochen.')))
-    const server = createServer((req, res) => {
-      const url = new URL(req.url ?? '/', 'http://127.0.0.1')
-      if (req.method !== 'GET' || url.pathname !== '/auth/callback') { res.writeHead(404).end(); return }
-      if (url.searchParams.get('state') !== state) { res.writeHead(400).end('Ungültige Anmeldung.'); return }
+    const accept = (url: URL): void => {
+      if (settled) throw new Error('Diese Anmeldung ist bereits abgeschlossen.')
+      const expected = new URL(redirectUri)
+      if (url.origin !== expected.origin || url.pathname !== expected.pathname || url.username || url.password || url.hash || url.searchParams.get('state') !== state) {
+        throw new Error('Die Rückleitung gehört nicht zu dieser Anmeldung. Kopiere die vollständige Adresse aus dem Anmeldebrowser.')
+      }
       const error = url.searchParams.get('error')
       const code = url.searchParams.get('code')
-      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
-        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'" })
-      res.end('<!doctype html><meta charset="utf-8"><title>James-Jarvis</title><p>Zurück zu James wechseln. Dort wird die Anmeldung geprüft.</p>')
-      if (error || !code) done(() => reject(new Error(error === 'access_denied'
+      if (!code && !error) throw new Error('In der Adresse fehlt der Anmeldecode.')
+      if (error) done(() => reject(new Error(error === 'access_denied'
         ? 'Die Nutzung deines ChatGPT-Plans wurde nicht erlaubt. Du kannst sie später erneut verbinden.'
-        : 'Die ChatGPT-Anmeldung wurde abgebrochen oder ist fehlgeschlagen.')))
-      else done(() => resolve({ code, issuedClientId: url.searchParams.get('client_id'), redirectUri }))
+        : 'Die ChatGPT-Anmeldung wurde vom Anmeldedienst abgebrochen. Bitte erneut versuchen.')))
+      else done(() => resolve({ code: code!, issuedClientId: url.searchParams.get('client_id'), redirectUri }))
+    }
+    const manual = (value: string): void => {
+      let url: URL
+      try { url = new URL(value) } catch { throw new Error('Bitte die vollständige http://127.0.0.1:…/auth/callback-Adresse einfügen.') }
+      accept(url)
+    }
+    const abort = (): void => done(() => reject(new Error('Die ChatGPT-Anmeldung wurde abgebrochen.')))
+    const server = createServer((req, res) => {
+      const url = new URL(req.url ?? '/', redirectUri || 'http://127.0.0.1')
+      if (req.method !== 'GET' || url.pathname !== '/auth/callback') { res.writeHead(404).end(); return }
+      if (url.searchParams.get('state') !== state) { res.writeHead(400).end('Ungültige Anmeldung.'); return }
+      try {
+        accept(url)
+        res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
+          'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'" })
+        res.end('<!doctype html><meta charset="utf-8"><title>James-Jarvis</title><p>Zurück zu James wechseln. Dort wird die Anmeldung geprüft.</p>')
+      } catch { res.writeHead(400).end('Ungültige Rückleitung. Bitte erneut kopieren.') }
     })
     const timeout = setTimeout(() => done(() => reject(new Error('Die ChatGPT-Anmeldung hat zu lange gedauert.'))), 5 * 60_000)
     signal.addEventListener('abort', abort, { once: true })
@@ -229,9 +259,16 @@ function awaitCallback(authUrl: (redirectUri: string) => URL, state: string, sig
       const address = server.address()
       if (!address || typeof address !== 'object') { abort(); return }
       redirectUri = `http://127.0.0.1:${address.port}/auth/callback`
-      // Never log this URL: returning sign-in includes an ID-token hint.
-      Promise.resolve().then(() => shell.openExternal(authUrl(redirectUri).toString()))
-        .catch(() => done(() => reject(new Error('Der Anmeldebrowser konnte nicht geöffnet werden.'))))
+      const url = authUrl(redirectUri)
+      const portable = new URL(url)
+      portable.searchParams.delete('id_token_hint')
+      pendingBrowser = { url: portable.toString(), expiresAt: Date.now() + 5 * 60_000 }
+      submitCallback = manual
+      // Browser forwarding during Remote Play may target another machine.
+      // Keep the validated manual callback available even if opening fails.
+      Promise.resolve().then(() => shell.openExternal(url.toString())).catch(() => {
+        if (!settled && pendingBrowser) pendingBrowser.browserError = 'Browser konnte nicht geöffnet werden. Anmeldelink kopieren und selbst öffnen.'
+      })
     })
   })
 }

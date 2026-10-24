@@ -1,4 +1,27 @@
-# James auf dem iPhone
+# James auf dem iPhone und der Apple Watch
+
+Neue Watch-App unter `targets/watch/`: SwiftUI, Orb, Diktat-/Texteingabe,
+Verlauf, Pause, Ton und Rechner-Wecken. Das lokale Modul verbindet die Watch
+über das iPhone mit dem Rechner; der Zugang bleibt im iPhone-Keychain.
+Die native Erweiterung wurde unter Windows **nicht kompiliert oder am Gerät
+geprüft**. Der JS-Export ersetzt diesen Test nicht.
+
+Für den Apple-Build:
+
+1. Apple-Team-ID in `expo.ios.appleTeamId` in `app.json` setzen.
+2. Mit `npx eas-cli@latest init` das eigene Expo-Projekt verknüpfen.
+3. `npx eas-cli@latest build --platform ios --profile development` ausführen.
+4. Neue iPhone-Fassung installieren, HTTPS-Kopplungs-QR-Code am Rechner scannen
+   und die James-Watch-App installieren. Auf der Watch den Lautsprecher
+   einschalten und über die Systemtastatur diktieren.
+
+Die Watch benötigt das gekoppelte iPhone. Sie versendet bei fehlender Verbindung
+keine veralteten Befehle automatisch. Rechner und iPhone müssen sich erreichen;
+das lokale Zertifikat muss auf dem iPhone vertraut sein. Hintergrundlaufzeit
+und Audioausgabe werden von iOS/watchOS begrenzt.
+
+Prüfen: `npm run lint`, `npm run typecheck`, `npm test`, `npx expo-doctor`.
+[Gesamter Prüfbericht](../docs/Orb-Watch-Remote-Update-1.3.11.md).
 
 Native Hülle um die Fernbedienungsseite unter `../resources/companion/`.
 Der Rechner bleibt der Agent; das iPhone ist Mikrofon, Lautsprecher und

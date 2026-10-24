@@ -32,6 +32,7 @@ const ui = {
   host: document.getElementById('host'),
   token: document.getElementById('token'),
   pair: document.getElementById('pair'),
+  pairBack: document.getElementById('pair-back'),
   pairError: document.getElementById('pair-error'),
   dot: document.getElementById('dot'),
   status: document.getElementById('status'),
@@ -42,7 +43,12 @@ const ui = {
   sayForm: document.getElementById('say-form'),
   wake: document.getElementById('wake'),
   pause: document.getElementById('pause'),
-  settings: document.getElementById('settings')
+  settings: document.getElementById('settings'),
+  audioStatus: document.getElementById('audio-status'),
+  audioTest: document.getElementById('audio-test'),
+  messages: document.getElementById('messages'),
+  clearChat: document.getElementById('clear-chat'),
+  reconnect: document.getElementById('reconnect')
 }
 
 let config = loadConfig()
@@ -51,6 +57,9 @@ let reconnectTimer = null
 let reconnectDelay = 1000
 let wakeTarget = null
 let paused = false
+let hostReady = true
+let pendingText = null
+let textTimer = null
 let heartbeatTimer = null
 /** Wann zuletzt irgendetwas vom Rechner kam — Antwort, Zustand oder Ton. */
 let lastHeard = Date.now()
@@ -68,13 +77,14 @@ function loadConfig() {
     const token = params.get('token')
     if (host && token) {
       const fresh = { host, token }
-      localStorage.setItem(STORE_KEY, JSON.stringify(fresh))
+      try { localStorage.setItem(STORE_KEY, JSON.stringify(fresh)) } catch { /* Private Browser: Sitzung bleibt nutzbar. */ }
       history.replaceState(null, '', location.pathname)
       return fresh
     }
   }
   try {
-    return JSON.parse(localStorage.getItem(STORE_KEY) || 'null')
+    const saved = JSON.parse(localStorage.getItem(STORE_KEY) || 'null')
+    return saved && typeof saved.host === 'string' && typeof saved.token === 'string' ? saved : null
   } catch {
     return null
   }
@@ -82,7 +92,7 @@ function loadConfig() {
 
 function saveConfig(next) {
   config = next
-  localStorage.setItem(STORE_KEY, JSON.stringify(next))
+  try { localStorage.setItem(STORE_KEY, JSON.stringify(next)) } catch { /* Nur für diese Sitzung merken. */ }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -102,8 +112,9 @@ const playback = {
   context: null,
   nextTime: 0,
   sources: new Set(),
-  /** Einmal gemeckert reicht — sonst überschreibt der Hinweis jede Notiz. */
-  complained: false,
+  pending: [],
+  pendingSamples: 0,
+  resuming: null,
 
   async ensure() {
     if (this.context) {
@@ -112,7 +123,8 @@ const playback = {
     }
     // iOS gibt die gewünschte Rate nicht immer — deshalb wird unten
     // umgerechnet, statt sich darauf zu verlassen.
-    this.context = new AudioContext({ sampleRate: VOICE_RATE, latencyHint: 'interactive' })
+    setAudioMode('playback')
+    this.context = new AudioContext({ latencyHint: 'interactive' })
     /**
      * Safari kennt einen dritten Zustand: `interrupted`. Ein Anruf, ein Wecker,
      * eine andere App, die den Ton an sich reißt — danach steht der Kontext still
@@ -120,7 +132,8 @@ const playback = {
      * auch beantwortet, statt darauf zu warten, dass jemand auf den Schirm tippt.
      */
     this.context.addEventListener('statechange', () => {
-      if (this.context && this.context.state !== 'running') void this.wake()
+      this.updateStatus()
+      if (this.context?.state === 'running') this.drain()
     })
     await this.wake()
   },
@@ -128,40 +141,43 @@ const playback = {
   /**
    * Zurückholen, was der Browser schlafen gelegt hat.
    *
-   * Der Zeitplan wird dabei verworfen. `nextTime` ist ein Zeitpunkt auf der Uhr
-   * des Kontexts, und die steht still, solange er ruht: Nach einer Minute im
-   * Hintergrund liegt der gemerkte Zeitpunkt weit vor der Uhr, und alles, was
-   * dann geplant wird, liefe auf einen Schlag los.
+   * Während der Unterbrechung eingehende Blöcke werden begrenzt aufgehoben.
+   * Beim Seitenwechsel wird die alte Antwort dagegen vollständig verworfen.
    */
   async wake() {
-    if (!this.context || this.context.state === 'running') return
-    try {
-      await this.context.resume()
-      this.nextTime = 0
-      // Der Hinweis darf wieder erscheinen, falls es später erneut klemmt.
-      this.complained = false
-    } catch {
-      // Ohne Geste des Nutzers geht es nicht. Der nächste Tipp holt es nach.
+    if (!this.context) return
+    if (this.context.state !== 'running') {
+      if (!this.resuming) {
+        this.resuming = this.context.resume().catch(() => {}).finally(() => { this.resuming = null })
+      }
+      await this.resuming
     }
+    this.updateStatus()
+    if (this.context.state === 'running') this.drain()
+  },
+
+  updateStatus() {
+    const running = this.context?.state === 'running'
+    ui.audioStatus.textContent = running ? 'Ausgabe bereit · Lautstärke am iPhone regeln' : 'Ton gesperrt oder unterbrochen · Ton prüfen antippen'
+    ui.audioTest.textContent = running ? 'Ton prüfen' : 'Ton aktivieren'
+  },
+
+  drain() {
+    const queued = this.pending
+    this.pending = []
+    this.pendingSamples = 0
+    for (const pcm of queued) this.push(pcm)
   },
 
   push(pcm) {
-    if (!this.context) {
-      // Der Ton war nie freigegeben: Wer die App vom Startbildschirm öffnet,
-      // hat nichts angetippt, und ohne Antippen gibt iOS keinen Lautsprecher
-      // heraus. Ohne diesen Hinweis wirkt das wie eine kaputte Verbindung —
-      // der Kristall bewegt sich, es kommt nur nichts.
-      if (!this.complained) {
-        this.complained = true
-        ui.note.textContent = 'Tipp einmal auf den Schirm, dann darf ich sprechen.'
-      }
-      return
-    }
-    if (this.context.state !== 'running') {
-      // Schlafend oder unterbrochen. Aufwecken und diesen Block fallen lassen:
-      // Ihn zu planen hieße, ihn auf einen Zeitpunkt zu legen, den die stehende
-      // Uhr nie erreicht.
-      void this.wake()
+    if (!pcm.length) return
+    if (!this.context || this.context.state !== 'running') {
+      // Höchstens acht Sekunden halten, damit die erste Antwort nicht verloren geht.
+      this.pending.push(pcm)
+      this.pendingSamples += pcm.length
+      while (this.pendingSamples > VOICE_RATE * 8) this.pendingSamples -= this.pending.shift().length
+      this.updateStatus()
+      if (this.context) void this.wake()
       return
     }
     const rate = this.context.sampleRate
@@ -205,6 +221,8 @@ const playback = {
       }
     }
     this.sources.clear()
+    this.pending = []
+    this.pendingSamples = 0
     this.nextTime = 0
   }
 }
@@ -253,6 +271,7 @@ const mic = {
             'über die Tailscale-Adresse — sie steht am Rechner unter Einstellungen, Telefon.'
       )
     }
+    setAudioMode('play-and-record')
     this.stream = await navigator.mediaDevices.getUserMedia({
       audio: {
         echoCancellation: true,
@@ -324,6 +343,8 @@ const mic = {
     this.node = null
     this.stream = null
     this.context = null
+    setAudioMode('playback')
+    void playback.wake()
   }
 }
 
@@ -344,6 +365,8 @@ function discard() {
   const dying = socket
   socket = null
   stopHeartbeat()
+  endTalk()
+  playback.flush()
   if (!dying) return
   try {
     dying.close()
@@ -426,7 +449,8 @@ function connect() {
       showPairing('Der Rechner hat die Marke abgelehnt. Hol dir eine neue.')
       return
     }
-    setStatus('getrennt', 'offline')
+    playback.flush()
+    setStatus('getrennt · erneuter Versuch läuft', 'offline')
     scheduleReconnect()
   }
 
@@ -518,12 +542,32 @@ function handleMessage(msg) {
   // schon vermerkt, und genau darin liegt sein ganzer Zweck.
   if (msg.t === 'pong') return
 
+  if (msg.t === 'text-result' && pendingText?.requestId === msg.requestId) {
+    const submitted = pendingText.text
+    clearTimeout(textTimer)
+    pendingText = null
+    ui.sayForm.querySelector('button').disabled = !hostReady || Boolean(pendingText)
+    if (msg.ok) {
+      if (ui.say.value.trim() === submitted) { ui.say.value = ''; storeDraft() }
+      ui.note.textContent = ''
+    } else { ui.note.textContent = 'James konnte deine Nachricht nicht übernehmen. Sie bleibt zum erneuten Senden erhalten.' }
+    return
+  }
+  if (msg.t === 'availability') {
+    hostReady = msg.ready === true
+    ui.talk.disabled = !hostReady
+    ui.sayForm.querySelector('button').disabled = !hostReady || Boolean(pendingText)
+    ui.note.textContent = hostReady ? '' : 'James ist am Rechner nicht bereit. Öffne dort das James-Fenster.'
+    return
+  }
   if (msg.t === 'state') {
     paused = msg.paused
-    ui.pause.textContent = paused ? 'Aufwecken' : 'Stilllegen'
+    ui.pause.textContent = paused ? 'Fortsetzen' : 'Pausieren'
     setStatus(labelFor(msg.state, msg.paused), msg.paused ? 'paused' : msg.state)
     // Neue Runde: Was noch in der Warteschlange lag, gehört zur alten Antwort.
     if (msg.state === 'listening') playback.flush()
+  } else if (msg.t === 'captions' && Array.isArray(msg.items)) {
+    renderCaptions(msg.items)
   } else if (msg.t === 'wake') {
     wakeTarget = msg
     // Die App merkt sich das Ziel selbst: Schläft der Rechner, lädt diese
@@ -539,7 +583,19 @@ function handleMessage(msg) {
 }
 
 function send(msg) {
-  if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(msg))
+  if (!hostReady && !['ping', 'hello'].includes(msg.t)) {
+    ui.note.textContent = 'Öffne das James-Fenster am Rechner. Deine Eingabe bleibt erhalten.'
+    return false
+  }
+  if (socket?.readyState !== WebSocket.OPEN) {
+    ui.note.textContent = 'Keine Verbindung. Deine Nachricht bleibt im Eingabefeld.'
+    ensureConnected()
+    return false
+  }
+  try { socket.send(JSON.stringify(msg)); return true } catch {
+    ui.note.textContent = 'Senden fehlgeschlagen. Bitte erneut versuchen.'
+    return false
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -591,7 +647,10 @@ function labelFor(state, isPaused) {
       speaking: 'spricht',
       tool: 'arbeitet',
       research: 'recherchiert',
-      offline: 'offline'
+      offline: 'offline',
+      confirm: 'wartet auf deine Antwort',
+      error: 'Fehler · Hinweis beachten',
+      paused: 'pausiert'
     }[state] ?? state
   )
 }
@@ -603,6 +662,9 @@ function setStatus(text, state) {
 }
 
 function showPairing(message) {
+  endTalk()
+  ui.pairBack.hidden = !config
+  ui.pairError.hidden = !message
   ui.main.hidden = true
   ui.pairing.hidden = false
   if (message) {
@@ -629,7 +691,17 @@ function deviceName() {
 // ─────────────────────────────────────────────────────────────
 
 ui.pair.addEventListener('click', async () => {
-  const host = ui.host.value.trim().replace(/^https?:\/\//, '').replace(/\/$/, '')
+  let host
+  try {
+    const entered = ui.host.value.trim()
+    const address = new URL(entered.includes('://') ? entered : `${location.protocol}//${entered}`)
+    if (!['https:', 'http:'].includes(address.protocol) || address.pathname !== '/' || address.search || address.hash || address.username || address.password) throw new Error('Adresse')
+    host = address.host
+  } catch {
+    ui.pairError.textContent = 'Bitte nur die Rechneradresse mit Port eingeben, zum Beispiel 192.168.1.20:8788.'
+    ui.pairError.hidden = false
+    return
+  }
   const token = ui.token.value.trim()
   if (!host || !token) {
     ui.pairError.textContent = 'Beides wird gebraucht.'
@@ -640,7 +712,7 @@ ui.pair.addEventListener('click', async () => {
   ui.pairError.hidden = true
   // Der Knopfdruck ist die Geste, die iOS für den Ton verlangt — hier und
   // nirgendwo sonst lässt sich der Kontext aufmachen.
-  await playback.ensure()
+  void playback.ensure().catch(showAudioError)
   showMain()
   connect()
 })
@@ -653,39 +725,98 @@ ui.pair.addEventListener('click', async () => {
  * `setPointerCapture` sorgt dafür, dass das Loslassen auch dann ankommt, wenn
  * der Finger dabei von der Taste gerutscht ist — sonst bliebe das Mikrofon an.
  */
-ui.talk.addEventListener('pointerdown', async (event) => {
-  ui.talk.setPointerCapture(event.pointerId)
-  ui.talk.classList.add('active')
-  await playback.ensure()
-  try {
-    await mic.start()
-    send({ t: 'mic', on: true })
-  } catch (err) {
-    ui.note.textContent = `Kein Zugriff aufs Mikrofon: ${err}`
-    ui.talk.classList.remove('active')
-  }
-})
+let talkHeld = false
+let talkStarting = false
+let talkGeneration = 0
 
-const endTalk = () => {
-  if (!ui.talk.classList.contains('active')) return
+async function beginTalk() {
+  if (talkHeld || talkStarting) return
+  if (socket?.readyState !== WebSocket.OPEN) { send({ t: 'ping' }); return }
+  const generation = ++talkGeneration
+  talkHeld = true
+  talkStarting = true
+  ui.talk.classList.add('active')
+  ui.talk.setAttribute('aria-pressed', 'true')
+  void playback.ensure().catch(showAudioError)
+  playback.flush()
+  try {
+    await mic.ensure()
+    // Eine Freigabe kann erst nach dem Loslassen oder Seitenwechsel eintreffen.
+    if (!talkHeld || generation !== talkGeneration) return
+    if (!send({ t: 'mic', on: true })) return
+    mic.active = true
+    mic.node.port.postMessage({ type: 'enable', value: true })
+  } catch (err) {
+    ui.note.textContent = `Kein Zugriff aufs Mikrofon: ${err.message || err}`
+    talkHeld = false
+  } finally {
+    if (!talkHeld || generation !== talkGeneration || !mic.active) {
+      talkHeld = false
+      ui.talk.classList.remove('active')
+      ui.talk.setAttribute('aria-pressed', 'false')
+      await mic.teardown()
+    }
+    talkStarting = false
+  }
+}
+
+function endTalk() {
+  if (!talkHeld) return
+  talkHeld = false
+  talkGeneration++
   ui.talk.classList.remove('active')
+  ui.talk.setAttribute('aria-pressed', 'false')
   mic.stop()
   send({ t: 'mic', on: false })
+  // Während der Freigabe räumt beginTalk auf. Sonst sofort die Spur freigeben.
+  if (!talkStarting) {
+    talkStarting = true
+    void mic.teardown().finally(() => { talkStarting = false })
+  }
 }
+ui.talk.addEventListener('pointerdown', (event) => {
+  if (event.button !== 0) return
+  ui.talk.setPointerCapture(event.pointerId)
+  void beginTalk()
+})
 ui.talk.addEventListener('pointerup', endTalk)
 ui.talk.addEventListener('pointercancel', endTalk)
+ui.talk.addEventListener('lostpointercapture', endTalk)
+ui.talk.addEventListener('keydown', (event) => {
+  if ((event.key === ' ' || event.key === 'Enter') && !event.repeat) { event.preventDefault(); void beginTalk() }
+})
+ui.talk.addEventListener('keyup', (event) => {
+  if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); endTalk() }
+})
+ui.talk.addEventListener('blur', endTalk)
+window.addEventListener('blur', endTalk)
 
-ui.crystal.addEventListener('click', () => send({ t: 'press' }))
+ui.crystal.addEventListener('click', () => { playback.flush(); send({ t: 'press' }) })
+ui.crystal.addEventListener('keydown', (event) => {
+  if (event.key === ' ' || event.key === 'Enter') { event.preventDefault(); ui.crystal.click() }
+})
 ui.pause.addEventListener('click', () => send({ t: 'pause', paused: !paused }))
 ui.wake.addEventListener('click', wakeComputer)
 ui.settings.addEventListener('click', () => showPairing(''))
+ui.pairBack.addEventListener('click', showMain)
 
 ui.sayForm.addEventListener('submit', (event) => {
   event.preventDefault()
   const text = ui.say.value.trim()
-  if (!text) return
-  send({ t: 'text', text })
-  ui.say.value = ''
+  if (!text || pendingText) return
+  void playback.ensure().catch(showAudioError)
+  const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`
+  if (send({ t: 'text', text, requestId })) {
+    pendingText = { requestId, text }
+    ui.sayForm.querySelector('button').disabled = true
+    ui.note.textContent = 'Nachricht wird an James übergeben …'
+    textTimer = setTimeout(() => {
+      if (pendingText?.requestId !== requestId) return
+      pendingText = null
+      ui.sayForm.querySelector('button').disabled = !hostReady
+      ui.note.textContent = 'Keine Sendebestätigung erhalten. Deine Nachricht bleibt erhalten; prüfe vor erneutem Senden den Verlauf.'
+    }, 30000)
+  }
 })
 
 /**
@@ -698,7 +829,7 @@ ui.sayForm.addEventListener('submit', (event) => {
  * In der Erfassungsphase, damit es auch dann greift, wenn ein anderer Handler
  * das Ereignis für sich behält.
  */
-document.addEventListener('pointerdown', () => void playback.ensure(), { capture: true })
+document.addEventListener('click', () => void playback.ensure().catch(showAudioError), { capture: true })
 
 // Zurück aus dem Hintergrund, aus dem Funkloch, aus dem Netzwechsel.
 document.addEventListener('visibilitychange', () => {
@@ -709,10 +840,73 @@ document.addEventListener('visibilitychange', () => {
   // Wer die App weglegt, während er spricht, soll nicht weitersenden. Ohne das
   // bliebe das Mikrofon offen, bis die Verbindung von selbst zusammenbricht.
   endTalk()
+  playback.flush()
 })
+window.addEventListener('pagehide', () => { endTalk(); playback.flush() })
 window.addEventListener('pageshow', ensureConnected)
 window.addEventListener('focus', ensureConnected)
 window.addEventListener('online', ensureConnected)
+
+function setAudioMode(type) {
+  try { if (navigator.audioSession) navigator.audioSession.type = type } catch { /* Optional auf älteren iPhones. */ }
+}
+function showAudioError(err) {
+  ui.audioStatus.textContent = `Audio nicht verfügbar: ${err.message || err}`
+}
+ui.audioTest.addEventListener('click', async () => {
+  try {
+    setAudioMode(mic.active ? 'play-and-record' : 'playback')
+    await playback.ensure()
+    if (playback.context.state !== 'running') return
+    const ctx = playback.context
+    const oscillator = ctx.createOscillator()
+    const gain = ctx.createGain()
+    oscillator.frequency.value = 660
+    gain.gain.setValueAtTime(0, ctx.currentTime)
+    gain.gain.linearRampToValueAtTime(.15, ctx.currentTime + .03)
+    gain.gain.exponentialRampToValueAtTime(.001, ctx.currentTime + .4)
+    oscillator.connect(gain).connect(ctx.destination)
+    oscillator.start()
+    oscillator.stop(ctx.currentTime + .45)
+    oscillator.onended = () => { oscillator.disconnect(); gain.disconnect() }
+    ui.note.textContent = 'Testton abgespielt. Falls du nichts hörst: Medienlautstärke erhöhen und Bluetooth-Ausgabe prüfen.'
+  } catch (err) { showAudioError(err) }
+})
+ui.reconnect.addEventListener('click', reconnectNow)
+function appendMessage(who, text) {
+  ui.messages.querySelector('.empty-chat')?.remove()
+  const row = document.createElement('article')
+  row.className = 'message'
+  row.dataset.who = who
+  const label = document.createElement('strong')
+  label.textContent = who === 'user' ? 'DU' : 'JAMES'
+  const content = document.createElement('p')
+  content.textContent = text
+  row.append(label, content)
+  ui.messages.append(row)
+  ui.main.classList.add('has-messages')
+  while (ui.messages.children.length > 30) ui.messages.firstElementChild.remove()
+  ui.messages.scrollTop = ui.messages.scrollHeight
+}
+let hiddenCaptionId = -1
+let latestCaptionId = -1
+function renderCaptions(items) {
+  const nearBottom = ui.messages.scrollHeight - ui.messages.scrollTop - ui.messages.clientHeight < 60
+  const oldScroll = ui.messages.scrollTop
+  ui.messages.replaceChildren()
+  for (const item of items.slice(-30)) {
+    if (typeof item.id !== 'number' || typeof item.text !== 'string' || !['user', 'james'].includes(item.who)) continue
+    latestCaptionId = Math.max(latestCaptionId, item.id)
+    if (item.id > hiddenCaptionId) appendMessage(item.who, item.text)
+  }
+  if (!nearBottom) ui.messages.scrollTop = oldScroll
+}
+ui.clearChat.addEventListener('click', () => { hiddenCaptionId = latestCaptionId; ui.messages.replaceChildren(); ui.main.classList.remove('has-messages') })
+function storeDraft() {
+  try { localStorage.setItem('jarvis.companion.draft', ui.say.value) } catch { /* Sitzung bleibt nutzbar. */ }
+}
+try { ui.say.value = localStorage.getItem('jarvis.companion.draft') || '' } catch { /* Kein Speicher. */ }
+ui.say.addEventListener('input', storeDraft)
 
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('sw.js').catch(() => {
