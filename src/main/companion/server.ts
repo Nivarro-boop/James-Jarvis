@@ -21,6 +21,8 @@ import {
 import { resourceFile } from '../resources'
 import { accept, guardSocket, type WsSocket } from './websocket'
 import { localWakeTarget } from './wol'
+import { parseHealthSnapshot } from '@shared/health'
+import { saveHealth } from '../health/store'
 
 /**
  * Der Server, an dem das Telefon hängt.
@@ -512,6 +514,14 @@ function attachPhone(ws: WsSocket): void {
     // Kristall für ein abgerissenes Netz und verbände sich im Kreis neu.
     if (msg.t === 'ping') {
       send(ws, { t: 'pong' })
+      return
+    }
+    // Wie der Ping: hat mit dem Kristallfenster nichts zu tun.
+    if (msg.t === 'health') {
+      const snapshot = parseHealthSnapshot(msg.data)
+      // Still bei Erfolg: Die Notizzeile der Seite trägt wichtigere Hinweise.
+      if (snapshot) saveHealth(snapshot)
+      else send(ws, { t: 'note', text: 'Apple-Health-Werte waren unvollständig und wurden nicht übernommen.' })
       return
     }
     if (!host) {

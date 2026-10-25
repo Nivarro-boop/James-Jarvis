@@ -15,6 +15,15 @@ public final class JarvisWakeModule: Module {
     AsyncFunction("configureWatch") { (link: String?) in try WatchRelay.shared.configure(link) }
     Function("watchStatus") { WatchRelay.shared.status() }
 
+    // Apple Health, nur lesen. Siehe HealthReader.swift.
+    Function("healthAvailable") { HealthReader.shared.available }
+    AsyncFunction("requestHealth") { () async throws -> Bool in
+      try await HealthReader.shared.requestAccess()
+    }
+    AsyncFunction("healthSummary") { (days: Int) async throws -> [String: Any] in
+      try await HealthReader.shared.summary(days: days)
+    }
+
     AsyncFunction("wake") { (mac: String, broadcast: String, address: String) in
       let packet = try magicPacket(mac: mac)
       var failures: [String] = []

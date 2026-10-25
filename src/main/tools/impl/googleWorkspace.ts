@@ -13,7 +13,7 @@ const MAX_DOWNLOAD = 5 * 1024 * 1024
 
 async function withGoogle<T>(fn: (google: any, auth: any) => Promise<T>): Promise<T> {
   if (hasGoogleAuth() && !hasWorkspaceAuth()) {
-    throw new Error('Die Google-Anmeldung deckt Drive, Docs, Tabellen und Aufgaben noch nicht ab. Einstellungen → Verbindungen → „Mit Google verbinden“ einmal neu drücken.')
+    throw new Error('Die Google-Anmeldung deckt Drive, Docs, Tabellen und Aufgaben noch nicht ab. Sag dem Nutzer: Einstellungen → Konten → „Neu anmelden“ drücken und bei Google alle Häkchen stehen lassen.')
   }
   const { google } = await import('googleapis')
   const auth = await googleClient(false)

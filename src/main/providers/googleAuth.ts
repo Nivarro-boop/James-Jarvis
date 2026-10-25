@@ -62,6 +62,8 @@ interface StoredTokens {
   expiry_date?: number | null
   scope?: string
   token_type?: string | null
+  /** Nur zum Anzeigen „Angemeldet als …" — nicht von Google, sondern von uns nach dem Verbinden gemerkt. */
+  account_email?: string
 }
 
 function tokenPath(): string {
@@ -129,6 +131,11 @@ export function hasGoogleAuth(): boolean {
 export function hasCalendarAuth(): boolean {
   const granted = loadTokens()?.scope?.split(/\s+/) ?? []
   return CALENDAR_SCOPES.every((needed) => granted.includes(needed))
+}
+
+/** Mit welchem Konto James verbunden ist, sofern beim Verbinden gemerkt. */
+export function googleAccountEmail(): string | undefined {
+  return hasGoogleAuth() ? loadTokens()?.account_email : undefined
 }
 
 /** Ob die Anmeldung Drive, Docs, Tabellen, Aufgaben und Kontakte abdeckt. */
@@ -299,9 +306,10 @@ const FAULTS: Record<GoogleFaultCode, { agent: string; user: string }> = {
   },
   'nicht-verbunden': {
     agent:
-      'Das Google-Konto ist noch nicht verbunden. Sag dem Nutzer, er soll in den Einstellungen auf ' +
-      '"Mit Google verbinden" klicken.',
-    user: 'Das Google-Konto ist noch nicht verbunden.'
+      'Das Google-Konto ist noch nicht angemeldet. Mails gehen trotzdem über die mail_*-Werkzeuge im ' +
+      'Browser. Für Kalender, Drive und Aufgaben: Sag dem Nutzer, er soll unter Einstellungen → Konten ' +
+      'auf „Mit Google anmelden" drücken — ein Klick, die Anmeldung läuft im Browser.',
+    user: 'Das Google-Konto ist noch nicht angemeldet.'
   },
   'kein-dauerrecht': {
     agent:
@@ -464,7 +472,10 @@ export async function connectGoogle(): Promise<{ ok: boolean; email?: string; er
     const { google } = await import('googleapis')
     const gmail = google.gmail({ version: 'v1', auth: client })
     const profile = await gmail.users.getProfile({ userId: 'me' })
-    return { ok: true, email: profile.data.emailAddress ?? undefined }
+    const email = profile.data.emailAddress ?? undefined
+    const stored = loadTokens()
+    if (email && stored) saveTokens({ ...stored, account_email: email })
+    return { ok: true, email }
   } catch (err) {
     cachedClient = null
     return { ok: false, error: googleErrorForUser(err) }

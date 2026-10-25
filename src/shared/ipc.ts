@@ -22,7 +22,7 @@ import type { BrainGraph, Widget } from './brain'
 import type { SipStatus } from './types'
 import type { ChatGptItem, ChatGptModel, ChatGptResponse, ChatGptStatus } from './chatgpt'
 import type { StudyStats } from './study'
-import type { CompanionSetup, CompanionStatus, WakeReadiness } from './companion'
+import type { CompanionSetup, CompanionStatus, JamesWebAppInfo, WakeReadiness } from './companion'
 import type {
   AlexaStatus,
   AuditEntry,
@@ -344,6 +344,8 @@ export interface IpcInvokeMap {
    * aber nicht, was zu tun ist.
    */
   'companion:setup': { req: void; res: CompanionSetup }
+  /** Adresse und Fassung der James-App fürs iPhone, live aus GitHub. */
+  'companion:webApp': { req: void; res: JamesWebAppInfo }
   'companion:runSetup': { req: { action: string }; res: CompanionSetup }
   /** Fragt Windows, ob es überhaupt auf ein Zauberpaket hört. */
   'companion:wakeReadiness': { req: void; res: WakeReadiness }
@@ -429,7 +431,10 @@ export interface IpcInvokeMap {
    * Ohne diese Angabe stünde in den Einstellungen „verbunden", während James
    * auf jede Terminfrage mit einer Fehlermeldung antwortet.
    */
-  'google:status': { req: void; res: { connected: boolean; calendar: boolean; workspace: boolean } }
+  'google:status': { req: void; res: { connected: boolean; calendar: boolean; workspace: boolean; email?: string; clientReady: boolean; builtin: boolean } }
+  /** Letzter Apple-Health-Stand vom iPhone; `summary` ist dieselbe Kurzfassung, die James bekommt. */
+  'health:status': { req: void; res: { takenAt: number | null; summary: string | null } }
+  'health:clear': { req: void; res: void }
   /** „Sign in with ChatGPT". `enabled` ist falsch, solange OpenAI James nicht freigegeben hat. */
   'chatgpt:connect': { req: void; res: { ok: boolean; email?: string; error?: string } }
   'chatgpt:pendingSignIn': { req: void; res: { url: string; expiresAt: number; browserError?: string } | null }
@@ -680,6 +685,7 @@ export const IPC_INVOKE_CHANNELS = [
   'companion:rotateToken',
   'companion:hostKey',
   'companion:setup',
+  'companion:webApp',
   'companion:runSetup',
   'companion:wakeReadiness',
   'companion:armWake',
@@ -722,6 +728,8 @@ export const IPC_INVOKE_CHANNELS = [
   'google:connect',
   'google:disconnect',
   'google:status',
+  'health:status',
+  'health:clear',
   'chatgpt:connect',
   'chatgpt:pendingSignIn',
   'chatgpt:submitCallback',

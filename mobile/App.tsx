@@ -4,9 +4,9 @@ import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'
 import { StatusBar } from 'expo-status-bar'
 import { CameraView, useCameraPermissions } from 'expo-camera'
 import { WebView, type WebViewMessageEvent, type WebViewProps } from 'react-native-webview'
-import { canWake, configureWatch, watchStatus, wake, type WakeTarget } from './modules/jarvis-wake'
+import { canWake, configureWatch, healthAvailable, healthSummary, requestHealth, watchStatus, wake, type WakeTarget } from './modules/jarvis-wake'
 import { parsePairing, sameOrigin, type Pairing } from './src/pairing'
-import { asWakeTarget, forget, loadPairing, loadWake, savePairing, saveWake } from './src/storage'
+import { asWakeTarget, forget, loadHealthSharing, loadPairing, loadWake, savePairing, saveHealthSharing, saveWake } from './src/storage'
 
 /**
  * James auf dem iPhone.
@@ -195,6 +195,42 @@ function RemoteScreen({ pairing, onOffline, onUnpair }: { pairing: Pairing; onOf
     return () => subscription.remove()
   }, [])
 
+  // Apple Health: aus, bis der Nutzer es einschaltet. Danach gehen die
+  // Tageswerte bei jedem Öffnen der App an den Rechner.
+  const [health, setHealth] = useState<'off' | 'on' | 'unavailable'>(() => (healthAvailable() ? 'off' : 'unavailable'))
+  useEffect(() => {
+    void loadHealthSharing().then(on => { if (on && healthAvailable()) setHealth('on') }).catch(() => undefined)
+  }, [])
+
+  const pushHealth = useCallback(async () => {
+    const data = await healthSummary().catch(() => null)
+    if (data) web.current?.injectJavaScript(`window.__jarvisHealth && window.__jarvisHealth(${JSON.stringify(data)}); true;`)
+  }, [])
+
+  useEffect(() => {
+    if (health !== 'on') return
+    void pushHealth()
+    const subscription = AppState.addEventListener('change', state => { if (state === 'active') void pushHealth() })
+    return () => subscription.remove()
+  }, [health, pushHealth])
+
+  const toggleHealth = async () => {
+    if (health === 'on') {
+      Alert.alert('Apple Health nicht mehr teilen?', 'Der Rechner behält den letzten Stand, bis du ihn dort löschst.', [
+        { text: 'Abbrechen', style: 'cancel' },
+        { text: 'Nicht mehr teilen', style: 'destructive', onPress: () => { void saveHealthSharing(false).then(() => setHealth('off')) } }
+      ])
+      return
+    }
+    try {
+      if (!(await requestHealth())) return
+      await saveHealthSharing(true)
+      setHealth('on')
+    } catch (err) {
+      Alert.alert('Apple Health', err instanceof Error ? err.message : 'Der Zugriff ging nicht.')
+    }
+  }
+
   const settle = (id: number, error: string | null) => {
     web.current?.injectJavaScript(`window.__jarvisSettle(${id}, ${JSON.stringify(error)}); true;`)
   }
@@ -226,6 +262,11 @@ function RemoteScreen({ pairing, onOffline, onUnpair }: { pairing: Pairing; onOf
     <View style={styles.web}>
       {watch.paired && !watch.installed && <Text style={styles.body}>Watch gekoppelt · James-Watch-App über die Watch-App installieren.</Text>}
       <Pressable accessibilityRole="button" onPress={onUnpair}><Text style={styles.body}>Rechner wechseln · neuen QR-Code scannen</Text></Pressable>
+      {health !== 'unavailable' && (
+        <Pressable accessibilityRole="switch" accessibilityState={{ checked: health === 'on' }} onPress={() => { void toggleHealth() }}>
+          <Text style={styles.body}>{health === 'on' ? 'Apple Health: wird geteilt ✓' : 'Apple Health teilen · antippen'}</Text>
+        </Pressable>
+      )}
       <JamesWebView
         ref={web}
         source={{ uri: pairing.url }}
@@ -239,6 +280,7 @@ function RemoteScreen({ pairing, onOffline, onUnpair }: { pairing: Pairing; onOf
         }}
         injectedJavaScriptBeforeContentLoaded={BRIDGE}
         onMessage={onMessage}
+        onLoadEnd={() => { if (health === 'on') void pushHealth() }}
         onError={({ nativeEvent }) => onOffline(describe(nativeEvent.code, nativeEvent.description))}
         onHttpError={({ nativeEvent }) => onOffline(`Der Rechner antwortet mit Fehler ${nativeEvent.statusCode}.`)}
         onContentProcessDidTerminate={() => web.current?.reload()}

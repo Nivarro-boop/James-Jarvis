@@ -1,3 +1,50 @@
+# Einfacher für alle: Google- und ChatGPT-Login, Apple Health, Essen bestellen (25.10.2026)
+
+- **Google mit einem Klick:** Der Build kann einen eigenen OAuth-Client
+  mitbringen (`JARVIS_GOOGLE_CLIENT_ID/SECRET`, GitHub-Secret oder lokale
+  `.env.google`). Dann reicht „Mit Google anmelden“, ohne Cloud Console.
+  Eigener Client bleibt unter „Für Fortgeschrittene“ möglich und hat Vorrang.
+  Angemeldetes Konto wird angezeigt. Google-Zeile auch auf der Startkarte.
+  Einrichtung und Grenzen (Verifizierung, CASA): [Anleitung](docs/Google-Anmeldung-einrichten.md).
+- **ChatGPT-Login aufgeräumt:** ein Knopf, kurze Erklärung, Modellwahl und
+  Reparatur eingeklappt („Automatisch“ als Standard sichtbar), Remote-Play-
+  Rückweg nur noch auf Wunsch aufgeklappt.
+- **Einstellungen für Laien:** „Konten & Anmelden“ direkt unter Start (vorher
+  drei Ebenen tief), „Telefon & iPhone“ sichtbar. Übersichtskacheln: Anmelden,
+  Mikrofon, iPhone, Stimme. Schlüssel, Fehlerberichte, Telefonie, Website-
+  Konten und Wake-on-LAN eingeklappt.
+- **Apple Health:** Die native iPhone-App (`mobile/`) liest per HealthKit
+  (eigener Swift-Code, nur lesen) Schritte, Strecke, aktive Energie, Training,
+  Stockwerke, Schlaf, Ruhepuls, Puls und Gewicht der letzten 7 Tage und schickt
+  sie über die gekoppelte Verbindung. Der PC prüft jede Zahl
+  (`src/shared/health.ts`), speichert nur den letzten Stand DPAPI-verschlüsselt,
+  Werkzeug `health_today`, Anzeige und Löschen unter Telefon & iPhone. Die
+  Web-App aus jarvis-iphone kann HealthKit nicht lesen.
+- **Essen bestellen:** `food_search` öffnet Lieferando/foodora/Wolt/Uber Eats
+  (Land nach Zeitzone) im James-Browser und gibt die Schritte vor.
+  Abgeschickt wird nur über `order_place`, das **immer** nachfragt (auch im
+  autonomen Profil) und Artikel, Preis, Adresse und Zahlungsart zeigt.
+  `chrome_click`/`chrome_interact` verweigern jetzt generell den letzten
+  Bestellknopf. Zahlungsdaten tippt James nie.
+- **Tokenverbrauch:** System-Prompt umsortiert – gleichbleibende Regeln zuerst,
+  Erinnerungen/PC-Profil/Uhrzeit ans Ende, damit OpenAI/Gemini den Anfang aus
+  dem Zwischenspeicher abrechnen (Idee aus Hermes Agent). Zwischengespeicherte
+  Token werden unter Erlaubnisse & Kosten angezeigt.
+- Prüfung: Typecheck, 2.120 Tests, neun UI-Prüfungen, Mobile tsc/lint.
+  Nicht geprüft: echtes Google-/ChatGPT-Konto, HealthKit auf echtem iPhone
+  (Swift braucht EAS-Build), echte Bestellung bei einem Lieferdienst.
+
+# Kopplungs-Code für die James-App aus GitHub (25.10.2026)
+
+Unter Menü → iPhone & Apple Watch gibt es einen zweiten QR-Code für die
+eigenständige James-App (Repo jarvis-iphone). Adresse und Fassung holt der
+Hauptprozess bei jedem Öffnen aus deren `version.json` auf GitHub Pages
+(`companion:webApp`, `src/main/companion/webapp.ts`); jede neue Fassung
+der App ist dort zugleich ein GitHub-Release. Nur die eigenen Adressen
+(GitHub Pages, Netlify, https) werden angenommen, damit die Marke nie an einen
+fremden Rechner geht. Ohne Netz gilt die eingebaute Adresse.
+Typecheck und 2.111 Tests bestanden; Seite nicht in der laufenden App geprüft.
+
 # GitHub-Update: ruhige Orb-Ansicht (24.10.2026)
 
 Markierte Knöpfe entfernt; Schreiben und Pause im Menü erhalten. Alte

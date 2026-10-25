@@ -52,10 +52,11 @@ import './refinement.css'
  */
 const SECTIONS = [
   { id: 'overview', label: 'Übersicht', group: 'Start' },
+  // Ganz oben, weil ohne Anmeldung kaum etwas geht: ChatGPT und Google, je ein Klick.
+  { id: 'keys', label: 'Konten & Anmelden', group: 'Start' },
   { id: 'voice', label: 'Stimme & Modelle', group: 'Sprechen' },
   { id: 'local', label: 'Lokale KI', group: 'Sprechen', hidden: true },
   { id: 'audio', label: 'Mikrofon & Zuhören', group: 'Sprechen' },
-  { id: 'keys', label: 'Konten & Standort', group: 'Dienste', hidden: true },
   { id: 'connections', label: 'Verbindungen', group: 'Dienste' },
   { id: 'mcp', label: 'Erweiterungen', group: 'Dienste', hidden: true },
   { id: 'memory', label: 'Gedächtnis', group: 'Du & Sicherheit' },
@@ -68,7 +69,7 @@ const SECTIONS = [
   { id: 'ears', label: 'Spracherkennung', group: 'Sprechen', hidden: true },
   { id: 'contacts', label: 'Kontakte', group: 'Dienste', hidden: true },
   { id: 'music', label: 'Musik', group: 'Dienste', hidden: true },
-  { id: 'companion', label: 'Telefon', group: 'Dienste', hidden: true },
+  { id: 'companion', label: 'Telefon & iPhone', group: 'Dienste' },
   { id: 'smarthome', label: 'Smart Home', group: 'Dienste', hidden: true },
   { id: 'alexa', label: 'Alexa', group: 'Dienste', hidden: true },
   { id: 'research', label: 'Recherchen', group: 'Du & Sicherheit', hidden: true },
@@ -84,14 +85,14 @@ const SECTION_KEYWORDS: Record<SectionId, string> = {
   local: 'lokal lokale ki modell modelle offline hugging face qwen mistral llama herunterladen download',
   overview: 'start hilfe einrichtung einrichten überblick',
   features: 'funktionen fähigkeiten aufgaben helfer',
-  keys: 'zugang schlüssel api key standort ort wetter fehler diagnose',
+  keys: 'anmelden login konto chatgpt google gmail kalender drive zugang schlüssel api key standort ort wetter fehler diagnose',
   voice: 'stimme sprechen anbieter modell gemini openai chatgpt elevenlabs hermes',
   audio: 'mikrofon lautsprecher gerät test hören ton ausgabe eingabe',
   listening: 'zuhören stille weckwort hotkey taste sprache sprachsteuerung',
   connections: 'kalender email e-mail mail konto dienste verbinden',
   contacts: 'kontakte person adresse telefonnummer adressbuch',
   music: 'musik spotify youtube wiedergabe',
-  companion: 'telefon mobilgerät handy anrufen companion twilio',
+  companion: 'telefon mobilgerät handy iphone apple watch health gesundheit schritte schlaf anrufen companion twilio',
   smarthome: 'smart home zuhause lampen geräte home assistant',
   alexa: 'alexa amazon echo',
   ears: 'ohren klatschen weckwort erkennung empfindlichkeit',
@@ -343,10 +344,10 @@ function App(): JSX.Element {
           <p className="lede">Du sagst, was du brauchst. James kümmert sich darum. Hier passt du die wichtigsten Dinge an.</p>
           <div className="settings-tiles">
             {([
-              ['voice', '01', 'Stimme & Modelle', 'Stimme wählen, Anbieter oder lokales Modell einrichten.'],
+              ['keys', '01', 'Anmelden', 'ChatGPT und Google verbinden – je ein Klick, kein Schlüssel nötig.'],
               ['audio', '02', 'Mikrofon und Lautsprecher', 'Prüfen, ob James dich hört und du ihn hören kannst.'],
-              ['connections', '03', 'Dienste verbinden', 'Kalender, E-Mail, Musik und weitere Helfer.'],
-              ['local', '04', 'Lokale KI', 'Modell mit einem Klick laden – kostenlos und offline.']
+              ['companion', '03', 'iPhone & Apple Watch', 'QR-Code scannen, mit James unterwegs sprechen, Apple Health teilen.'],
+              ['voice', '04', 'Stimme', 'Wie James klingt und wie er denkt.']
             ] as const).map(([id, number, title, description]) => <button className="settings-tile" key={id} onClick={() => navigate(id)}><span>{number} <i>↗</i></span><strong>{title}</strong><p>{description}</p></button>)}
           </div>
           <div className="settings-help"><strong>Neu hier?</strong><p>Die geführte Einrichtung hilft dir Schritt für Schritt beim Start.</p><button className="primary" onClick={() => setForceSetup(true)}>Einrichtung öffnen</button></div>
@@ -371,7 +372,7 @@ function App(): JSX.Element {
           <nav className="connection-tabs" aria-label="Verbindungsbereiche">{[
             ['accounts', 'Konten'], ['phone', 'iPhone & Watch'], ['music', 'Musik'], ['home', 'Zuhause'], ['contacts', 'Kontakte'], ['extensions', 'Erweiterungen']
           ].map(([id, label]) => <button key={id} aria-pressed={connectionTab === id} onClick={() => setConnectionTab(id)}>{label}</button>)}</nav>
-          {connectionTab === 'accounts' && <><ConnectionsSection /><details className="settings-fold"><summary>KI-Konten und API-Zugänge</summary><KeysSection settings={settings} patch={patch} /></details></>}
+          {connectionTab === 'accounts' && <><KeysSection settings={settings} patch={patch} /><details className="settings-fold"><summary>Technischer Status aller Verbindungen</summary><ConnectionsSection /></details></>}
           {connectionTab === 'phone' && <CompanionSection settings={settings} patch={patch} />}
           {connectionTab === 'music' && <MusicSection settings={settings} patch={patch} />}
           {connectionTab === 'home' && <><SmartHomeSection settings={settings} patch={patch} /><details className="settings-fold"><summary>Amazon Alexa</summary><AlexaSection settings={settings} patch={patch} /></details></>}

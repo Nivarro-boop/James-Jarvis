@@ -99,6 +99,8 @@ const assert = require('node:assert/strict')
     assert.equal(await settings.getByRole('button', { name: /^Hermes$/ }).count(), 0)
     await settings.screenshot({ path: resolve('out/audit/voice-1.2.11.png') })
     await settings.evaluate(() => { window.location.hash = 'keys' })
+    // Fehlerberichte und Schlüssel stehen eingeklappt unter „Für Fortgeschrittene“.
+    await settings.getByText('Für Fortgeschrittene', { exact: false }).click()
     assert.equal(await settings.getByRole('button', { name: 'Statistik senden', exact: true }).isDisabled(), true)
     // Capability-gap reports carry conversation text: separate opt-in, off by default.
     const gaps = settings.getByRole('checkbox', { name: 'Fähigkeitslücken mit Gesprächsausschnitt senden', exact: true })

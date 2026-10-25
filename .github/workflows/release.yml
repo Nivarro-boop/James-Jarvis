@@ -62,4 +62,8 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_NOTES: ${{ github.event.head_commit.message }}
+          # Eingebauter Google-Zugang („Mit Google anmelden" ohne Cloud Console).
+          # Fehlen die Secrets, baut die App ohne ihn.
+          JARVIS_GOOGLE_CLIENT_ID: ${{ secrets.JARVIS_GOOGLE_CLIENT_ID }}
+          JARVIS_GOOGLE_CLIENT_SECRET: ${{ secrets.JARVIS_GOOGLE_CLIENT_SECRET }}
         run: npm run release

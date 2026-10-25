@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto'
 import { join } from 'node:path'
 import type { SecretKey, SecretStatus } from '@shared/types'
 import { websiteLoginUrl, type WebsiteAccountInfo, type WebsiteAccountInput } from '@shared/websiteAccounts'
+import { builtinGoogleClient } from '../providers/googleBuiltin'
 
 /**
  * API-Keys landen nie im Klartext auf der Platte.
@@ -123,9 +124,28 @@ function persist(next: Store): void {
 }
 
 export function getSecret(key: SecretKey): string | null {
+  if (key === 'googleOAuthClientId' || key === 'googleOAuthClientSecret') return googleClientSecret(key)
   // Auch beim Lesen getrimmt: Ältere Einträge stammen aus der Zeit vor dem Trimmen beim Speichern.
   const value = load()[key]?.trim()
   return value ? value : null
+}
+
+/**
+ * Client-ID und Geheimnis gehören zusammen: Hat der Nutzer eine eigene ID
+ * eingetragen, gilt sein Paar ganz; sonst das mitgelieferte. Gemischt gäbe es
+ * nur `invalid_client`.
+ */
+function googleClientSecret(key: 'googleOAuthClientId' | 'googleOAuthClientSecret'): string | null {
+  const store = load()
+  if (store.googleOAuthClientId?.trim()) return store[key]?.trim() || null
+  const builtin = builtinGoogleClient()
+  if (!builtin) return null
+  return key === 'googleOAuthClientId' ? builtin.id : builtin.secret
+}
+
+/** Ob der Nutzer einen eigenen Google-Client eingetragen hat. */
+export function hasOwnGoogleClient(): boolean {
+  return Boolean(load().googleOAuthClientId?.trim())
 }
 
 export function setSecret(key: SecretKey, value: string): void {

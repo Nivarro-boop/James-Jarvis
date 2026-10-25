@@ -15,6 +15,8 @@ export function FirstRun({ ready }: { ready: boolean }): JSX.Element | null {
   const [, tick] = useState(0)
   const [chatgpt, setChatgpt] = useState<'unknown' | 'connected' | 'missing' | 'busy'>('unknown')
   const [whatsapp, setWhatsapp] = useState<'unknown' | 'connected' | 'missing' | 'busy'>('unknown')
+  /** `hidden`: dieser Build hat keinen eingebauten Google-Zugang, dann gehört die Zeile nicht hierher. */
+  const [google, setGoogle] = useState<'unknown' | 'connected' | 'missing' | 'busy' | 'hidden'>('unknown')
   const [error, setError] = useState('')
   const alive = useRef(true)
   const loginRun = useRef(0)
@@ -42,6 +44,9 @@ export function FirstRun({ ready }: { ready: boolean }): JSX.Element | null {
       if (p.done || p.error) load()
     })
     void window.jarvis.invoke('chatgpt:status').then(s => { if (alive) setChatgpt(s.connected ? 'connected' : 'missing') }).catch(() => setChatgpt('missing'))
+    void window.jarvis.invoke('google:status').then(s => {
+      if (alive) setGoogle(s.connected ? 'connected' : s.clientReady ? 'missing' : 'hidden')
+    }).catch(() => setGoogle('hidden'))
     void window.jarvis.invoke('connect:status').then(list => {
       if (alive) setWhatsapp(list.find(c => c.id === 'whatsapp')?.ok ? 'connected' : 'missing')
     }).catch(() => setWhatsapp('missing'))
@@ -86,6 +91,13 @@ export function FirstRun({ ready }: { ready: boolean }): JSX.Element | null {
       setChatgpt(r.ok ? 'connected' : 'missing')
       if (!r.ok && r.error) setError(r.error)
     }).catch(e => { setChatgpt('missing'); setError(String(e)) })
+  }
+  const connectGoogle = (): void => {
+    setGoogle('busy'); setError('')
+    void window.jarvis.invoke('google:connect').then(r => {
+      setGoogle(r.ok ? 'connected' : 'missing')
+      if (!r.ok && r.error) setError(r.error)
+    }).catch(e => { setGoogle('missing'); setError(String(e)) })
   }
   const connectWhatsapp = (): void => {
     const run = ++loginRun.current
@@ -148,6 +160,15 @@ export function FirstRun({ ready }: { ready: boolean }): JSX.Element | null {
       <p>James denkt dann über dein ChatGPT-Abo. Kein API-Schlüssel nötig.</p>
       {chatgpt === 'missing' && <button className="first-run-btn" onClick={connectChatgpt}>Mit ChatGPT verbinden</button>}
     </div>
+
+    {google !== 'hidden' && google !== 'unknown' && <div className="first-run-row">
+      <div className="first-run-line">
+        <span>Mit Google anmelden</span>
+        <em>{google === 'connected' ? 'angemeldet' : google === 'busy' ? 'im Browser anmelden …' : 'optional'}</em>
+      </div>
+      <p>Für Gmail, Kalender, Drive und Aufgaben. Dein Passwort gibst du nur bei Google ein.</p>
+      {google === 'missing' && <button className="first-run-btn" onClick={connectGoogle}>Mit Google anmelden</button>}
+    </div>}
 
     <div className="first-run-row">
       <div className="first-run-line">

@@ -26,6 +26,8 @@ import {
   clearMcpSecrets,
   clearSecret,
   getSecret,
+  hasOwnGoogleClient,
+  hasSecret,
   mcpSecretStatus,
   secretStatus,
   setMcpSecret,
@@ -40,6 +42,7 @@ import { activityStart, activityAnnotate, activityEnd } from '../agent/activity'
 import { companionHostKey, companionStatus, rotateToken } from '../companion/server'
 import { armWake, wakeReadiness } from '../companion/wol'
 import { companionSetup, runSetupAction } from '../companion/setup'
+import { jamesWebApp } from '../companion/webapp'
 import {
   clearActions,
   clearIncidents,
@@ -85,7 +88,10 @@ import { completeReminder, createReminder, snoozeReminder } from '../scheduler/r
 import { cancelChatGptSignIn, chatGptPendingSignIn, submitChatGptCallback, chatGptStatus, connectChatGpt, disconnectChatGpt } from '../providers/chatgptAuth'
 import { chatGptModels, chatGptResponse, chatGptTools } from '../providers/chatgptResponses'
 import { consumeModelCall, withModelBudget } from '../agent/modelBudget'
-import { connectGoogle, disconnectGoogle, hasCalendarAuth, hasGoogleAuth, hasWorkspaceAuth } from '../providers/googleAuth'
+import { connectGoogle, disconnectGoogle, googleAccountEmail, hasCalendarAuth, hasGoogleAuth, hasWorkspaceAuth } from '../providers/googleAuth'
+import { builtinGoogleClient } from '../providers/googleBuiltin'
+import { clearHealth, latestHealth } from '../health/store'
+import { describeHealth } from '@shared/health'
 import { listModels as listOpenRouterModels } from '../providers/openrouter'
 import {
   forgetOllamaReachability,
@@ -597,6 +603,7 @@ export function registerIpcHandlers(version: string): void {
   })
   handle('companion:hostKey', () => companionHostKey())
   handle('companion:setup', () => companionSetup())
+  handle('companion:webApp', () => jamesWebApp())
   handle('companion:runSetup', async ({ action }) => {
     await runSetupAction(action as never)
     // Direkt danach neu prüfen: Der Knopf soll seinen eigenen Erfolg anzeigen,
@@ -813,7 +820,21 @@ export function registerIpcHandlers(version: string): void {
     }
   })
   handle('google:disconnect', () => disconnectGoogle())
-  handle('google:status', () => ({ connected: hasGoogleAuth(), calendar: hasCalendarAuth(), workspace: hasWorkspaceAuth() }))
+  handle('google:status', () => ({
+    connected: hasGoogleAuth(),
+    calendar: hasCalendarAuth(),
+    workspace: hasWorkspaceAuth(),
+    email: googleAccountEmail(),
+    clientReady: hasSecret('googleOAuthClientId') && hasSecret('googleOAuthClientSecret'),
+    builtin: !hasOwnGoogleClient() && builtinGoogleClient() !== null
+  }))
+
+  // ── Apple Health (vom iPhone) ──────────────────────────────
+  handle('health:status', () => {
+    const snapshot = latestHealth()
+    return { takenAt: snapshot?.takenAt ?? null, summary: snapshot ? describeHealth(snapshot) : null }
+  })
+  handle('health:clear', () => clearHealth())
 
   // ── ChatGPT-Abo ────────────────────────────────────────────
   handle('chatgpt:connect', async () => {

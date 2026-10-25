@@ -119,6 +119,12 @@ export type PhoneMessage =
    * das Telefon aus wie ein abgerissenes Netz.
    */
   | { t: 'ping' }
+  /**
+   * Apple-Health-Tageswerte aus der James-App, nachdem der Nutzer dort
+   * „Apple Health teilen" erlaubt hat. Geprüft wird der Inhalt erst im
+   * Hauptprozess (`parseHealthSnapshot`), hier nur die Form.
+   */
+  | { t: 'health'; data: unknown }
 
 export interface CompanionCaption { id: number; who: 'user' | 'james'; text: string }
 
@@ -247,6 +253,7 @@ export function isPhoneMessage(value: unknown): value is PhoneMessage {
   switch (msg.t) {
     case 'hello': return typeof msg.name === 'string' && msg.name.length <= 80
     case 'press': case 'ping': return true
+    case 'health': return Boolean(msg.data) && typeof msg.data === 'object' && !Array.isArray(msg.data)
     case 'mic': return typeof msg.on === 'boolean'
     case 'pause': return typeof msg.paused === 'boolean'
     case 'text': return (msg.requestId === undefined || (typeof msg.requestId === 'string' && msg.requestId.length <= 80)) && typeof msg.text === 'string' && msg.text.trim().length > 0 && msg.text.length <= 8000
@@ -260,4 +267,53 @@ export function isCaptionMessage(value: unknown): value is { t: 'captions'; item
   return msg.t === 'captions' && Array.isArray(msg.items) && msg.items.length <= 30 && msg.items.every(item =>
     item && Number.isSafeInteger(item.id) && (item.who === 'user' || item.who === 'james') &&
     typeof item.text === 'string' && item.text.length <= 16000)
+}
+
+/** Die eigenständige iPhone-App „James“ (Repo jarvis-iphone, GitHub Pages). */
+export const JAMES_WEB_APP = 'https://nivarro-boop.github.io/jarvis-iphone/'
+
+/**
+ * Wo die App liegen darf. Die Adresse kommt live aus GitHub (`version.json`
+ * der App); weil der Kopplungslink die Marke trägt, gilt nur, was hier steht —
+ * sonst könnte ein verändertes `version.json` die Marke an einen fremden
+ * Rechner lenken.
+ */
+const JAMES_WEB_APP_HOSTS = new Set(['nivarro-boop.github.io', 'james-marktplatz.netlify.app'])
+
+/** Stand der James-App, wie ihn GitHub gerade ausliefert. */
+export interface JamesWebAppInfo {
+  url: string
+  version: string | null
+  date: string | null
+  /** false: GitHub war nicht erreichbar, es gilt die eingebaute Adresse. */
+  fromGitHub: boolean
+}
+
+export function isJamesWebAppUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return url.protocol === 'https:' && JAMES_WEB_APP_HOSTS.has(url.hostname) && !url.username && !url.password && !url.search && !url.hash && url.pathname.endsWith('/')
+  } catch {
+    return false
+  }
+}
+
+/** Liest `version.json` der App. Unbrauchbares fällt auf die eingebaute Adresse zurück. */
+export function parseJamesWebAppInfo(data: unknown): JamesWebAppInfo {
+  const raw = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+  const app = typeof raw.app === 'string' && isJamesWebAppUrl(raw.app) ? raw.app : JAMES_WEB_APP
+  const version = typeof raw.version === 'string' && /^\d+\.\d+\.\d+(-[\w.]+)?$/.test(raw.version) ? raw.version : null
+  const date = typeof raw.date === 'string' && !Number.isNaN(Date.parse(raw.date)) ? raw.date : null
+  return { url: app, version, date, fromGitHub: version !== null }
+}
+
+/**
+ * Kopplungslink für die James-App: `…/jarvis-iphone/#pc=<host:port>&token=…`.
+ * Die App liest das Fragment, fragt nach und merkt sich Adresse und Marke.
+ * Ohne gültige Adresse oder Marke gibt es keinen Link.
+ */
+export function jamesWebAppPairing(serverUrl: string, token: string, app = JAMES_WEB_APP): string | null {
+  const host = serverUrl.replace(/^https?:\/\//i, '').replace(/\/.*$/, '').toLowerCase()
+  if (!/^[a-z0-9.-]+(:\d{1,5})?$/.test(host) || token.length < 8 || token.length > 200) return null
+  return `${isJamesWebAppUrl(app) ? app : JAMES_WEB_APP}#pc=${host}&token=${encodeURIComponent(token)}`
 }

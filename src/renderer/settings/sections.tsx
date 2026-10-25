@@ -35,7 +35,7 @@ import type {
 import { PHONE_COUNTRIES, VOICES } from '@shared/types'
 import type { OllamaHealth } from '@shared/types'
 import { ELEVEN, PIPER, WHISPER } from '@shared/config/defaults'
-import type { CompanionSetup, CompanionStatus, WakeReadiness } from '@shared/companion'
+import { jamesWebAppPairing, type CompanionSetup, type CompanionStatus, type JamesWebAppInfo, type WakeReadiness } from '@shared/companion'
 import { CHATGPT_USAGE_URL, type ChatGptModel } from '@shared/chatgpt'
 import { JarvisLocalSetup } from './JarvisLocal'
 import { ChoiceCards } from './ChoiceCards'
@@ -97,10 +97,10 @@ const SECRET_FIELDS: { key: SecretKey; label: string; hint: string; required?: b
   },
   {
     key: 'googleOAuthClientId',
-    label: 'Google OAuth Client-ID',
-    hint: 'Für Gmail. Aus der Google Cloud Console, Anwendungstyp Desktop.'
+    label: 'Eigener Google OAuth-Client (Client-ID)',
+    hint: 'Nur nötig, wenn „Mit Google anmelden“ keinen eingebauten Zugang hat. Google Cloud Console, Anwendungstyp Desktop.'
   },
-  { key: 'googleOAuthClientSecret', label: 'Google OAuth Geheimnis', hint: '' },
+  { key: 'googleOAuthClientSecret', label: 'Eigener Google OAuth-Client (Geheimnis)', hint: '' },
   {
     key: 'calendarIcsUrl',
     label: 'Kalender-Link (iCal)',
@@ -223,12 +223,6 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
   const renderFields = (fields: typeof SECRET_FIELDS): JSX.Element => (<>
       {fields.map((field) => (
         <div className="field" key={field.key}>
-          {field.key === 'openai' && (
-            <>
-              <h3>ChatGPT verbinden</h3>
-              <ChatGptLogin model={settings.chatGptModel} onModelChange={(id) => patch({ chatGptModel: id })} />
-            </>
-          )}
           <label id={`secret-label-${field.key}`}>
             {field.label}{' '}
             {present(field.key) ? (
@@ -278,17 +272,28 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
     <>
       <h2>Konten &amp; Standort</h2>
       <p className="lede">
-        Website-Konten, Standardort und Fehlerberichte an einem Ort.
-        Den Sprachzugang richtest du unter „Stimme“ ein.
+        Einmal anmelden, fertig. James kümmert sich um den Rest.
       </p>
-      <WebsiteAccounts />
-
+      <div className="field">
+        <h3>ChatGPT</h3>
+        <ChatGptLogin model={settings.chatGptModel} onModelChange={(id) => patch({ chatGptModel: id })} />
+      </div>
       <GoogleConnect />
-      <div className="field"><label>Standardstandort</label>
+      <details className="settings-fold">
+        <summary>Andere Websites (z. B. Lieferando, Amazon): Konto für James speichern</summary>
+        <WebsiteAccounts />
+      </details>
+
+      <div className="field"><label>Wohnort</label>
         <input aria-label="Standardstandort" placeholder="z. B. Wien" value={settings.homeLocation} onChange={e => void patch({ homeLocation: e.target.value })} />
         <p className="hint">Ohne Ortsangabe verwenden Wetter, Ortssuche und Routen diesen Ort. Ein ausdrücklich genannter Ort hat Vorrang.</p>
       </div>
       <DeviceLocationField settings={settings} patch={patch} />
+
+      {/* Alles Technische eingeklappt: Wer nur Mails und Termine will, muss
+          hier nichts verstehen. Geöffnet ist alles wie vorher. */}
+      <details className="settings-fold">
+      <summary>Für Fortgeschrittene: Fehlerberichte, API-Schlüssel, Telefonie</summary>
       <div className="field"><label>Optionale Fehlerberichte</label>
         {/* Eine veränderte Adresse ist eine andere Zusage: Gesendet würde nun
             an jemand anderes. Deshalb poussiert das Ändern den Versand aus —
@@ -320,6 +325,7 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
 
       <hr className="section-divider" />
       <LinphoneSetup settings={settings} patch={patch} />
+      </details>
     </>
   )
 }
@@ -863,42 +869,29 @@ function TextProviderChoice({
  * bekommt.
  */
 function GoogleConnect(): JSX.Element {
-  const [connected, setConnected] = useState(false)
-  /** Ob die bestehende Anmeldung auch den Kalender abdeckt. */
-  const [calendar, setCalendar] = useState(true)
-  /** Ob die Anmeldung auch Drive, Docs, Tabellen, Aufgaben und Kontakte abdeckt. */
-  const [workspace, setWorkspace] = useState(true)
+  const [status, setStatus] = useState<{ connected: boolean; calendar: boolean; workspace: boolean; email?: string; clientReady: boolean; builtin: boolean } | null>(null)
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<string | null>(null)
   /** Ob die Meldung ein Fehlschlag ist — grau gesetzt liest sich einer wie ein Hinweis. */
   const [failed, setFailed] = useState(false)
 
-  useEffect(() => {
-    void window.jarvis
-      .invoke('google:status')
-      .then((s) => {
-        setConnected(s.connected)
-        setCalendar(s.calendar)
-        setWorkspace(s.workspace)
-      })
-      .catch(() => undefined)
-  }, [])
+  const refresh = async (): Promise<void> => {
+    try { setStatus(await window.jarvis.invoke('google:status')) } catch { /* Anzeige bleibt beim alten Stand */ }
+  }
+  useEffect(() => { void refresh() }, [])
 
   const connect = async (): Promise<void> => {
     setBusy(true)
     setFailed(false)
-    setMessage('Im Browser anmelden…')
+    setMessage('Im Browser hat sich Google geöffnet. Dort anmelden und auf „Zulassen“ drücken.')
     try {
       const result = await window.jarvis.invoke('google:connect')
-      setConnected(result.ok)
       setFailed(!result.ok)
-      setMessage(result.ok ? `Verbunden als ${result.email ?? 'unbekannt'}` : (result.error ?? 'Fehlgeschlagen'))
+      setMessage(result.ok ? `Fertig. Angemeldet als ${result.email ?? 'dein Google-Konto'}.` : (result.error ?? 'Das hat nicht geklappt. Bitte noch einmal drücken.'))
       // Nach dem Verbinden neu nachfragen statt anzunehmen: Im
       // Zustimmungsdialog lassen sich einzelne Häkchen wegnehmen, und dann
       // ist die Anmeldung erfolgreich und der Kalender trotzdem nicht dabei.
-      const status = await window.jarvis.invoke('google:status')
-      setCalendar(status.calendar)
-      setWorkspace(status.workspace)
+      await refresh()
     } catch (err) {
       setFailed(true)
       setMessage(err instanceof Error ? err.message : 'Die Anmeldung ging nicht.')
@@ -907,82 +900,63 @@ function GoogleConnect(): JSX.Element {
     }
   }
 
+  const disconnect = async (): Promise<void> => {
+    try {
+      await window.jarvis.invoke('google:disconnect')
+      setFailed(false)
+      setMessage('Abgemeldet.')
+      await refresh()
+    } catch (err) {
+      setFailed(true)
+      setMessage(err instanceof Error ? err.message : 'Das Abmelden ging nicht.')
+    }
+  }
+
+  const connected = status?.connected ?? false
+  // Der wichtigste Sonderfall: verbunden, aber die Zustimmung stammt aus der
+  // Zeit vor Kalender oder Drive, oder im Google-Dialog fehlte ein Häkchen.
+  // Ohne Hinweis stünde „verbunden“ da, und James scheiterte trotzdem.
+  const incomplete = connected && !(status?.calendar && status?.workspace)
+
   return (
     <div className="field">
+      <h3>Google-Konto</h3>
       <label>
-        Google Workspace: Gmail, Kalender, Drive, Docs, Tabellen, Aufgaben, Kontakte{' '}
-        {connected && calendar && workspace ? (
-          <span className="badge ok">verbunden</span>
-        ) : connected ? (
-          <span className="badge missing">{calendar ? 'neu verbinden' : 'ohne Kalender'}</span>
+        Gmail, Kalender, Drive, Docs, Tabellen, Aufgaben und Kontakte{' '}
+        {connected && !incomplete ? (
+          <span className="badge ok">angemeldet</span>
+        ) : incomplete ? (
+          <span className="badge missing">einmal neu anmelden</span>
         ) : (
-          <span className="badge missing">optional</span>
+          <span className="badge missing">nicht angemeldet</span>
         )}
       </label>
-
-      {/*
-        Der wichtigste Fall in diesem Abschnitt: verbunden, aber die
-        Zustimmung stammt aus der Zeit vor dem Kalender. Ohne diesen Hinweis
-        steht oben „verbunden“, und James antwortet auf jede Terminfrage mit
-        einem Fehler — was wie ein Programmfehler aussieht und keiner ist.
-      */}
-      {connected && !calendar && (
+      {connected && status?.email && <div className="hint ok">Angemeldet als {status.email}</div>}
+      {incomplete && (
         <div className="hint err" style={{ marginBottom: 10 }}>
-          Diese Anmeldung ist älter als der Kalender und deckt ihn nicht ab. Einmal auf „Mit
-          Google verbinden" drücken — danach kann James Termine nachsehen, eintragen,
-          verschieben und absagen. Für Mails ändert sich nichts.
+          Es fehlen Rechte (z. B. Kalender oder Drive). Einmal auf „Neu anmelden“ drücken und bei Google
+          alle Häkchen stehen lassen.
         </div>
       )}
-
-      {connected && calendar && !workspace && (
-        <div className="hint err" style={{ marginBottom: 10 }}>
-          Neu dabei: Drive, Docs, Tabellen, Aufgaben und Kontakte. Einmal auf „Mit Google verbinden“
-          drücken und im Google-Dialog alle Häkchen setzen. In der Google Cloud Console müssen dafür
-          die Drive-, Docs-, Sheets-, Tasks- und People-API aktiviert sein.
+      {status && !status.clientReady ? (
+        <div className="hint err">
+          Diese Ausgabe von James hat keinen eingebauten Google-Zugang. Unten unter „Für
+          Fortgeschrittene“ lässt sich ein eigener Google-Client eintragen.
         </div>
-      )}
-
-      <div className="hint" style={{ marginBottom: 10 }}>
-        <strong style={{ color: 'var(--text)' }}>Für Mails brauchst du das nicht.</strong> Lesen,
-        öffnen, durchsuchen, herauskopieren und schreiben läuft über den James-Browser und kostet
-        dich eine einmalige Anmeldung — einzurichten unter „Verbindungen". Dieser Weg hier ist nur
-        schneller und kann Mails direkt versenden.
-        <br />
-        <br />
-        <strong style={{ color: 'var(--text)' }}>Für den Kalender brauchst du ihn schon.</strong>{' '}
-        Termine gibt es nur über diese Schnittstelle; einen Browserweg wie bei den Mails gibt es
-        dafür nicht. Beides verlangt einen eigenen OAuth-Client vom Typ{' '}
-        <strong style={{ color: 'var(--text)' }}>Desktop</strong> aus der Google Cloud Console,
-        eingetragen unten als Client-ID und Geheimnis.
-      </div>
-      <div className="row">
-        <button className="primary" onClick={() => void connect()} disabled={busy}>
-          {busy ? 'Warte auf den Browser…' : 'Mit Google verbinden'}
-        </button>
-        {connected && (
-          <button
-            onClick={() => {
-              void window.jarvis
-                .invoke('google:disconnect')
-                .then(() => {
-                  setConnected(false)
-                  setFailed(false)
-                  setMessage(null)
-                })
-                .catch((err: unknown) => {
-                  setFailed(true)
-                  setMessage(err instanceof Error ? err.message : 'Das Trennen ging nicht.')
-                })
-            }}
-          >
-            Trennen
+      ) : (
+        <div className="row">
+          <button className="primary" onClick={() => void connect()} disabled={busy || !status}>
+            {busy ? 'Warte auf Google…' : connected ? 'Neu anmelden' : 'Mit Google anmelden'}
           </button>
-        )}
-      </div>
-      <div className={failed ? 'hint err' : 'hint'}>
-        {message ??
-          'Die Anmeldung läuft in deinem Browser — dein Passwort sieht James nie. Nach dem Klick öffnet sich ein Google-Fenster; danach kannst du es schließen.'}
-      </div>
+          {connected && <button onClick={() => void disconnect()} disabled={busy}>Abmelden</button>}
+        </div>
+      )}
+      {(message || status?.clientReady) && (
+        <div className={failed ? 'hint err' : 'hint'} role="status">
+          {message ??
+            'Ein Klick öffnet Google in deinem Browser. Dein Passwort gibst du nur dort ein — James sieht es nie. Abmelden geht jederzeit.'}
+        </div>
+      )}
     </div>
   )
 }
@@ -3092,6 +3066,7 @@ export function SaverSection({ settings, patch }: Props): JSX.Element {
 
         <div className="hint" style={{ marginTop: 14 }}>
           Gemeldete ChatGPT-Nutzung der letzten bis zu 100 abgeschlossenen Anfragen seit dem Start: {report?.usage?.totalTokens == null ? 'keine Tokenzahl gemeldet' : `${report.usage.totalTokens.toLocaleString('de-DE')} Token`}.
+          {report?.usage?.cachedTokens ? ` Davon ${report.usage.cachedTokens.toLocaleString('de-DE')} Eingabe-Token aus dem Zwischenspeicher (günstiger).` : ''}
           {' '}Anfragen mit Tokenangabe: {report?.usage?.knownCalls ?? 0}/{report?.usage?.calls ?? 0}. Dies ist keine Anzeige des verbleibenden Kontingents.
           {report?.usage?.last && <> Letzte Antwort: {(report.usage.last.ms / 1000).toFixed(1)} s.</>}
         </div>
@@ -4889,10 +4864,42 @@ export function MemorySection(): JSX.Element {
  * nicht. Der Wechselknopf daneben ist der Ausweg, falls sie einmal irgendwo
  * gelandet ist, wo sie nicht hingehört.
  */
+/**
+ * Apple Health: was zuletzt vom iPhone kam, und ein Knopf zum Löschen.
+ *
+ * Eingeschaltet wird auf dem iPhone, nicht hier — nur dort kann Apple fragen.
+ */
+function AppleHealthPanel(): JSX.Element {
+  const [state, setState] = useState<{ takenAt: number | null; summary: string | null } | null>(null)
+  const load = (): void => { void window.jarvis.invoke('health:status').then(setState).catch(() => setState({ takenAt: null, summary: null })) }
+  useEffect(load, [])
+  return (
+    <div className="field">
+      <h3>Apple Health</h3>
+      {state?.summary ? (
+        <>
+          <p className="hint ok">Werte vom iPhone sind da. Frag James z. B. „Wie viele Schritte hab ich heute?“ oder „Wie hab ich geschlafen?“</p>
+          <details className="settings-fold">
+            <summary>Was James sieht</summary>
+            <p className="hint" style={{ whiteSpace: 'pre-line' }}>{state.summary}</p>
+          </details>
+          <button onClick={() => { void window.jarvis.invoke('health:clear').then(load) }}>Gesundheitswerte am Rechner löschen</button>
+        </>
+      ) : (
+        <p className="hint">
+          In der James-App auf dem iPhone oben auf „Apple Health teilen“ tippen und erlauben. Danach kommen Schritte,
+          Schlaf, Aktivität, Puls und Gewicht bei jedem Öffnen der App hierher — nur auf diesen Rechner, verschlüsselt.
+        </p>
+      )}
+    </div>
+  )
+}
+
 export function CompanionSection({ settings, patch }: Props): JSX.Element {
   const [status, setStatus] = useState<CompanionStatus | null>(null)
   const [readiness, setReadiness] = useState<WakeReadiness | null>(null)
   const [setup, setSetup] = useState<CompanionSetup | null>(null)
+  const [webApp, setWebApp] = useState<JamesWebAppInfo | null>(null)
   const [note, setNote] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
@@ -4911,6 +4918,15 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
   // Die Leiter wird nicht mitgetaktet: Sie ruft `tailscale cert` auf, und das
   // ist ein Prozessstart. Einmal beim Öffnen und nach jedem Knopfdruck reicht —
   // was sich dazwischen ändert, ändert sich nicht von selbst.
+  // Adresse und Fassung der James-App: bei jedem Öffnen frisch aus GitHub,
+  // damit der Code jeder neuen Fassung folgt.
+  useEffect(() => {
+    void window.jarvis
+      .invoke('companion:webApp')
+      .then(setWebApp)
+      .catch(() => setWebApp(null))
+  }, [])
+
   useEffect(() => {
     void window.jarvis
       .invoke('companion:setup')
@@ -4991,6 +5007,10 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
 
   const pairingUrl =
     status?.urls[0] && status.token ? `${status.urls[0]}#host=${status.urls[0].replace(/^https?:\/\//, '').replace(/\/$/, '')}&token=${status.token}` : null
+  const webAppUrl = status?.urls[0] && status.token ? jamesWebAppPairing(status.urls[0], status.token, webApp?.url) : null
+  const webAppVersion = webApp?.fromGitHub && webApp.version
+    ? `James-App ${webApp.version}${webApp.date ? ` vom ${new Date(webApp.date).toLocaleDateString('de-DE')}` : ''}, aktuell aus GitHub.`
+    : 'GitHub gerade nicht erreichbar – der Code nutzt die bekannte Adresse der James-App.'
 
   return (
     <>
@@ -5032,6 +5052,7 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
         </div>
       )}
 
+      <AppleHealthPanel />
       <details className="settings-fold"><summary>Netzwerk und Zertifikat</summary>
       <label>
         Port
@@ -5150,6 +5171,19 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
           </table>
 
           {pairingUrl && <PairingCode url={pairingUrl} label="QR-Code für iPhone & Watch erstellen" />}
+          {/*
+            Die James-App aus dem James Store ist eine eigene Web-App und
+            koppelt über ihren eigenen Link. Gleiche Marke, gleiche Adresse —
+            nur das Ziel ist die App statt dieser Fernbedienungsseite.
+          */}
+          {webAppUrl && (
+            <PairingCode
+              url={webAppUrl}
+              label="QR-Code für die James-App (James Store)"
+              copyLabel="Link für die James-App kopieren"
+              hint={`${webAppVersion} Mit der iPhone-Kamera abfotografieren, James fragt dann, ob er koppeln soll. Liegt James schon auf dem Home-Bildschirm, koppelt das nur Safari — dann dort auf „Link kopieren“ tippen und in James unter Einstellungen → PC koppeln einfügen.`}
+            />
+          )}
 
           <div className="row">
             <button onClick={() => void rotate()} disabled={busy}>
@@ -5159,12 +5193,11 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
         </>
       )}
 
-      <h3>Rechner aufwecken</h3>
+      <details className="settings-fold">
+      <summary>Rechner vom iPhone aus aufwecken</summary>
       <p className="hint">
-        Schläft der Rechner, ist auch dieser Server aus — geweckt werden kann er deshalb nur von
-        außen, also vom Telefon. Eine Webseite darf das nicht, ein Browser kann keine solchen
-        Netzpakete verschicken. Der Weckknopf wirkt nur in der eingepackten App; wie die ohne Mac
-        entsteht, steht in <code>resources/companion/README.md</code>.
+        Schläft der Rechner, kann ihn die James-App auf dem iPhone wecken. Dafür hier einmal
+        „Aufwachen einschalten“ drücken. Geht nur mit der installierten James-App, nicht in Safari.
       </p>
 
       {status?.wake && (
@@ -5202,6 +5235,7 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
           {readiness.note}
         </p>
       )}
+      </details>
 
       {note && <p className="hint" role="status">{note}</p>}
     </>
@@ -5222,10 +5256,14 @@ export function CompanionSection({ settings, patch }: Props): JSX.Element {
  */
 function PairingCode({
   url,
-  label = 'iPhone verbinden'
+  label = 'iPhone verbinden',
+  hint = 'Beim ersten Start der iPhone-App abfotografieren. In Safari geht es auch ohne: Adresse und Marke von Hand eintragen.',
+  copyLabel = 'Kopplungslink kopieren'
 }: {
   url: string
   label?: string
+  hint?: string
+  copyLabel?: string
 }): JSX.Element {
   const [shown, setShown] = useState(false)
 
@@ -5251,10 +5289,7 @@ function PairingCode({
 
   return (
     <div style={{ marginTop: 12 }}>
-      <p className="hint">
-        Beim ersten Start der iPhone-App abfotografieren. In Safari geht es auch ohne: Adresse und
-        Marke von Hand eintragen.
-      </p>
+      <p className="hint">{hint}</p>
       {matrix ? (
         <svg
           // Vier Module Ruhezone rundherum — ohne sie findet kein Leser die
@@ -5272,7 +5307,7 @@ function PairingCode({
         <p className="hint">Der Code ließ sich nicht erzeugen — nimm die Angaben aus der Tabelle.</p>
       )}
       <div className="row" style={{ marginTop: 8 }}>
-        <button onClick={() => { void navigator.clipboard.writeText(url) }}>Kopplungslink kopieren</button>
+        <button onClick={() => { void navigator.clipboard.writeText(url) }}>{copyLabel}</button>
         <button onClick={() => setShown(false)}>Verbergen</button>
       </div>
     </div>

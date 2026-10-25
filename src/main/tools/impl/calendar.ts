@@ -34,7 +34,7 @@ async function calendarApi(): Promise<any> {
   if (hasGoogleAuth() && !hasCalendarAuth()) {
     throw new Error(
       'Die Google-Anmeldung ist älter als der Kalender und deckt ihn nicht ab. Sag dem Nutzer, ' +
-        'er soll sich unter Einstellungen, Verbindungen einmal neu verbinden — danach geht es.'
+        'er soll unter Einstellungen → Konten einmal auf „Neu anmelden“ drücken — danach geht es.'
     )
   }
   const { google } = await import('googleapis')

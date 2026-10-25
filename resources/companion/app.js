@@ -412,6 +412,7 @@ function connect() {
     ws.send(JSON.stringify({ t: 'hello', name: deviceName() }))
     setStatus('verbunden', 'idle')
     startHeartbeat()
+    flushHealth()
   }
 
   ws.onmessage = (event) => {
@@ -580,6 +581,21 @@ function handleMessage(msg) {
   } else if (msg.t === 'bye') {
     setStatus(msg.reason, 'offline')
   }
+}
+
+// Apple Health: Die James-App reicht die Tageswerte über `__jarvisHealth`
+// herein. Sie gehen am Kristall vorbei direkt an den Rechner — dafür muss
+// das James-Fenster nicht offen sein. Steht die Leitung noch nicht, wartet
+// der letzte Stand bis zum nächsten Verbindungsaufbau.
+let pendingHealth = null
+function flushHealth() {
+  if (!pendingHealth || socket?.readyState !== WebSocket.OPEN) return
+  try { socket.send(JSON.stringify({ t: 'health', data: pendingHealth })); pendingHealth = null } catch { /* nächster Aufbau */ }
+}
+window.__jarvisHealth = (data) => {
+  if (!data || typeof data !== 'object') return
+  pendingHealth = data
+  flushHealth()
 }
 
 function send(msg) {

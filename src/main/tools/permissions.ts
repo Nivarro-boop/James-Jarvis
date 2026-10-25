@@ -60,6 +60,15 @@ const FORCED_ASK = new Set([
 /** Wird nie ausgeführt, egal was das Modell will. */
 const HARD_DENY = new Set(['amazon_place_order', 'enter_payment_details'])
 
+/**
+ * Was echtes Geld ausgibt, fragt immer — auch im autonomen Profil.
+ *
+ * Das autonome Profil heißt „keine Soll-ich-Fragen", nicht „bestell, was du
+ * für richtig hältst". Eine abgeschickte Bestellung lässt sich nicht
+ * zurückholen; die Rückfrage zeigt Artikel, Preis und Adresse.
+ */
+const ALWAYS_CONFIRM = new Set(['order_place'])
+
 /** Eine Rückfrage verfällt, wenn nicht zeitnah darauf reagiert wird. */
 const CHALLENGE_TTL_MS = 3 * 60 * 1000
 
@@ -131,6 +140,7 @@ export function permissionFor(toolName: string): ToolPermission {
   const settings = getSettings()
   const configured = settings.permissions[toolName]
   if (configured === 'deny') return 'deny'
+  if (ALWAYS_CONFIRM.has(toolName)) return 'ask'
   if (!settings.confirmActions) return 'allow'
   if (FORCED_ASK.has(toolName)) return 'ask'
   const tool = getTool(toolName)

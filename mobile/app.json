@@ -16,9 +16,15 @@
       "config": {
         "usesNonExemptEncryption": false
       },
+      "entitlements": {
+        "com.apple.developer.healthkit": true,
+        "com.apple.developer.healthkit.access": []
+      },
       "infoPlist": {
         "NSMicrophoneUsageDescription": "James hört zu, solange du die Sprechtaste hältst.",
         "NSLocalNetworkUsageDescription": "James verbindet sich mit deinem Rechner im Heimnetz und weckt ihn bei Bedarf auf.",
+        "NSHealthShareUsageDescription": "James liest Schritte, Schlaf, Aktivität, Puls und Gewicht, damit du ihn danach fragen kannst. Die Werte gehen nur an deinen eigenen Rechner.",
+        "NSHealthUpdateUsageDescription": "James schreibt nichts in Apple Health.",
         "NSAppTransportSecurity": {
           "NSAllowsLocalNetworking": true
         }

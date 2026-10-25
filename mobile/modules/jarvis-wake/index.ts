@@ -11,6 +11,9 @@ interface NativeWake {
   configureWatch?(link: string | null): Promise<void>
   watchStatus?(): { supported: boolean; paired?: boolean; installed?: boolean; reachable?: boolean; configured?: boolean }
   wake(mac: string, broadcast: string, address: string): Promise<void>
+  healthAvailable?(): boolean
+  requestHealth?(): Promise<boolean>
+  healthSummary?(days: number): Promise<Record<string, unknown>>
 }
 
 // Fehlt in Expo Go und im Web: Dort gibt es keinen eingebauten UDP-Versand.
@@ -28,4 +31,21 @@ export async function configureWatch(link: string | null): Promise<void> {
 }
 export function watchStatus() {
   return native?.watchStatus?.() ?? { supported: false }
+}
+
+/** Apple Health gibt es nur in der gebauten App auf einem iPhone, nicht in Expo Go oder auf dem iPad. */
+export function healthAvailable(): boolean {
+  return native?.healthAvailable?.() ?? false
+}
+
+/** Zeigt Apples Freigabedialog. `false`, wenn Health hier nicht geht. */
+export async function requestHealth(): Promise<boolean> {
+  if (!native?.requestHealth) return false
+  return native.requestHealth()
+}
+
+/** Tageswerte der letzten sieben Tage, im Format von `src/shared/health.ts` am Rechner. */
+export async function healthSummary(): Promise<Record<string, unknown> | null> {
+  if (!native?.healthSummary) return null
+  return native.healthSummary(7)
 }

@@ -69,33 +69,47 @@ export function ChatGptConnection({ onChange, model, onModelChange }: Props): JS
     finally { setBusy(false) }
   }
 
+  const modelName = !model || model === 'auto' ? 'Automatisch (empfohlen)' : models.find((m) => m.id === model)?.name ?? model
+
   return <div style={{ marginTop: 8 }}>
     {!state ? <p className="hint">Anmeldestatus wird geprüft …</p> : !state.enabled ?
       <p className="hint">{state.reason}</p> : state.connected ? <>
-        <p className="hint">Anmeldung gespeichert{state.email ? ` als ${state.email}` : ''}.
-          Geeignete Textanfragen zählen gegen deinen ChatGPT-Plan.</p>
-        {onModelChange && <ChoiceCards
-          title="Denkweise"
-          value={model ?? ''}
-          disabled={busy || models.length === 0}
-          options={[
-            { value: 'auto', label: 'Automatisch (empfohlen)', hint: 'Schnell im Gespräch, gründlich bei schwierigen Aufgaben.' },
-            ...models.map((m) => ({ value: m.id, label: m.name, hint: modelHint(m) })),
-            ...(model && model !== 'auto' && !models.some((m) => m.id === model) ? [{ value: model, label: model, hint: 'Nicht mehr in deinem Konto – Verfügbarkeit prüfen.' }] : [])
-          ]}
-          onChange={(id) => { void onModelChange(id).catch((err) => setError(String(err))) }}
-        />}
-        <button type="button" disabled={busy} onClick={() => void disconnect()}>Abmelden</button>{' '}
-        <button type="button" disabled={busy} onClick={() => void connect()}>Erneut anmelden</button>{' '}
-        <button type="button" disabled={busy} onClick={() => { void refresh().catch((e) => setError(String(e))) }}>Modelle erneut prüfen</button>
-      </> : <button type="button" className="primary" disabled={busy} onClick={() => void connect()}>
-        {busy ? 'Warte auf den Browser …' : 'Continue with ChatGPT'}
-      </button>}
+        <p className="hint ok">Angemeldet{state.email ? ` als ${state.email}` : ''}. James denkt über dein ChatGPT-Abo.</p>
+        {onModelChange && <p className="hint">Denkweise: <strong>{modelName}</strong></p>}
+        <button type="button" disabled={busy} onClick={() => void disconnect()}>Abmelden</button>
+        {/* Für die meisten reicht „Automatisch“. Wer selbst wählen oder einen
+            Fehler beheben will, klappt auf — sonst stehen hier vier Knöpfe
+            und zehn Modellnamen, die niemand auseinanderhalten kann. */}
+        <details className="settings-fold">
+          <summary>Modell selbst wählen oder Anmeldung reparieren</summary>
+          {onModelChange && <ChoiceCards
+            title="Denkweise"
+            value={model ?? ''}
+            disabled={busy || models.length === 0}
+            options={[
+              { value: 'auto', label: 'Automatisch (empfohlen)', hint: 'Schnell im Gespräch, gründlich bei schwierigen Aufgaben.' },
+              ...models.map((m) => ({ value: m.id, label: m.name, hint: modelHint(m) })),
+              ...(model && model !== 'auto' && !models.some((m) => m.id === model) ? [{ value: model, label: model, hint: 'Nicht mehr in deinem Konto – Verfügbarkeit prüfen.' }] : [])
+            ]}
+            onChange={(id) => { void onModelChange(id).catch((err) => setError(String(err))) }}
+          />}
+          <button type="button" disabled={busy} onClick={() => void connect()}>Neu anmelden</button>{' '}
+          <button type="button" disabled={busy} onClick={() => { void refresh().catch((e) => setError(String(e))) }}>Modelle neu laden</button>
+          <p className="hint"><a href={CHATGPT_USAGE_URL} target="_blank" rel="noreferrer">Nutzung und Limits in ChatGPT</a> · Live-Sprache über die OpenAI API wird separat abgerechnet.</p>
+        </details>
+      </> : <>
+        <button type="button" className="primary" disabled={busy} onClick={() => void connect()}>
+          {busy ? 'Warte auf den Browser …' : 'Continue with ChatGPT'}
+        </button>
+        <p className="hint">{busy
+          ? 'Im Browser hat sich ChatGPT geöffnet. Dort anmelden und auf „Zulassen“ drücken. Danach hierher zurückkommen.'
+          : 'Ein Klick öffnet ChatGPT in deinem Browser. Kein API-Schlüssel, keine Zusatzkosten — es zählt dein bestehendes Abo.'}</p>
+      </>}
     {signingIn && <button type="button" onClick={() => {
       void window.jarvis.invoke('chatgpt:cancelSignIn').catch((e) => setError(String(e)))
     }}>Anmeldung abbrechen</button>}
-    {signingIn && pending && <details className="settings-fold" open>
-      <summary>Remote Play oder Browser auf einem anderen Gerät?</summary>
+    {signingIn && pending && <details className="settings-fold">
+      <summary>Browser zeigt am Ende einen Fehler oder läuft auf einem anderen Gerät?</summary>
       <p className="hint">Öffne den Anmeldelink. Falls der Browser am Ende 127.0.0.1 nicht erreicht, kopiere die komplette Adresse aus seiner Adresszeile hierher. James prüft sie auf diesem Rechner.</p>
       {pending.browserError && <p className="hint err">{pending.browserError}</p>}
       <button type="button" onClick={() => { void navigator.clipboard.writeText(pending.url).catch(() => setError('Kopieren fehlgeschlagen. Bitte den Link markieren.')) }}>Anmeldelink kopieren</button>
@@ -108,10 +122,9 @@ export function ChatGptConnection({ onChange, model, onModelChange }: Props): JS
           .catch(err => setError(err instanceof Error ? err.message : String(err))).finally(() => setCallbackBusy(false))
       }}>Anmeldung abschließen</button>
     </details>}
-    <p className="hint"><a href={CHATGPT_USAGE_URL} target="_blank" rel="noreferrer">Nutzung und Limits in ChatGPT</a> · Live-Sprache über die OpenAI API wird separat abgerechnet.</p>
-    {error && <><p className="hint err">{error}</p><button type="button" disabled={busy} onClick={() => {
+    {error && <><p className="hint err" role="alert">{error}</p><button type="button" disabled={busy} onClick={() => {
       setBusy(true); setError('')
       void refresh().catch(e => setError(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false))
-    }}>Status und Modelle erneut laden</button></>}
+    }}>Erneut versuchen</button></>}
   </div>
 }

@@ -1805,8 +1805,8 @@ export interface TokenReport {
   silenceSecondsToday: number
   /** Grobe Ersparnis in Dollar, heute. */
   todayUsd: number
-  usage?: { calls: number; knownCalls: number; totalTokens: number | null;
-    last: { model: string; total: number | null; input: number | null; output: number | null; ms: number; firstMs: number | null } | null }
+  usage?: { calls: number; knownCalls: number; totalTokens: number | null; cachedTokens?: number | null;
+    last: { model: string; total: number | null; input: number | null; output: number | null; cached?: number | null; ms: number; firstMs: number | null } | null }
 }
 
 // ─────────────────────────────────────────────────────────────

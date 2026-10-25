@@ -44,6 +44,8 @@ import { capabilityGapTools } from './impl/capabilityGap'
 import { brainTools } from './impl/brain'
 import { googleWorkspaceTools } from './impl/googleWorkspace'
 import { studyTools } from './impl/study'
+import { healthTools } from './impl/health'
+import { foodTools } from './impl/food'
 
 /**
  * Sammelstelle aller Werkzeuge.
@@ -94,6 +96,8 @@ export function registerAllTools(): void {
     ...chromeTools,
     ...memoryTools,
     ...shoppingTools,
+    ...foodTools,
+    ...healthTools,
     ...priceWatchTools,
     // Der Browserweg zuerst: er braucht keine Einrichtung und ist deshalb
     // der, der bei den meisten überhaupt funktioniert. Die Werkzeuge der

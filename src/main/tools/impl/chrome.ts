@@ -2,6 +2,7 @@ import { websiteAccounts, websiteAccount } from '../../secrets/keystore'
 import { performWebsiteLogin } from '../../automation/websiteLogin'
 import type { Page } from 'playwright-core'
 import { z } from 'zod'
+import { FINAL_ORDER_REFUSAL, isFinalOrderLabel } from '@shared/orderGate'
 import { defineTool, type ToolDefinition, type ToolContext } from '../registry'
 import { detectBlock, getContext, openPage, activePage, selectActivePage, setWindowVisible, declineCookies } from '../../automation/chromeCdp'
 
@@ -169,6 +170,8 @@ const clickElement = defineTool({
     for (const locator of candidates) {
       const count = await locator.count().catch(() => 0)
       if (count > 0) {
+        const label = await locator.first().evaluate(e => (e.getAttribute('aria-label') || (e as HTMLElement).innerText || (e as HTMLInputElement).value || '').slice(0, 200)).catch(() => text)
+        if (isFinalOrderLabel(label) || isFinalOrderLabel(text)) throw new Error(FINAL_ORDER_REFUSAL)
         await locator.first().click({ timeout: 8000 })
         await page.waitForLoadState('domcontentloaded', { timeout: 10_000 }).catch(() => undefined)
         return { geklickt: text, seite: await page.title() }
@@ -342,6 +345,10 @@ const interact = defineTool({
     if (action === 'fill') {
       const sensitive = await el.evaluate(e => e instanceof HTMLInputElement && (e.type === 'password' || /password|one-time-code|cc-/i.test(e.autocomplete)))
       if (sensitive) throw new Error('Dieses Feld enthält Zugangs- oder Zahlungsdaten. Anmeldungen laufen über website_login, alles andere bitte selbst eintragen.')
+    }
+    if (action === 'click' || action === 'press') {
+      const label = await el.evaluate(e => (e.getAttribute('aria-label') || (e as HTMLElement).innerText || (e as HTMLInputElement).value || '').slice(0, 200)).catch(() => '')
+      if (isFinalOrderLabel(label)) throw new Error(FINAL_ORDER_REFUSAL)
     }
     const opts = { timeout: 8000 }
     const before = page.url()

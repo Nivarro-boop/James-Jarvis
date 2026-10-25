@@ -8,6 +8,7 @@ import { parsePairing, type Pairing } from './pairing'
  */
 const PAIRING = 'james.pairing'
 const WAKE = 'james.wake'
+const HEALTH = 'james.health'
 
 export async function loadPairing(): Promise<Pairing | null> {
   const raw = await SecureStore.getItemAsync(PAIRING)
@@ -23,6 +24,16 @@ export async function savePairing(pairing: Pairing): Promise<void> {
 export async function forget(): Promise<void> {
   await SecureStore.deleteItemAsync(PAIRING)
   await SecureStore.deleteItemAsync(WAKE)
+}
+
+/** Ob der Nutzer „Apple Health teilen" eingeschaltet hat. Bleibt beim Rechnerwechsel bestehen. */
+export async function loadHealthSharing(): Promise<boolean> {
+  return (await SecureStore.getItemAsync(HEALTH)) === 'on'
+}
+
+export async function saveHealthSharing(on: boolean): Promise<void> {
+  if (on) await SecureStore.setItemAsync(HEALTH, 'on')
+  else await SecureStore.deleteItemAsync(HEALTH)
 }
 
 const MAC = /^[0-9a-f]{2}([:-]?[0-9a-f]{2}){5}$/i
