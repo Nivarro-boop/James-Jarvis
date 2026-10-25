@@ -18,21 +18,43 @@ Fortgeschrittene“.
 
 ## In den Build bringen
 
-- **GitHub-Release:** im Repo unter Settings → Secrets → Actions zwei Secrets
-  anlegen: `JARVIS_GOOGLE_CLIENT_ID` und `JARVIS_GOOGLE_CLIENT_SECRET`. Die
-  Release-Action reicht sie an den Build weiter.
-- **Lokal:** Datei `.env.google` im Projektordner (wird nicht eingecheckt):
+Am einfachsten mit dem Einrichtungsskript, einmal im Projektordner:
 
-  ```
-  JARVIS_GOOGLE_CLIENT_ID=123-abc.apps.googleusercontent.com
-  JARVIS_GOOGLE_CLIENT_SECRET=GOCSPX-…
-  ```
+```
+npm run google:setup -- "C:\Pfad\zu\client_secret_….json"
+```
 
-  Danach `npm run dist`.
+Die JSON-Datei bietet die Cloud Console beim Anlegen des Desktop-Clients zum
+Herunterladen an. Ohne Datei (`npm run google:setup`) fragt das Skript nach
+Client-ID und Clientschlüssel; die Eingabe bleibt unsichtbar.
 
-Google behandelt den Schlüssel eines Desktop-Clients nicht als geheim; die
-Anmeldung ist über PKCE und `state` abgesichert. Er gehört trotzdem nicht ins
-öffentliche Repo.
+Das Skript
+
+- schreibt `.env.google` (über `.env.*` in .gitignore ausgeschlossen, kommt
+  nicht in den Installer),
+- setzt auf Nachfrage die GitHub-Secrets `JARVIS_GOOGLE_CLIENT_ID` und
+  `JARVIS_GOOGLE_CLIENT_SECRET` in `Nivarro-boop/James-Jarvis`, damit auch die
+  Release-Action den Zugang mitbaut,
+- gibt keinen der Werte aus.
+
+Danach `npm run dist`. Kein Nutzer muss mehr etwas eintragen; die Felder für
+einen eigenen Client verschwinden aus den Einstellungen.
+
+## Wer den Wert sehen kann
+
+- **Nicht im Repo:** weder im Quelltext noch in der Historie.
+- **Nicht in der Oberfläche, im Protokoll oder beim Sprachmodell:** Der Wert
+  verlässt den Hauptprozess nur in Richtung Google.
+- **Im Installer nur verschleiert** (`src/main/providers/googleSeal.ts`): pro
+  Build zufällig verwürfelt, ein Durchsuchen nach `googleusercontent.com`
+  findet nichts. `scripts/check-package.cjs` prüft das nach `npm run dist`.
+- **Grenze:** Eine Desktop-App muss den Client zum Anmelden selbst kennen. Wer
+  das Programm gezielt zerlegt, kann ihn herausholen — das gilt für jede
+  Desktop-App, auch für die großer Anbieter. Google rechnet damit und
+  behandelt den Schlüssel eines Desktop-Clients nicht als geheim; die
+  Anmeldung ist über PKCE und `state` abgesichert. Mehr als der Client-Name
+  „James-Jarvis“ lässt sich damit nicht missbrauchen: Ohne Anmeldung und
+  Zustimmung des jeweiligen Nutzers kommt niemand an dessen Daten.
 
 ## Grenzen, die nur Google aufheben kann
 

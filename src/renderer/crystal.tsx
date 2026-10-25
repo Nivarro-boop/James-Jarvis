@@ -1,6 +1,7 @@
 import { useEffect, useRef, type JSX } from 'react'
 import { createRoot } from 'react-dom/client'
 import { Home } from './home/Home'
+import { BrowserWorkspace } from './browser/BrowserWorkspace'
 import { listenForCameraRequests } from './camera/capture'
 import { JarvisController } from './live/controller'
 import { startCompanionBridge } from './live/companionBridge'
@@ -198,7 +199,7 @@ function App(): JSX.Element {
     }
   }, [])
 
-  return <Home />
+  return <BrowserWorkspace><Home /></BrowserWorkspace>
 }
 
 // Bewusst ohne StrictMode: der doppelte Effekt-Durchlauf im Entwicklungsmodus

@@ -11,6 +11,8 @@ import { contactTools } from '@main/tools/impl/contacts'
 import { fileTools } from '@main/tools/impl/files'
 import { gmailTools } from '@main/tools/impl/gmail'
 import { gmailWebTools } from '@main/tools/impl/gmailWeb'
+import { icloudTools } from '@main/tools/impl/icloud'
+import { browserTools } from '@main/tools/impl/browser'
 import { higgsfieldTools } from '@main/tools/impl/higgsfield'
 import { introspectionTools } from '@main/tools/impl/tokens'
 import { knowledgeTools } from '@main/tools/impl/knowledge'
@@ -67,6 +69,8 @@ const ALL_TOOLS: ToolDefinition[] = [
   ...fileTools,
   ...gmailTools,
   ...gmailWebTools,
+  ...icloudTools,
+  ...browserTools,
   ...higgsfieldTools,
   ...introspectionTools,
   ...knowledgeTools,

@@ -26,7 +26,7 @@ const healthToday = defineTool({
       return {
         verfügbar: false,
         hinweis:
-          'Noch keine Apple-Health-Daten. Sag dem Nutzer: In der James-App auf dem iPhone oben auf ' +
+          'Noch keine Apple-Health-Daten. Apple Health ist weder über iCloud.com noch über die Web-App zugänglich. Sag dem Nutzer: In der nativen James-App auf dem iPhone oben auf ' +
           '„Apple Health teilen" tippen und den Zugriff erlauben. Die Werte kommen dann bei jedem Öffnen der App.'
       }
     }

@@ -36,7 +36,9 @@ it('begrenzt ältere ChatGPT-Antworten und erhält vollständige aktuelle Dialog
   assert.equal(kept.at(-2)!.content, 'Frage 5')
   assert.match(String(kept.at(-1)!.content), /gekürzt/)
   assert.equal(String(history[1].content).length, 12000)
-  assert.equal(budgetConversation(history, false).length, 12)
+  const normal = budgetConversation(history, false)
+  assert.ok(JSON.stringify(normal).length < 20000)
+  assert.equal(normal.at(-2)!.content, 'Frage 5')
 })
 
 it('kürzt Bildverläufe paarweise und entfernt verwaiste Werkzeugantworten', () => {
@@ -65,7 +67,7 @@ it('sendet das aktuelle Bild über den normalen ChatGPT-Responses-Weg mit lokale
     write: false, format: 'cjs', platform: 'node', logLevel: 'silent', alias: { '@shared': resolve('src/shared') }, plugins: [{ name: 'auth-fixture', setup(b) {
       b.onResolve({ filter: /\/chatgptAuth$/ }, () => ({ path: 'auth', namespace: 'fixture' }))
       b.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents:
-        'export const CHATGPT_RESOURCE="https://test.invalid/v1";export const chatGptAccessToken=async()=>"test-access"'
+        'export const CHATGPT_RESOURCE="https://test.invalid/v1";export const chatGptAccessToken=async()=>"test-access";export const chatGptSessionGeneration=()=>0'
       }))
     } }] })
   let body: any

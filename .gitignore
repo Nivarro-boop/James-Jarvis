@@ -35,6 +35,9 @@ src/**/*.d.ts
 .env.*
 *.pem
 secrets.bin
+# Die von der Google Cloud Console heruntergeladene Client-Datei. Ihr Inhalt
+# gehört in .env.google (npm run google:setup), nicht in die Historie.
+client_secret*.json
 google-tokens.bin
 
 # Betriebssystem und Editor

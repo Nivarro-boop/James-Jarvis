@@ -10,6 +10,7 @@ it('verbindet automatische Erinnerungen mit Sprache und entfernt den Listener be
     'react/jsx-runtime': 'export const jsx=(type,props)=>typeof type==="function"?type(props):null; export const jsxs=jsx',
     'react-dom/client': 'export const createRoot=()=>({render(){}})',
     './home/Home': 'export const Home=()=>null',
+    './browser/BrowserWorkspace': 'export const BrowserWorkspace=({children})=>children',
     './camera/capture': 'export const listenForCameraRequests=()=>()=>{}',
     './live/controller': 'export class JarvisController {async init(){} async dispose(){} async speakPrompt(text){spoken.push(text)}}',
     './live/companionBridge': 'export const startCompanionBridge=()=>({stop(){}})',

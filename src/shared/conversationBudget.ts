@@ -60,7 +60,7 @@ export function budgetCompletedHistory<T extends { role: string; content?: unkno
     const group = groups[i]
     const size = JSON.stringify(group).length
     // Normal mode also cuts at whole question boundaries, never in the middle of a tool exchange.
-    if ((saver && chars + size > 6000) || count + group.length > 12) {
+    if (chars + size > (saver ? 6000 : 18000) || count + group.length > 12) {
       if (!kept.length) kept.push(compactLatest(group, saver ? 6000 : 18000))
       break
     }
@@ -93,12 +93,11 @@ export function budgetConversation(history: ChatGptItem[], saver: boolean): Chat
 }
 
 function trimConversation(history: ChatGptItem[], saver: boolean): ChatGptItem[] {
-  if (!saver) return trimToQuestion(history.slice(-12))
   const groups: ChatGptItem[][] = []
   for (const item of history) {
     if (item.role === 'user' || !groups.length) groups.push([])
     const content = typeof item.content === 'string' ? item.content : ''
-    groups.at(-1)!.push(item.role === 'assistant' && content.length > 2000
+    groups.at(-1)!.push(saver && item.role === 'assistant' && content.length > 2000
       ? { ...item, content: `${content.slice(0, 2000)}\n[Ältere Antwort gekürzt]` } : item)
   }
   const kept: ChatGptItem[][] = []
@@ -107,8 +106,8 @@ function trimConversation(history: ChatGptItem[], saver: boolean): ChatGptItem[]
   for (let i = groups.length - 1; i >= 0; i--) {
     const group = groups[i]
     const size = JSON.stringify(group).length
-    if (chars + size > 5500 || count + group.length > 12) {
-      if (!kept.length) kept.push(compactLatest(group as HistoryItem[], 5500))
+    if (chars + size > (saver ? 5500 : 18000) || count + group.length > 12) {
+      if (!kept.length) kept.push(compactLatest(group as HistoryItem[], saver ? 5500 : 18000))
       break
     }
     kept.unshift(group)
@@ -116,10 +115,4 @@ function trimConversation(history: ChatGptItem[], saver: boolean): ChatGptItem[]
     count += group.length
   }
   return kept.flat()
-}
-
-/** Ein abgeschnittener Verlauf soll mit einer Frage beginnen, nicht mitten in einer Antwort. */
-function trimToQuestion(items: ChatGptItem[]): ChatGptItem[] {
-  const start = items.findIndex((item) => item.role === 'user')
-  return start <= 0 ? items : items.slice(start)
 }

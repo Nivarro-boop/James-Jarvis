@@ -160,7 +160,7 @@ export class GeminiBrain implements Brain {
       : [{ text: input.text ?? '' }]
 
     const [basePrompt, tools] = await abortable(Promise.all([
-      window.jarvis.invoke('agent:systemPrompt', { query: input.text }),
+      window.jarvis.invoke('agent:systemPrompt', { query: input.text, historyProvided: this.history.length > 0 }),
       window.jarvis.invoke('agent:toolDeclarations')
     ]), requestSignal(hooks.signal))
     if (hooks.cancelled()) return false
@@ -405,7 +405,7 @@ export class OllamaBrain implements Brain {
     if (!text || hooks.cancelled()) return false
 
     const [basePrompt, tools] = await abortable(Promise.all([
-      window.jarvis.invoke('agent:systemPrompt', { query: input.text }),
+      window.jarvis.invoke('agent:systemPrompt', { query: input.text, historyProvided: this.history.length > 0 }),
       window.jarvis.invoke('agent:toolSchemas')
     ]), requestSignal(hooks.signal))
     if (hooks.cancelled()) return false
@@ -815,7 +815,7 @@ export class ChatGptBrain implements Brain {
     const text = (input.text ?? '').trim()
     if (!text || hooks.cancelled()) return false
 
-    const systemPrompt = withVoiceBudget(await abortable(window.jarvis.invoke('agent:systemPrompt', { query: input.text }), requestSignal(hooks.signal)), this.settings)
+    const systemPrompt = withVoiceBudget(await abortable(window.jarvis.invoke('agent:systemPrompt', { query: input.text, historyProvided: this.history.length > 0 }), requestSignal(hooks.signal)), this.settings)
     if (hooks.cancelled()) return false
     const items: ChatGptItem[] = [...budgetConversation(this.history, this.settings.tokenSaver.enabled), { role: 'user', content: text }]
     let spoke = false

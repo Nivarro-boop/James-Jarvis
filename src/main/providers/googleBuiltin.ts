@@ -10,34 +10,43 @@
  * Google behandelt das Geheimnis eines Desktop-Clients ausdrücklich nicht als
  * vertraulich — es steckt zwangsläufig in jeder ausgelieferten App. Die
  * Sicherheit der Anmeldung tragen PKCE und `state` in googleAuth.ts. Trotzdem
- * steht der Wert nicht im öffentlichen Repo: Er kommt beim Bauen aus
- * `JARVIS_GOOGLE_CLIENT_ID` / `JARVIS_GOOGLE_CLIENT_SECRET` (GitHub-Secret
- * oder lokale, nicht eingecheckte `.env.google`), siehe electron.vite.config.ts.
+ * steht der Wert weder im öffentlichen Repo noch lesbar im Installer: Er kommt
+ * beim Bauen aus `JARVIS_GOOGLE_CLIENT_ID` / `JARVIS_GOOGLE_CLIENT_SECRET`
+ * (GitHub-Secret oder lokale, nicht eingecheckte `.env.google`, angelegt mit
+ * `npm run google:setup`) und wird verschleiert eingebettet, siehe
+ * googleSeal.ts und electron.vite.config.ts. In die Oberfläche, ins Protokoll
+ * oder an das Sprachmodell gelangt er nie.
  *
  * Ein selbst eingetragener Client in den Einstellungen hat weiterhin Vorrang.
  */
 
-declare const __JARVIS_GOOGLE_CLIENT_ID__: string | undefined
-declare const __JARVIS_GOOGLE_CLIENT_SECRET__: string | undefined
+import { openGoogleClient } from './googleSeal'
+
+declare const __JARVIS_GOOGLE_CLIENT__: string | undefined
 
 export interface GoogleClientPair {
   id: string
   secret: string
 }
 
-function baked(name: 'id' | 'secret'): string {
+function baked(): GoogleClientPair | null {
   // `typeof` statt direktem Zugriff: In den Tests ersetzt esbuild die
-  // Konstanten nicht, und ein nackter Zugriff wäre dort ein ReferenceError.
-  if (name === 'id') return typeof __JARVIS_GOOGLE_CLIENT_ID__ === 'string' ? __JARVIS_GOOGLE_CLIENT_ID__ : ''
-  return typeof __JARVIS_GOOGLE_CLIENT_SECRET__ === 'string' ? __JARVIS_GOOGLE_CLIENT_SECRET__ : ''
+  // Konstante nicht, und ein nackter Zugriff wäre dort ein ReferenceError.
+  return openGoogleClient(typeof __JARVIS_GOOGLE_CLIENT__ === 'string' ? __JARVIS_GOOGLE_CLIENT__ : '')
 }
 
 /** Der mitgelieferte Client, oder `null`, wenn dieser Build keinen hat. */
 export function builtinGoogleClient(): GoogleClientPair | null {
-  const id = (process.env.JARVIS_GOOGLE_CLIENT_ID?.trim() || baked('id')).trim()
-  const secret = (process.env.JARVIS_GOOGLE_CLIENT_SECRET?.trim() || baked('secret')).trim()
-  // Nur echte Google-Client-IDs. Ein Tippfehler im Build soll nicht als
-  // „eingerichtet" gelten und dann erst bei Google scheitern.
-  if (!/^[\w-]+\.apps\.googleusercontent\.com$/.test(id) || !secret) return null
-  return { id, secret }
+  const fromBuild = baked()
+  const id = (process.env.JARVIS_GOOGLE_CLIENT_ID?.trim() || fromBuild?.id || '').trim()
+  const secret = (process.env.JARVIS_GOOGLE_CLIENT_SECRET?.trim() || fromBuild?.secret || '').trim()
+  return isGoogleClient(id, secret) ? { id, secret } : null
+}
+
+/**
+ * Nur echte Google-Client-IDs. Ein Tippfehler im Build soll nicht als
+ * „eingerichtet" gelten und dann erst bei Google scheitern.
+ */
+export function isGoogleClient(id: string, secret: string): boolean {
+  return /^[\w-]+\.apps\.googleusercontent\.com$/.test(id) && Boolean(secret)
 }

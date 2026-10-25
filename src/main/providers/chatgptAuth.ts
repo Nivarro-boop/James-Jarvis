@@ -103,6 +103,8 @@ export function chatGptStatus(): ChatGptStatus {
 }
 
 let sessionGeneration = 0
+/** Invalidates account-specific reads without exposing credentials. */
+export function chatGptSessionGeneration(): number { return sessionGeneration }
 let connecting: Promise<{ email?: string }> | null = null
 let pendingSignIn: AbortController | null = null
 let refreshing: Promise<string> | null = null

@@ -2,6 +2,9 @@ import type { WebsiteAccountInfo, WebsiteAccountInput } from './websiteAccounts'
 import type { WorkingContext } from './workingContext'
 import type { SkillProposal } from './skillProposal'
 import type { BrainGraph, Widget } from './brain'
+import type { BrowserBounds, BrowserPanelState } from './browser'
+import type { ICloudCheck, ICloudService, ICloudStatus } from './icloud'
+import type { VoicePreviewRequest, VoicePreviewResult } from './voiceGallery'
 /**
  * Typisierter IPC-Vertrag.
  *
@@ -273,10 +276,25 @@ export interface IpcInvokeMap {
   'connect:status': { req: { start?: boolean } | void; res: ConnectionStatus[] }
   /** Macht den James-Browser auf einer Anmeldeseite sichtbar. */
   'connect:login': {
-    req: { target: 'gmail' | 'yahoo' | 'amazon' | 'whatsapp' }
+    req: { target: 'gmail' | 'yahoo' | 'amazon' | 'whatsapp' | 'icloud' }
     res: { ok: boolean; error?: string }
   }
 
+  /** iCloud: Status, direkte Mail-/Kalender-Anmeldung per app-spezifischem Passwort, Browser-Abmeldung. */
+  'icloud:status': { req: void; res: ICloudStatus }
+  'icloud:save': { req: { address: string; password: string }; res: ICloudStatus }
+  'icloud:check': { req: void; res: ICloudCheck }
+  'icloud:forget': { req: void; res: ICloudStatus }
+  'icloud:signOutWeb': { req: void; res: ICloudStatus }
+  'icloud:open': { req: { service: ICloudService }; res: { ok: boolean; error?: string } }
+  'icloud:openDrive': { req: void; res: { ok: boolean; error?: string } }
+  /** Hörprobe einer Galerie-Stimme, ohne die Einstellungen zu ändern. */
+  'voice:preview': { req: VoicePreviewRequest; res: VoicePreviewResult }
+
+  'browser:open': { req: { url?: string }; res: BrowserPanelState }
+  'browser:status': { req: void; res: BrowserPanelState }
+  'browser:bounds': { req: BrowserBounds | null; res: void }
+  'browser:action': { req: { action: 'hide' | 'show' | 'select' | 'close' | 'navigate' | 'back' | 'forward' | 'reload' | 'stop'; id?: string; url?: string }; res: BrowserPanelState }
   'app:openSettings': { req: { section?: string } | void; res: void }
   'app:quit': { req: void; res: void }
   /**
@@ -314,7 +332,7 @@ export interface IpcInvokeMap {
    */
   'app:pauseGet': { req: void; res: PauseState }
   /** Zieht die System-Prompt-Bausteine inkl. abgerufener Erinnerungen. */
-  'agent:systemPrompt': { req: { query?: string } | void; res: string }
+  'agent:systemPrompt': { req: { query?: string; historyProvided?: boolean } | void; res: string }
   /** Verfügbare Tools als Gemini-functionDeclarations für den Live-Socket. */
   'agent:toolDeclarations': { req: void; res: unknown[] }
   /**
@@ -527,6 +545,7 @@ export interface IpcInvokeMap {
 
 /** Main → Renderer, ohne Antwort. */
 export interface IpcEventMap {
+  'browser:state': BrowserPanelState
   'state:set': { state: CrystalState; reason?: string }
   /** Die Kacheln auf der Startseite haben sich geändert. */
   'brain:widgets': Widget[]
@@ -681,6 +700,18 @@ export const IPC_INVOKE_CHANNELS = [
   'telephony:incoming',
   'connect:status',
   'connect:login',
+  'icloud:status',
+  'icloud:save',
+  'icloud:check',
+  'icloud:forget',
+  'icloud:signOutWeb',
+  'icloud:open',
+  'icloud:openDrive',
+  'voice:preview',
+  'browser:open',
+  'browser:status',
+  'browser:bounds',
+  'browser:action',
   'companion:status',
   'companion:rotateToken',
   'companion:hostKey',
@@ -767,6 +798,7 @@ export const IPC_INVOKE_CHANNELS = [
 ] as const satisfies readonly IpcInvokeChannel[]
 
 export const IPC_EVENT_CHANNELS = [
+  'browser:state',
   'state:set',
   'brain:widgets',
   'confirm:request',

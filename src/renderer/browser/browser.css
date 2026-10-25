@@ -1,0 +1,54 @@
+.james-workspace { display: flex; width: 100%; height: 100dvh; overflow: hidden; background: #101718; }
+.james-conversation { flex: 1; min-width: 0; height: 100%; }
+.browser-is-open .james-conversation { flex: 0 0 43%; }
+.browser-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #141a1c; color: #e6eeec; border-left: 1px solid #3b4949; font-family: var(--font-body, sans-serif); }
+.browser-panel button, .browser-panel input { font: inherit; }
+.browser-panel button { cursor: pointer; color: inherit; }
+.browser-panel button:disabled { opacity: .35; cursor: default; }
+.browser-panel button:focus-visible, .browser-panel input:focus-visible { outline: 2px solid #a8e3d0; outline-offset: -2px; }
+.browser-tabbar { display: flex; align-items: center; gap: 4px; padding: 10px 8px 5px; min-height: 49px; }
+.browser-tabs { flex: 1; min-width: 0; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
+.browser-tab { display: flex; flex: 0 1 190px; min-width: 100px; border: 1px solid transparent; border-radius: 9px; }
+.browser-tab.selected { background: #293335; border-color: #435253; }
+.browser-tab button { border: 0; background: transparent; padding: 8px; font-size: 12px; }
+.browser-tab button[role=tab] { display: flex; gap: 8px; flex: 1; min-width: 0; align-items: center; }
+.browser-tab span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.browser-icon { flex: none; width: 32px; height: 32px; border: 0; background: transparent; border-radius: 8px; font-size: 19px !important; }
+.browser-icon:hover:not(:disabled), .browser-tab button:hover { background: #354243; }
+.browser-toolbar { display: flex; gap: 3px; padding: 6px 10px 9px; align-items: center; }
+.browser-toolbar input { flex: 1; min-width: 0; height: 36px; border: 1px solid #3b4b4c; border-radius: 20px; padding: 0 14px; color: #e6eeec; background: #222d2f; font-size: 12px; }
+.browser-go { border: 0; border-radius: 8px; background: #253b36; width: 32px; height: 32px; }
+.browser-bookmarks { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 12px 10px; border-bottom: 1px solid #334142; }
+.browser-bookmarks button { border: 0; border-radius: 5px; background: transparent; font-size: 11px; color: #b6ccc6; padding: 5px 7px; }
+.browser-bookmarks button:hover { background: #2a3938; }
+.browser-viewport { flex: 1; min-height: 0; position: relative; overflow: auto; background: #11191c; }
+.browser-start { max-width: 650px; margin: auto; padding: clamp(24px, 4vw, 54px) 28px; }
+.browser-eyebrow { color: #a8e3d0; letter-spacing: 2px; font-size: 9px; }
+.browser-start h2 { font-size: clamp(25px, 3vw, 40px); line-height: 1.15; letter-spacing: -1.5px; font-weight: 500; margin: 15px 0; }
+.browser-start p { color: #a6bab5; font-size: 13px; line-height: 1.7; }
+.browser-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 28px 0; }
+.browser-shortcuts button { display: flex; flex-direction: column; text-align: left; border: 1px solid #384c4c; border-radius: 16px; padding: 20px; gap: 8px; background: linear-gradient(145deg,#233c3d,#182527); }
+.browser-shortcuts button:hover { border-color: #9acdbb; background: #294744; }
+.browser-service-icon { font-size: 25px; color: #b6efda; margin-bottom: 8px; }
+.browser-shortcuts strong { font-size: 14px; }
+.browser-shortcuts small { color: #a0b8b1; font-size: 11px; }
+.browser-start .browser-footnote { font-size: 11px; color: #91a9a3; }
+.browser-error { margin: 0; padding: 10px 14px; color: #ffd3b9; background: #483126; font-size: 12px; }
+.browser-status { display: flex; justify-content: space-between; padding: 7px 12px; border-top: 1px solid #334142; color: #9db4ad; font-size: 10px; }
+.browser-wait { padding: 24px; color: #b6ccc6; }
+.browser-is-open .home-bar { flex-wrap: wrap; gap: 8px; }
+.browser-is-open .home-actions { flex-wrap: wrap; }
+.browser-is-open .james-ui.home .home-stage .orb { width: clamp(130px, 23vh, 240px); }
+.browser-is-open .james-ui.home .home-stage h1 { font-size: 28px; }
+.browser-is-open .james-ui.home .home-dock { padding: 10px 20px 16px; }
+.browser-is-open .top-clock, .browser-is-open .home-health, .browser-is-open .top-pill { display: none; }
+.browser-launch { border: 1px solid #4b6460; border-radius: 9px; padding: 8px 11px; background: #203532; color: #cce9dd; font: inherit; font-size: 12px; cursor: pointer; }
+@media (max-width: 760px) { .browser-is-open .james-conversation { display: none; } .browser-panel { border-left: 0; } .browser-status span { display: none; } }
+
+/* Movable handoff window; opening it never exposes the conversation composer. */
+.james-workspace { position: relative; }
+.browser-is-open .james-conversation { flex: 1; display: block; }
+.browser-panel { position: absolute; z-index: 30; width: min(780px, calc(100vw - 24px)); height: min(740px, calc(100dvh - 96px)); min-height: 220px; border: 1px solid #4b6460; border-radius: 14px; overflow: hidden; box-shadow: 0 18px 70px #0009; }
+.browser-drag-handle { display: flex; align-items: center; gap: 10px; flex: none; width: 100%; padding: 12px 16px; border: 0; border-bottom: 1px solid #334142; background: #20312e; cursor: grab !important; touch-action: none; user-select: none; }
+.browser-drag-handle:active { cursor: grabbing !important; }
+.browser-drag-handle small { margin-left: auto; font-size: 10px; color: #a6bab5; }

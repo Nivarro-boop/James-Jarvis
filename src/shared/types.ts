@@ -206,6 +206,12 @@ export interface SpeechSettings {
   /** Stimme der OpenAI-Realtime-API, z. B. `marin` oder `cedar`. */
   realtimeVoice: string
   /**
+   * Die zuletzt in der Stimmen-Galerie gewählte Stimme (`voiceGallery.ts`).
+   * Leer heißt: keine Galerie-Stimme. Solange sie gilt, bittet der Systemtext
+   * um eine klare, ruhige Sprechweise.
+   */
+  voicePreset: string
+  /**
    * Wer zuhört, also den Ton in Wortlaut übersetzt.
    *
    * Der Schalter, der aus „lokal" endlich lokal macht. Solange die Abschrift
@@ -1307,6 +1313,15 @@ export type SecretKey =
    * nicht im Klartext in den Einstellungen.
    */
   | 'calendarIcsUrl'
+  /** iCloud-Mailadresse für IMAP, SMTP und CalDAV. Kein Geheimnis, gehört aber zum Passwort. */
+  | 'icloudMailAddress'
+  /**
+   * App-spezifisches Passwort von account.apple.com (`abcd-efgh-ijkl-mnop`).
+   *
+   * Nie das Apple-Account-Passwort: Das nimmt Apples Mailserver ohnehin nicht
+   * an, und dieses lässt sich einzeln widerrufen.
+   */
+  | 'icloudAppPassword'
 
 export interface SecretStatus {
   key: SecretKey
@@ -1806,6 +1821,7 @@ export interface TokenReport {
   /** Grobe Ersparnis in Dollar, heute. */
   todayUsd: number
   usage?: { calls: number; knownCalls: number; totalTokens: number | null; cachedTokens?: number | null;
+    inputTokens?: number | null; outputTokens?: number | null; reasoningTokens?: number | null;
     last: { model: string; total: number | null; input: number | null; output: number | null; cached?: number | null; ms: number; firstMs: number | null } | null }
 }
 

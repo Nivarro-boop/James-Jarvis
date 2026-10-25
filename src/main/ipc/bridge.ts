@@ -123,7 +123,11 @@ import {
 } from '../providers/piper'
 import { installLocalAsset, localAssets } from '../local/assets'
 import { createSettingsWindow } from '../windows/settings'
-import { getCrystalWindow, setAlwaysOnTop } from '../windows/crystal'
+import { createCrystalWindow, getCrystalWindow, setAlwaysOnTop } from '../windows/crystal'
+import { browserAction, browserCookies, browserState, clearBrowserSite, openBrowser, setBrowserBounds } from '../browser/panel'
+import { forgetICloudCache, iCloudCheck, iCloudCredentials, iCloudDrivePath } from '../providers/icloud'
+import { voicePreview } from '../providers/voicePreview'
+import { ICLOUD_SERVICES, ICLOUD_SERVICE_IDS, hasICloudAuthCookie, isICloudServiceUrl, normalizeAppPassword, normalizeICloudAddress, type ICloudStatus } from '@shared/icloud'
 import { broadcast, sendToCrystal, speak } from './emit'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve as resolvePath, sep as pathSep } from 'node:path'
@@ -154,7 +158,7 @@ function trustedSender(event: IpcMainInvokeEvent): boolean {
   // zugesagt — und wenn nicht, stünde hier jeder Kanal still.
   const main = event.sender.mainFrame
   if (!frame || frame.processId !== main.processId || frame.routingId !== main.routingId) return false
-  return BrowserWindow.fromWebContents(event.sender) !== null
+  return [getCrystalWindow(), getSettingsWindow()].some(window => window && !window.isDestroyed() && window.webContents.id === event.sender.id)
 }
 
 function handle<C extends keyof IpcInvokeMap>(channel: C, fn: Handler<C>): void {
@@ -440,7 +444,7 @@ export function registerIpcHandlers(version: string): void {
   handle('tools:cancel', ({ id }) => cancelToolCall(id))
 
   // ── Agent ──────────────────────────────────────────────────
-  handle('agent:systemPrompt', (payload) => buildSystemPrompt({ query: typeof payload?.query === 'string' ? payload.query.slice(0, 2000) : undefined, desktopContext: true }))
+  handle('agent:systemPrompt', (payload) => buildSystemPrompt({ query: typeof payload?.query === 'string' ? payload.query.slice(0, 2000) : undefined, desktopContext: true, historyProvided: payload?.historyProvided === true }))
   handle('agent:toolDeclarations', () =>
     geminiToolDeclarations((name) => permissionFor(name) === 'ask')
   )
@@ -579,21 +583,87 @@ export function registerIpcHandlers(version: string): void {
   // "weiß ich nicht, er läuft ja nicht" wäre genau die Auskunft, wegen der
   // es diese Seite gibt.
   handle('connect:status', (req) => checkConnections(req?.start ?? true))
+  handle('browser:status', () => browserState())
+  handle('browser:open', (req) => { createCrystalWindow(); return openBrowser(req?.url) })
+  handle('browser:bounds', (req) => setBrowserBounds(req))
+  handle('browser:action', (req) => browserAction(req?.action, req?.id, req?.url))
   handle('connect:login', async ({ target }) => {
     const LOGIN_PAGES = {
       gmail: 'https://mail.google.com/mail/u/0/#inbox',
+      icloud: 'https://www.icloud.com/',
       yahoo: 'https://login.yahoo.com/',
       amazon: 'https://www.amazon.de/gp/cart/view.html',
       whatsapp: 'https://web.whatsapp.com/'
     } as const
 
     try {
+      if (target === 'icloud') {
+        createCrystalWindow()
+        openBrowser(LOGIN_PAGES.icloud, true)
+        return { ok: true }
+      }
       await openForLogin(LOGIN_PAGES[target] ?? LOGIN_PAGES.gmail)
       return { ok: true }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
     }
   })
+
+  // ── iCloud ─────────────────────────────────────────────────
+  const icloudStatus = async (): Promise<ICloudStatus> => {
+    const cookies = await browserCookies('icloud.com').catch(() => [])
+    const credentials = iCloudCredentials()
+    return {
+      web: hasICloudAuthCookie(cookies),
+      mailAddress: credentials?.address ?? normalizeICloudAddress(getSecret('icloudMailAddress') ?? ''),
+      mailConfigured: credentials !== null,
+      drivePath: iCloudDrivePath()
+    }
+  }
+  handle('icloud:status', () => icloudStatus())
+  handle('icloud:save', async ({ address, password }) => {
+    const cleanAddress = normalizeICloudAddress(String(address ?? ''))
+    if (!cleanAddress) throw new Error('Bitte die iCloud-Mailadresse eintragen, z. B. name@icloud.com.')
+    const cleanPassword = normalizeAppPassword(String(password ?? ''))
+    if (!cleanPassword) {
+      throw new Error('Das ist kein app-spezifisches Passwort. Es hat 16 Buchstaben im Format abcd-efgh-ijkl-mnop und wird unter account.apple.com → Anmeldung und Sicherheit erstellt.')
+    }
+    setSecret('icloudMailAddress', cleanAddress)
+    setSecret('icloudAppPassword', cleanPassword)
+    forgetICloudCache()
+    refreshTools()
+    return icloudStatus()
+  })
+  handle('icloud:check', () => iCloudCheck())
+  handle('icloud:forget', async () => {
+    clearSecret('icloudAppPassword')
+    forgetICloudCache()
+    refreshTools()
+    return icloudStatus()
+  })
+  handle('icloud:signOutWeb', async () => {
+    await clearBrowserSite(['icloud.com', 'apple.com'])
+    return icloudStatus()
+  })
+  handle('icloud:open', async ({ service }) => {
+    if (!ICLOUD_SERVICE_IDS.includes(service)) return { ok: false, error: 'Unbekannter iCloud-Dienst.' }
+    try {
+      createCrystalWindow()
+      const existing = browserState().tabs.find((tab) => isICloudServiceUrl(tab.url, service))
+      if (existing) { browserAction('select', existing.id); browserAction('show') }
+      else openBrowser(ICLOUD_SERVICES[service], true)
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
+  })
+  handle('icloud:openDrive', async () => {
+    const path = iCloudDrivePath()
+    if (!path) return { ok: false, error: 'Kein iCloud-Drive-Ordner gefunden. „iCloud für Windows“ aus dem Microsoft Store installieren und anmelden.' }
+    const error = await shell.openPath(path)
+    return error ? { ok: false, error } : { ok: true }
+  })
+  handle('voice:preview', (request) => voicePreview(request))
 
   // ── Telefon ────────────────────────────────────────────────
   handle('companion:status', () => companionStatus())

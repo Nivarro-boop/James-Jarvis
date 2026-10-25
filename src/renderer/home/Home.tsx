@@ -238,8 +238,10 @@ export function Home(): JSX.Element {
   const [composerOpen, setComposerOpen] = useState(false)
   useEffect(() => {
     const toggle = (): void => setComposerOpen(value => !value)
+    const show = (): void => setComposerOpen(true)
     window.addEventListener('jarvis:conversation', toggle)
-    return () => window.removeEventListener('jarvis:conversation', toggle)
+    window.addEventListener('jarvis:showConversation', show)
+    return () => { window.removeEventListener('jarvis:conversation', toggle); window.removeEventListener('jarvis:showConversation', show) }
   }, [])
   const [hasVoiceAccess, setHasVoiceAccess] = useState(true)
   const [wakePhrase, setWakePhrase] = useState('Hey James')
@@ -343,6 +345,7 @@ export function Home(): JSX.Element {
             onClick={() => openSettings('diagnose')}><i aria-hidden="true" />{healthLine}</button>
           <ConnectionPill ready={hasVoiceAccess} />
           <Clock />
+          <button className="browser-launch" onClick={() => { void window.jarvis.invoke('browser:action', { action: 'show' }).catch(() => useCrystal.getState().setError('Browser konnte nicht geöffnet werden.')) }}>Browser</button>
           <MainMenu onBrain={() => setBrainOpen(true)} />
         </div>
       </header>

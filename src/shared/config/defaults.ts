@@ -78,6 +78,7 @@ export const DEFAULT_SETTINGS: Settings = {
     elevenPlan: 'saving',
     realtimeModel: 'gpt-realtime',
     realtimeVoice: 'marin',
+    voicePreset: '',
     // Ein Sprachassistent soll lebendig klingen, aber nicht schwanken. Etwas
     // unter der Mitte ist der Punkt, an dem Betonung entsteht, ohne dass zwei
     // Sätze hintereinander verschieden klingen.

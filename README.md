@@ -1,5 +1,9 @@
 # James-Jarvis
 
+Lokale Version **1.3.22**: integrierter Browser rechts neben dem Gespräch,
+Tabs und gespeicherte Anmeldungen, iCloud Mail/Kalender/Drive/Fotos direkt in James.
+[Prüfungen und verbleibende Konto-/Health-Schritte](docs/Integrierter-Browser-1.3.22.md).
+
 Update **1.3.11**: großer Orb, kompakte Einstellungen, iPhone-QR-Kopplung und
 Remote-Play-Rückweg für ChatGPT. Native Apple-Watch-Erweiterung implementiert;
 Apple-Build und Gerätetests stehen noch aus.

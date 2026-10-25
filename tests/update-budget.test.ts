@@ -21,6 +21,12 @@ it('unterscheidet unbekannten Verbrauch von tatsächlich gemeldeten null Token',
   recordModelUsage('test', { total_tokens: 0, input_tokens: 0, output_tokens: 0 }, 200, 20)
   assert.equal(modelUsageReport().totalTokens, 0)
   assert.equal(modelUsageReport().knownCalls, 1)
+  recordModelUsage('test', { total_tokens: 130, input_tokens: 100, output_tokens: 30,
+    input_tokens_details: { cached_tokens: 80 }, output_tokens_details: { reasoning_tokens: 10 } }, 200, 20)
+  assert.equal(modelUsageReport().inputTokens, 100)
+  assert.equal(modelUsageReport().outputTokens, 30)
+  assert.equal(modelUsageReport().cachedTokens, 80)
+  assert.equal(modelUsageReport().reasoningTokens, 10)
   for (let i = 0; i < 110; i++) recordModelUsage('test', undefined, 100, null)
   assert.equal(modelUsageReport().calls, 100)
 })

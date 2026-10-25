@@ -45,6 +45,8 @@ import { brainTools } from './impl/brain'
 import { googleWorkspaceTools } from './impl/googleWorkspace'
 import { studyTools } from './impl/study'
 import { healthTools } from './impl/health'
+import { icloudTools } from './impl/icloud'
+import { browserTools } from './impl/browser'
 import { foodTools } from './impl/food'
 
 /**
@@ -68,6 +70,8 @@ export function registerAllTools(): void {
     ...toolSearchTools,
     ...brainTools,
     ...googleWorkspaceTools,
+    ...icloudTools,
+    ...browserTools,
     ...studyTools,
     ...selfConfigTools,
     ...linphoneTools,

@@ -21,5 +21,3 @@ Vor Veröffentlichung: Typecheck, Gesamttests und Desktop-Oberflächenprüfung.
 GitHub prüft den Pull Request erneut und erstellt nach dem Merge das öffentliche
 Windows-Update. Die Release-Action addiert ihre Laufnummer zur Basisversion;
 daher ist die veröffentlichte Versionsnummer höher als 1.3.12.
-
-[Neue Orb-Ansicht](screenshots/update-1.3.12/desktop.png).

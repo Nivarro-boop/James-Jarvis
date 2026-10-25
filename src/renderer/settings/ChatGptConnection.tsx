@@ -1,4 +1,4 @@
-import { useEffect, useState, type JSX } from 'react'
+import { useEffect, useRef, useState, type JSX } from 'react'
 import { CHATGPT_USAGE_URL, type ChatGptModel, type ChatGptStatus } from '@shared/chatgpt'
 import { ChoiceCards } from './ChoiceCards'
 
@@ -27,6 +27,8 @@ export function ChatGptConnection({ onChange, model, onModelChange }: Props): JS
   const [pending, setPending] = useState<{ url: string; browserError?: string } | null>(null)
   const [callback, setCallback] = useState('')
   const [callbackBusy, setCallbackBusy] = useState(false)
+  const operation = useRef(false)
+  const refreshVersion = useRef(0)
   useEffect(() => {
     if (!signingIn) { setPending(null); setCallback(''); return }
     let alive = true
@@ -37,20 +39,34 @@ export function ChatGptConnection({ onChange, model, onModelChange }: Props): JS
   }, [signingIn])
 
   const refresh = async (): Promise<void> => {
+    const version = ++refreshVersion.current
     const status = await window.jarvis.invoke('chatgpt:status')
+    if (version !== refreshVersion.current) return
     setState(status)
     onChange?.(status.connected)
-    setModels([])
+    if (!status.connected) setModels([])
     if (status.connected) {
       const available = await window.jarvis.invoke('chatgpt:models')
+      if (version !== refreshVersion.current) return
       setModels(available)
       if (!model && available.length && onModelChange) await onModelChange('auto')
       if (!available.length) setError('Das Konto liefert keine verfügbaren Modelle. Prüfe die Freigabe und lade die Modelle erneut.')
     }
   }
-  useEffect(() => { void refresh().catch((e) => setError(String(e))) }, [])
+  const reload = async (): Promise<void> => {
+    if (operation.current) return
+    operation.current = true
+    setBusy(true); setError('')
+    try { await refresh() }
+    catch (e) { setError(e instanceof Error ? e.message : String(e)) }
+    finally { operation.current = false; setBusy(false) }
+  }
+  useEffect(() => { void reload() }, [])
 
   const connect = async (): Promise<void> => {
+    if (operation.current) return
+    operation.current = true
+    ++refreshVersion.current
     setBusy(true)
     setSigningIn(true)
     setError('')
@@ -59,14 +75,17 @@ export function ChatGptConnection({ onChange, model, onModelChange }: Props): JS
       if (!result.ok) throw new Error(result.error ?? 'Die Anmeldung ist fehlgeschlagen.')
       await refresh()
     } catch (e) { setError(e instanceof Error ? e.message : 'Die Anmeldung ist fehlgeschlagen.') }
-    finally { setBusy(false); setSigningIn(false) }
+    finally { operation.current = false; setBusy(false); setSigningIn(false) }
   }
   const disconnect = async (): Promise<void> => {
+    if (operation.current) return
+    operation.current = true
+    ++refreshVersion.current
     setBusy(true)
     setError('')
     try { await window.jarvis.invoke('chatgpt:disconnect'); await refresh() }
     catch (e) { setError(e instanceof Error ? e.message : 'Abmelden fehlgeschlagen.') }
-    finally { setBusy(false) }
+    finally { operation.current = false; setBusy(false) }
   }
 
   const modelName = !model || model === 'auto' ? 'Automatisch (empfohlen)' : models.find((m) => m.id === model)?.name ?? model
@@ -94,7 +113,7 @@ export function ChatGptConnection({ onChange, model, onModelChange }: Props): JS
             onChange={(id) => { void onModelChange(id).catch((err) => setError(String(err))) }}
           />}
           <button type="button" disabled={busy} onClick={() => void connect()}>Neu anmelden</button>{' '}
-          <button type="button" disabled={busy} onClick={() => { void refresh().catch((e) => setError(String(e))) }}>Modelle neu laden</button>
+          <button type="button" disabled={busy} onClick={() => { void reload() }}>Modelle neu laden</button>
           <p className="hint"><a href={CHATGPT_USAGE_URL} target="_blank" rel="noreferrer">Nutzung und Limits in ChatGPT</a> · Live-Sprache über die OpenAI API wird separat abgerechnet.</p>
         </details>
       </> : <>
@@ -103,7 +122,7 @@ export function ChatGptConnection({ onChange, model, onModelChange }: Props): JS
         </button>
         <p className="hint">{busy
           ? 'Im Browser hat sich ChatGPT geöffnet. Dort anmelden und auf „Zulassen“ drücken. Danach hierher zurückkommen.'
-          : 'Ein Klick öffnet ChatGPT in deinem Browser. Kein API-Schlüssel, keine Zusatzkosten — es zählt dein bestehendes Abo.'}</p>
+          : 'Ein Klick öffnet ChatGPT in deinem Browser. Du nutzt das freigegebene Kontingent deines Abos. Einen API-Schlüssel musst du dafür nicht eingeben.'}</p>
       </>}
     {signingIn && <button type="button" onClick={() => {
       void window.jarvis.invoke('chatgpt:cancelSignIn').catch((e) => setError(String(e)))
@@ -122,9 +141,6 @@ export function ChatGptConnection({ onChange, model, onModelChange }: Props): JS
           .catch(err => setError(err instanceof Error ? err.message : String(err))).finally(() => setCallbackBusy(false))
       }}>Anmeldung abschließen</button>
     </details>}
-    {error && <><p className="hint err" role="alert">{error}</p><button type="button" disabled={busy} onClick={() => {
-      setBusy(true); setError('')
-      void refresh().catch(e => setError(e instanceof Error ? e.message : String(e))).finally(() => setBusy(false))
-    }}>Erneut versuchen</button></>}
+    {error && <><p className="hint err" role="alert">{error}</p><button type="button" disabled={busy} onClick={() => { void reload() }}>Erneut versuchen</button></>}
   </div>
 }

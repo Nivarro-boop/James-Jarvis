@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { defineConfig, externalizeDepsPlugin } from 'electron-vite'
 import react from '@vitejs/plugin-react'
+import { sealGoogleClient } from './src/main/providers/googleSeal'
 
 /**
  * Minifiziert wird überall, und zwar mit erhaltenen Namen.
@@ -29,7 +30,10 @@ const minified = {
  * aus einer lokalen `.env.google` mit Zeilen `NAME=wert`. Die Datei ist über
  * `.env.*` in .gitignore ausgeschlossen. Fehlt beides, baut der Build ohne
  * eingebauten Zugang, und die Einstellungen fragen wie bisher nach einem
- * eigenen Client.
+ * eigenen Client. Angelegt wird die Datei mit `npm run google:setup`.
+ *
+ * Eingebettet wird das Paar nur verschleiert (googleSeal.ts), damit es im
+ * Installer nicht als lesbarer Text steht.
  */
 function googleClientEnv(): Record<string, string> {
   const values: Record<string, string> = {}
@@ -48,13 +52,16 @@ function googleClientEnv(): Record<string, string> {
 }
 
 const googleEnv = googleClientEnv()
+const googleSealed =
+  googleEnv.JARVIS_GOOGLE_CLIENT_ID && googleEnv.JARVIS_GOOGLE_CLIENT_SECRET
+    ? sealGoogleClient({ id: googleEnv.JARVIS_GOOGLE_CLIENT_ID, secret: googleEnv.JARVIS_GOOGLE_CLIENT_SECRET })
+    : ''
 
 export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     define: {
-      __JARVIS_GOOGLE_CLIENT_ID__: JSON.stringify(googleEnv.JARVIS_GOOGLE_CLIENT_ID ?? ''),
-      __JARVIS_GOOGLE_CLIENT_SECRET__: JSON.stringify(googleEnv.JARVIS_GOOGLE_CLIENT_SECRET ?? '')
+      __JARVIS_GOOGLE_CLIENT__: JSON.stringify(googleSealed)
     },
     build: {
       minify: minified.minify,

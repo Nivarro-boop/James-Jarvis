@@ -42,6 +42,8 @@ import { ChoiceCards } from './ChoiceCards'
 import { ChatGptConnection as ChatGptLogin } from './ChatGptConnection'
 import { ReminderPanel } from '../home/ReminderPanel'
 import { VoiceAccess } from './VoiceAccess'
+import { VoiceGallery } from './VoiceGallery'
+import { ICloudPanel } from './ICloudPanel'
 import { encodeQr, qrToSvgPath } from '@shared/qr'
 import { listAudioDevices } from '../audio/capture'
 
@@ -152,11 +154,22 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
   /** Der Empfänger, wie er beim Betreten des Feldes galt — er entscheidet, ob die Zusage noch gilt. */
   const reportUrlAtFocus = useRef(settings.diagnosticReporting.url)
 
+  /**
+   * Ob dieser Build einen eigenen Google-Client mitbringt. Dann gibt es für
+   * niemanden etwas einzutragen, und die beiden Felder bleiben weg — es sei
+   * denn, jemand hat früher schon einen eigenen Client hinterlegt; der soll
+   * sich weiter löschen lassen.
+   */
+  const [googleBuiltin, setGoogleBuiltin] = useState(false)
+
   useEffect(() => {
     void window.jarvis.invoke('secrets:status').then(setStatus).catch(() => undefined)
+    void window.jarvis.invoke('google:status').then(s => setGoogleBuiltin(s.builtin)).catch(() => undefined)
   }, [])
 
   const present = (key: SecretKey): boolean => status.find((s) => s.key === key)?.present ?? false
+  const hiddenField = (key: SecretKey): boolean =>
+    googleBuiltin && (key === 'googleOAuthClientId' || key === 'googleOAuthClientSecret') && !present('googleOAuthClientId')
 
   /**
    * Speichern heißt beim Gemini-Schlüssel: erst ausprobieren.
@@ -279,6 +292,7 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
         <ChatGptLogin model={settings.chatGptModel} onModelChange={(id) => patch({ chatGptModel: id })} />
       </div>
       <GoogleConnect />
+      <div className="field"><ICloudPanel /></div>
       <details className="settings-fold">
         <summary>Andere Websites (z. B. Lieferando, Amazon): Konto für James speichern</summary>
         <WebsiteAccounts />
@@ -321,7 +335,7 @@ export function KeysSection({ settings, patch }: Props): JSX.Element {
       {renderFields(SECRET_FIELDS.filter(field => field.key === 'diagnosticReportToken'))}
       <hr className="section-divider" />
       <h3>Weitere Dienste und Schlüssel</h3>
-      {renderFields(SECRET_FIELDS.filter(field => field.key !== 'diagnosticReportToken'))}
+      {renderFields(SECRET_FIELDS.filter(field => field.key !== 'diagnosticReportToken' && !hiddenField(field.key)))}
 
       <hr className="section-divider" />
       <LinphoneSetup settings={settings} patch={patch} />
@@ -2153,8 +2167,11 @@ export function VoiceSection({ settings, patch }: Props): JSX.Element {
       <details className="settings-fold"><summary>Persönlichkeit anpassen</summary><PersonalityControls settings={settings} patch={patch} /></details>
 
       <hr className="section-divider" />
-      <h3 className="settings-step">2 · Wer spricht</h3>
+      <h3 className="settings-step">2 · Stimme wählen</h3>
+      <VoiceGallery settings={settings} patch={patch} present={present} />
+      <details className="settings-fold"><summary>Anbieter und Feineinstellung</summary>
       <ElevenVoicePicker settings={settings} patch={patch} />
+      </details>
 
       <hr className="section-divider" />
       <h3 className="settings-step">3 · Wer denkt – Cloud oder lokale Modelle</h3>
@@ -2917,10 +2934,12 @@ const SAVING_LABELS: Record<string, string> = {
 
 export function SaverSection({ settings, patch }: Props): JSX.Element {
   const [report, setReport] = useState<TokenReport | null>(null)
+  const [loadError, setLoadError] = useState('')
   const saver = settings.tokenSaver
 
   const load = (): void => {
-    void window.jarvis.invoke('tokens:get').then(setReport).catch(() => undefined)
+    void window.jarvis.invoke('tokens:get').then(value => { setReport(value); setLoadError('') })
+      .catch(() => setLoadError('Verbrauch konnte nicht geladen werden. Bitte erneut aktualisieren.'))
   }
 
   useEffect(load, [])
@@ -2928,6 +2947,7 @@ export function SaverSection({ settings, patch }: Props): JSX.Element {
   return (
     <>
       <h2>Sparmodus</h2>
+      <p className="hint">ChatGPT und lokale Textmodelle: Im Sparmodus bleiben bis zu rund 6.000 Zeichen Gesprächsverlauf erhalten; ein Auftrag hat höchstens vier Werkzeugrunden. Gekürzte Details müssen bei Bedarf erneut gelesen werden.</p>
       <p className="hint">OpenAI Realtime hält im Sparmodus höchstens 8.000 Gesprächstoken nach den Anweisungen vor und behält bei Kürzung 80 Prozent. Antworten sind auf 2.048 Ausgabetoken begrenzt. Ältere Gesprächsdetails können entfallen; für sehr ausführliche Antworten den Sparmodus ausschalten.</p>
       <div className="field">
         <label>
@@ -2937,9 +2957,8 @@ export function SaverSection({ settings, patch }: Props): JSX.Element {
         <div className="hint">Niedrige Prozesspriorität und Pause für automatische Lern- und Wartungsarbeiten. Nach dem Spielen wieder ausschalten.</div>
       </div>
       <p className="lede">
-        Die Rechnung entsteht an vier Stellen, und an allen vieren lässt sich etwas wegnehmen,
-        ohne dass James dümmer wird. Der größte Posten steht nicht hier, sondern unter „Zuhören":
-        die Trennung nach Stille und der lokale Sprachfilter.
+        Kürzere Werkzeugantworten, weniger Verlauf und wiederverwendete Leseergebnisse senken den Aufwand.
+        Auch unter „Zuhören“ helfen die Trennung nach Stille und der lokale Sprachfilter.
       </p>
 
       <div className="field">
@@ -2952,6 +2971,7 @@ export function SaverSection({ settings, patch }: Props): JSX.Element {
           />
           Sparmodus aktiv
         </label>
+        <button onClick={() => patch({ tokenSaver: { enabled: true, maxResultChars: 1400, cacheTtlSec: 120, slimDeclarations: true } })}>Empfohlenes Sparprofil anwenden</button>
       </div>
 
       <div className="field">
@@ -3021,6 +3041,7 @@ export function SaverSection({ settings, patch }: Props): JSX.Element {
 
       <div className="field">
         <label>Geschätzte Einsparung</label>
+        {loadError && <p className="hint err" role="alert">{loadError}</p>}
         {!report || report.totalTokens === 0 ? (
           <p className="hint">Noch keine Einsparschätzung verfügbar.</p>
         ) : (
@@ -3070,6 +3091,12 @@ export function SaverSection({ settings, patch }: Props): JSX.Element {
           {' '}Anfragen mit Tokenangabe: {report?.usage?.knownCalls ?? 0}/{report?.usage?.calls ?? 0}. Dies ist keine Anzeige des verbleibenden Kontingents.
           {report?.usage?.last && <> Letzte Antwort: {(report.usage.last.ms / 1000).toFixed(1)} s.</>}
         </div>
+        {report?.usage && <table aria-label="Gemeldeter ChatGPT-Tokenverbrauch"><tbody>
+          <tr><td>Eingabe</td><td>{report.usage.inputTokens?.toLocaleString('de-DE') ?? 'nicht gemeldet'}</td></tr>
+          <tr><td>Davon aus dem Anbieter-Cache</td><td>{report.usage.cachedTokens?.toLocaleString('de-DE') ?? 'nicht gemeldet'}</td></tr>
+          <tr><td>Ausgabe</td><td>{report.usage.outputTokens?.toLocaleString('de-DE') ?? 'nicht gemeldet'}</td></tr>
+          <tr><td>Davon Denk-Token</td><td>{report.usage.reasoningTokens?.toLocaleString('de-DE') ?? 'nicht gemeldet'}</td></tr>
+        </tbody></table>}
         <div className="row" style={{ marginTop: 14 }}>
           <button onClick={load}>Aktualisieren</button>
           <button
@@ -3987,25 +4014,37 @@ export function AlexaSection({ settings, patch }: Props): JSX.Element {
   )
 }
 
+/** Prüfung ohne klares Ergebnis: nicht als Fehler zeigen. */
+const UNCONFIRMED = /ungeprüft|nicht erkennbar|läuft gerade nicht|geht erst/
+
 export function ConnectionsSection(): JSX.Element {
   const [status, setStatus] = useState<ConnectionStatus[]>([])
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState<string | null>(null)
   const [timers, setTimers] = useState<TimerEntry[]>([])
+  const checking = useRef(false)
+  const [checkedAt, setCheckedAt] = useState<number | null>(null)
 
   const load = async (startBrowser: boolean): Promise<void> => {
+    if (checking.current) return
+    checking.current = true
     setBusy(true)
     try {
       setNote(null)
-      const [connections, runningTimers] = await Promise.all([
+      const [connections, runningTimers] = await Promise.allSettled([
         window.jarvis.invoke('connect:status', { start: startBrowser }),
         window.jarvis.invoke('timers:list')
       ])
-      setStatus(connections)
-      setTimers(runningTimers)
+      if (connections.status === 'fulfilled') { setStatus(connections.value); setCheckedAt(Date.now()) }
+      if (runningTimers.status === 'fulfilled') setTimers(runningTimers.value)
+      const errors: string[] = []
+      if (connections.status === 'rejected') errors.push('Verbindungen konnten nicht geprüft werden. Bitte erneut versuchen.')
+      if (runningTimers.status === 'rejected') errors.push('Timer konnten nicht geladen werden.')
+      if (errors.length) setNote(errors.join(' '))
     } catch (err) {
       setNote(err instanceof Error ? err.message : 'Die Verbindungsliste ließ sich nicht aufnehmen.')
     } finally {
+      checking.current = false
       setBusy(false)
     }
   }
@@ -4018,14 +4057,16 @@ export function ConnectionsSection(): JSX.Element {
    * Sekunde später meldete zuverlässig wieder "nicht angemeldet". Stattdessen
    * sagt der Hinweis, was als Nächstes dran ist.
    */
-  const login = async (target: 'gmail' | 'yahoo' | 'amazon' | 'whatsapp'): Promise<void> => {
+  const login = async (target: 'gmail' | 'yahoo' | 'amazon' | 'whatsapp' | 'icloud'): Promise<void> => {
+    if (checking.current) return
+    checking.current = true
     setBusy(true)
     setNote(null)
     try {
       const result = await window.jarvis.invoke('connect:login', { target })
       setNote(
         result.ok
-          ? 'Das Fenster ist offen. Melde dich dort an und klick danach auf „Jetzt prüfen".'
+          ? target === 'icloud' ? 'iCloud ist rechts im James-Hauptfenster geöffnet. Melde dich dort mit deinem Apple Account an.' : 'Das Chrome-Fenster ist offen. Melde dich dort an und klick danach auf „Jetzt prüfen".'
           : `Der Browser ließ sich nicht öffnen: ${result.error ?? 'unbekannter Fehler'}`
       )
     } catch (err) {
@@ -4033,6 +4074,7 @@ export function ConnectionsSection(): JSX.Element {
       // aus, als hätte er nichts getan.
       setNote(err instanceof Error ? err.message : String(err))
     } finally {
+      checking.current = false
       setBusy(false)
     }
   }
@@ -4048,9 +4090,12 @@ export function ConnectionsSection(): JSX.Element {
   return (
     <>
       <h2>Verbindungen</h2>
+      <div className="field"><h3>ChatGPT</h3><ChatGptLogin /></div>
+      <h3>Browser und weitere Dienste</h3>
+      <p className="hint">Apple iCloud steht oben unter Konten &amp; Standort.</p>
       <p className="lede">
-        Gmail und Amazon laufen über einen Chrome, der James gehört — mit eigenem Profil, neben
-        deinem normalen Browser. Dein Chrome musst du dafür nie schließen. Einmal anmelden genügt,
+        Die bisherigen Gmail-, Yahoo- und Amazon-Werkzeuge laufen über ein separates Chrome-Fenster mit eigenem Profil.
+        Deinen normalen Browser musst du dafür nie schließen. Einmal anmelden genügt,
         danach bleibt es. Die Google-Schnittstelle unter „Zugänge" ist zusätzlich und optional.
       </p>
 
@@ -4059,6 +4104,7 @@ export function ConnectionsSection(): JSX.Element {
           {busy ? 'Prüfe…' : 'Jetzt prüfen'}
         </button>
       </div>
+      {checkedAt && <p className="hint" role="status">Zuletzt geprüft um {new Date(checkedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}. {status.filter(s => s.ok).length} von {status.length} Verbindungen bestätigt.</p>}
 
       {note && (
         <p className="hint" style={{ marginBottom: 18 }}>
@@ -4078,7 +4124,7 @@ export function ConnectionsSection(): JSX.Element {
                 {s.ok ? (
                   <span className="badge ok">Verbunden</span>
                 ) : (
-                  <span className="badge err">Nicht verbunden</span>
+                  <span className={`badge ${UNCONFIRMED.test(s.detail) ? 'missing' : 'err'}`}>{UNCONFIRMED.test(s.detail) ? 'Nicht bestätigt' : 'Nicht verbunden'}</span>
                 )}
               </td>
               <td className="hint">{s.ok ? '' : (s.fix ?? '')}</td>
@@ -4871,11 +4917,14 @@ export function MemorySection(): JSX.Element {
  */
 function AppleHealthPanel(): JSX.Element {
   const [state, setState] = useState<{ takenAt: number | null; summary: string | null } | null>(null)
-  const load = (): void => { void window.jarvis.invoke('health:status').then(setState).catch(() => setState({ takenAt: null, summary: null })) }
+  const [error, setError] = useState('')
+  const load = (): void => { void window.jarvis.invoke('health:status').then(result => { setState(result); setError('') }).catch(() => setError('Health-Status konnte nicht geladen werden. Bitte erneut prüfen.')) }
   useEffect(load, [])
   return (
     <div className="field">
       <h3>Apple Health</h3>
+      <button onClick={load}>Health-Verbindung prüfen</button>
+      {error && <p className="hint" role="alert">{error}</p>}
       {state?.summary ? (
         <>
           <p className="hint ok">Werte vom iPhone sind da. Frag James z. B. „Wie viele Schritte hab ich heute?“ oder „Wie hab ich geschlafen?“</p>
@@ -4883,11 +4932,11 @@ function AppleHealthPanel(): JSX.Element {
             <summary>Was James sieht</summary>
             <p className="hint" style={{ whiteSpace: 'pre-line' }}>{state.summary}</p>
           </details>
-          <button onClick={() => { void window.jarvis.invoke('health:clear').then(load) }}>Gesundheitswerte am Rechner löschen</button>
+          <button onClick={() => { void window.jarvis.invoke('health:clear').then(load).catch(() => setError('Gesundheitswerte konnten nicht gelöscht werden. Bitte erneut versuchen.')) }}>Gesundheitswerte am Rechner löschen</button>
         </>
       ) : (
         <p className="hint">
-          In der James-App auf dem iPhone oben auf „Apple Health teilen“ tippen und erlauben. Danach kommen Schritte,
+          In der nativen James-App auf dem iPhone oben auf „Apple Health teilen“ tippen und erlauben. Die Web-App und iCloud.com haben keinen Health-Zugriff. Danach kommen Schritte,
           Schlaf, Aktivität, Puls und Gewicht bei jedem Öffnen der App hierher — nur auf diesen Rechner, verschlüsselt.
         </p>
       )}

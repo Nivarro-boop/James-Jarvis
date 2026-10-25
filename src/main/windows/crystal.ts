@@ -2,6 +2,7 @@ import { BrowserWindow, screen } from 'electron'
 import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 import { guardExternalLinks } from './external'
+import { bindBrowserWindow } from '../browser/panel'
 
 /**
  * Das Hauptfenster mit der Startseite. Der End Crystal sitzt darin —
@@ -55,6 +56,7 @@ export function createCrystalWindow(): BrowserWindow {
 
   // Remove the menu itself so pressing Alt cannot reveal a blank menu strip.
   win.setMenu(null)
+  bindBrowserWindow(win)
   win.setMenuBarVisibility(false)
 
   // Der Kristall soll auch dann weiterlaufen, wenn das Fenster nicht fokussiert

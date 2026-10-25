@@ -1,8 +1,9 @@
 import type { ChatGptItem, ChatGptModel, ChatGptResponse } from '@shared/chatgpt'
-import { chatGptAccessToken, CHATGPT_RESOURCE } from './chatgptAuth'
+import { chatGptAccessToken, chatGptSessionGeneration, CHATGPT_RESOURCE } from './chatgptAuth'
 import { consumeModelCall } from '../agent/modelBudget'
 import { recordModelUsage } from '../agent/modelUsage'
 import { abortable } from '@shared/async'
+import { singleFlight } from '@shared/singleFlight'
 
 export function chatGptError(error?: { code?: string; message?: string }, status?: number): string {
   if (error?.code === 'subscription_sharing_usage_limit_exceeded' || status === 429) {
@@ -40,18 +41,23 @@ async function authorizedFetch(path: string, init: RequestInit): Promise<Respons
   return response
 }
 
-export async function chatGptModels(): Promise<ChatGptModel[]> {
+const sharedModels = singleFlight(async (generation: number): Promise<ChatGptModel[]> => {
   const response = await authorizedFetch('/models', { signal: AbortSignal.timeout(30_000) })
   const data = await response.json() as { models?: { slug?: string; display_name?: string; visibility?: string }[] }
+  if (generation !== chatGptSessionGeneration()) throw new Error('Die ChatGPT-Anmeldung wurde inzwischen geändert. Modelle erneut laden.')
   if (!Array.isArray(data.models)) throw new Error('ChatGPT hat keine gültige Modellliste geliefert.')
   return data.models.filter((m) => m.visibility === 'list' && typeof m.slug === 'string' && m.slug)
     .map((m) => ({ id: m.slug!, name: m.display_name || m.slug! }))
+})
+
+export function chatGptModels(): Promise<ChatGptModel[]> {
+  return sharedModels(chatGptSessionGeneration())
 }
 
 /** „Automatisch“ in den Einstellungen: kein fester Modellname. */
 export const CHATGPT_AUTO = 'auto'
 const FAST = /mini|nano|luna|flash|fast|spark|lite/i
-let modelCache: { at: number; models: ChatGptModel[] } | null = null
+let modelCache: { at: number; generation: number; models: ChatGptModel[] } | null = null
 
 /**
  * Löst „Automatisch“ auf: schnell im Gespräch, gründlich bei schwierigen
@@ -60,7 +66,12 @@ let modelCache: { at: number; models: ChatGptModel[] } | null = null
  */
 export async function resolveChatGptModel(model: string, purpose: 'fast' | 'deep' = 'fast'): Promise<string> {
   if (model !== CHATGPT_AUTO) return model
-  if (!modelCache || Date.now() - modelCache.at > 10 * 60_000) modelCache = { at: Date.now(), models: await chatGptModels() }
+  const generation = chatGptSessionGeneration()
+  if (!modelCache || modelCache.generation !== generation || Date.now() - modelCache.at > 10 * 60_000) {
+    const models = await chatGptModels()
+    if (generation !== chatGptSessionGeneration()) throw new Error('Die ChatGPT-Anmeldung wurde inzwischen geändert.')
+    modelCache = { at: Date.now(), generation, models }
+  }
   const all = modelCache.models.map(m => m.id)
   const general = all.filter(id => !/codex/i.test(id))
   const pool = general.length ? general : all
@@ -82,7 +93,12 @@ export async function chatGptResponse(
   options: { tools?: unknown[]; signal?: AbortSignal; onText?: (text: string) => void; purpose?: 'fast' | 'deep' } = {}
 ): Promise<ChatGptResponse> {
   // Nur „Automatisch“ braucht die Modellliste; sonst ohne Umweg, damit ein Abbruch sofort greift.
-  if (model === CHATGPT_AUTO) model = await resolveChatGptModel(model, options.purpose)
+  options.signal?.throwIfAborted()
+  if (model === CHATGPT_AUTO) {
+    const pending = resolveChatGptModel(model, options.purpose)
+    model = options.signal ? await abortable(pending, options.signal) : await pending
+  }
+  options.signal?.throwIfAborted()
   consumeModelCall()
   const started = Date.now()
   let firstMs: number | null = null

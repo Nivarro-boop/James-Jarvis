@@ -5,6 +5,7 @@ import { isFinalOrderLabel } from '@shared/orderGate'
 import { isPhoneMessage } from '@shared/companion'
 import { deliveryCountry, pickService } from '@main/tools/impl/food'
 import { builtinGoogleClient } from '@main/providers/googleBuiltin'
+import { openGoogleClient, sealGoogleClient } from '@main/providers/googleSeal'
 import { buildSystemPrompt } from '@main/agent/prompt'
 import { getSettings, setSettings } from '@main/store/settings'
 import { permissionFor } from '@main/tools/permissions'
@@ -113,6 +114,22 @@ describe('Google mit einem Klick', () => {
       if (id === undefined) delete process.env.JARVIS_GOOGLE_CLIENT_ID; else process.env.JARVIS_GOOGLE_CLIENT_ID = id
       if (secret === undefined) delete process.env.JARVIS_GOOGLE_CLIENT_SECRET; else process.env.JARVIS_GOOGLE_CLIENT_SECRET = secret
     }
+  })
+
+  it('bettet den Client nicht lesbar ein und bekommt ihn unverändert zurück', () => {
+    const pair = { id: '123-abc.apps.googleusercontent.com', secret: 'GOCSPX-test' }
+    const sealed = sealGoogleClient(pair)
+    assert.ok(!sealed.includes('googleusercontent') && !sealed.includes('GOCSPX'))
+    assert.ok(!Buffer.from(sealed, 'base64url').toString('latin1').includes('googleusercontent'))
+    assert.deepEqual(openGoogleClient(sealed), pair)
+    // Jeder Build würfelt neu: Derselbe Client sieht nie zweimal gleich aus.
+    assert.notEqual(sealGoogleClient(pair), sealed)
+  })
+
+  it('übersteht leere und kaputte Einbettungen ohne Ausnahme', () => {
+    assert.equal(openGoogleClient(''), null)
+    assert.equal(openGoogleClient('kaputt'), null)
+    assert.equal(openGoogleClient(Buffer.alloc(40, 7).toString('base64url')), null)
   })
 })
 

@@ -1,3 +1,68 @@
+# iCloud-Anmeldung und Stimmen-Galerie – 1.3.24 (25.10.2026)
+
+- **iCloud sichtbar:** Die Apple-Anmeldung lag eingeklappt unter „Technischer
+  Status“. Sie steht jetzt unter Verbindungen → Konten als Karte „Apple iCloud“
+  mit Anmeldestatus, Knöpfen für alle elf iCloud-Apps und Abmelden.
+- **Mail und Kalender direkt:** Mit iCloud-Adresse und app-spezifischem Passwort
+  liest James iCloud Mail (IMAP) und alle iCloud-Kalender (CalDAV) ohne offenen
+  Browser. Mails schickt er über SMTP, immer erst nach Rückfrage. Neue Werkzeuge:
+  `icloud_mail_list/read/send`, `icloud_calendar`, `icloud_drive_list/read`
+  (Ordner von „iCloud für Windows“).
+- **Stimmen-Galerie:** 14 klare Stimmen mit Hörprobe und einem Klick zum
+  Auswählen. „Wie Siri“ markiert die sauberste Auswahl (Gemini Erinome/Iapetus,
+  OpenAI marin/cedar, ElevenLabs Sarah). Siris Originalstimme gibt es nur auf
+  Apple-Geräten. Galerie-Stimmen sprechen klar, ruhig und gleichmäßig.
+- Prüfung: Typecheck, 2.271 Tests, Build und UI-Prüfungen (`check-voice-icloud-ui.cjs`,
+  Redesign und Browser) erfolgreich. Nicht geprüft: echtes Apple-Konto,
+  Hörproben mit echten Schlüsseln, iCloud für Windows.
+  [Details und Grenzen](docs/iCloud-und-Stimmen-1.3.24.md).
+- Installer `dist/James-Jarvis Setup 1.3.24.exe` gebaut, Paketprüfung bestanden,
+  Mail-Bibliotheken im Paket. Installiert (Dateiversion 1.3.24, `app.asar`-Hash
+  identisch mit dem Paket) und gestartet. Kein GitHub-Release.
+
+# Integrierter Browser – 1.3.22 (25.10.2026)
+
+- Browser direkt im Hauptfenster, rechts neben dem Gespräch; Tabs, Navigation,
+  Adressfeld, iCloud-Schnellzugriffe und gespeicherte Anmeldesitzung.
+- Apple-Login und iCloud-Werkzeuge verwenden diesen integrierten Browser.
+  Externe Seiten sind von James' privilegierter Oberfläche getrennt.
+- Typecheck, Build und 2.166 Tests erfolgreich. Electron-UI-Test einschließlich
+  Pop-up, Session-Persistenz nach Neustart, kleiner Fenster und echter öffentlicher iCloud-Seite bestanden.
+- Echte Apple-Anmeldung/2FA sowie signierter HealthKit-Build und iPhone-Gerätetest
+  bleiben offen. Lokaler Build, kein GitHub-Release.
+- [Details und Grenzen](docs/Integrierter-Browser-1.3.22.md).
+- Windows-Installer erfolgreich ausgeführt; installierte 1.3.22 per Dateiversion
+  und identischem Paket-Hash bestätigt. iCloud Mail wurde rechts in der laufenden
+  Anwendung geöffnet. Der Nutzer kann dort „Anmelden“ wählen.
+
+# Gesamtprüfung und Feinschliff (25.10.2026)
+
+- **iPhone-App aktualisiert sich zuverlässig** (Repo jarvis-iphone, live als
+  0.2.19): Der Service Worker fragt Seiten am Server nach, statt sie 10 Minuten
+  aus dem Browser-Speicher zu nehmen. Neu geladen wird unter `?v=<Stand>`.
+  Stilles Update auch nach Rückkehr aus dem Hintergrund und im PC-Modus, solange
+  kein Gespräch läuft. Knöpfe auf 44 pt vergrößert (noch nicht veröffentlicht).
+- **Abgerissene Verbindungen** (`ECONNRESET`, `EPIPE` …) zeigen keine rote
+  Fehlermeldung mehr, sondern landen nur im Protokoll (`src/shared/transientError.ts`).
+- **Erster Start:** „Später einrichten“ gilt auch beim nächsten Start, solange
+  Stimme und Gehör vollständig sind.
+- Prüfung: Typecheck, 2.130 Tests, Build, alle neun UI-Prüfungen; iPhone-App
+  55 Tests und Build; Mobile tsc/lint. Nicht geprüft: echtes iPhone, echte Konten.
+
+# Google-Zugang eingebaut und verborgen (25.10.2026)
+
+- **Niemand trägt mehr eine Client-ID ein:** `npm run google:setup` legt den
+  Google-Client einmal für den Herausgeber an (`.env.google`, auf Wunsch
+  GitHub-Secrets für die Release-Action). Mit eingebautem Client verschwinden
+  die Felder „Eigener Google OAuth-Client“ aus den Einstellungen.
+- **Nicht lesbar im Installer:** Client-ID und Schlüssel werden pro Build
+  verschleiert eingebettet (`src/main/providers/googleSeal.ts`);
+  `scripts/check-package.cjs` schlägt an, falls die ID lesbar im Paket steht.
+  Grenze: Eine Desktop-App kann ihren Client nicht völlig geheim halten, siehe
+  [Anleitung](docs/Google-Anmeldung-einrichten.md).
+- **Offen:** Der Google-Client selbst muss noch in der Google Cloud Console
+  angelegt werden; bis dahin baut die App ohne eingebauten Zugang.
+
 # Einfacher für alle: Google- und ChatGPT-Login, Apple Health, Essen bestellen (25.10.2026)
 
 - **Google mit einem Klick:** Der Build kann einen eigenen OAuth-Client

@@ -11,6 +11,7 @@ import { hasGoogleAuth } from '../providers/googleAuth'
 import { hasSecret } from '../secrets/keystore'
 import { ollamaHealth } from '../providers/ollama'
 import { getSettings } from '../store/settings'
+import { singleFlight } from '@shared/singleFlight'
 
 /**
  * Was gerade wirklich funktioniert.
@@ -109,7 +110,7 @@ async function chromeProbe(start: boolean): Promise<{
   const base = {
     chrome: {
       id: 'chrome' as const,
-      label: 'James-Browser',
+      label: 'Chrome für bestehende Automationen',
       ok: false,
       detail: 'nicht erreichbar',
       fix:
@@ -196,8 +197,9 @@ async function chromeProbe(start: boolean): Promise<{
     signedOutMarker: string,
     inPage?: (page: Page) => Promise<boolean | null>
   ): Promise<{ ok: boolean; detail: string; unklar?: boolean }> => {
-    const page = await ctx.newPage()
+    let page: Page | undefined
     try {
+      page = await ctx.newPage()
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 20_000 })
       if (page.url().includes(signedOutMarker)) {
         return { ok: false, detail: 'nicht angemeldet' }
@@ -215,7 +217,7 @@ async function chromeProbe(start: boolean): Promise<{
         unklar: true
       }
     } finally {
-      await page.close().catch(() => undefined)
+      await page?.close().catch(() => undefined)
     }
   }
 
@@ -256,7 +258,13 @@ async function chromeProbe(start: boolean): Promise<{
   return base
 }
 
-export async function checkConnections(start = false): Promise<ConnectionStatus[]> {
+const sharedCheck = singleFlight(probeConnections)
+
+export function checkConnections(start = false): Promise<ConnectionStatus[]> {
+  return sharedCheck(start)
+}
+
+async function probeConnections(start: boolean): Promise<ConnectionStatus[]> {
   const backend = await inputBackendStatus()
 
   const input: ConnectionStatus = {

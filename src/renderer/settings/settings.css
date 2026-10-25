@@ -334,3 +334,28 @@
 .choice-card strong { display: block; font-size: 15px; color: #f2f4f3; }
 .choice-card small { display: block; margin-top: 3px; font-size: 13px; color: #9aa39f; line-height: 1.45; }
 .choice-group:disabled .choice-card { opacity: .55; cursor: progress; }
+
+/* Stimmen-Galerie */
+.voice-gallery { margin-bottom: 8px; }
+.voice-gallery-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; margin: 10px 0; }
+.voice-card { display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border: 1px solid rgba(255,255,255,.1); border-radius: 10px; background: rgba(255,255,255,.02); transition: border-color .15s ease, background .15s ease; }
+.voice-card:hover { border-color: rgba(255,255,255,.22); }
+.voice-card[data-active="true"] { border-color: color-mix(in srgb, var(--accent, #ff2da8) 55%, transparent); background: color-mix(in srgb, var(--accent, #ff2da8) 7%, transparent); }
+.voice-card header { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.voice-card strong { font-size: 15px; color: #f2f4f3; }
+.voice-card p { margin: 0; font-size: 13px; color: #c9d0cc; line-height: 1.4; }
+.voice-card small { font-size: 12px; color: #9aa39f; }
+.voice-tag { font-size: 11px; padding: 2px 7px; border-radius: 999px; background: #b8dac722; color: #d4eadc; white-space: nowrap; }
+.voice-card-actions { display: flex; gap: 6px; margin-top: auto; padding-top: 4px; }
+.voice-card-actions button { flex: 1; min-height: 32px; }
+.hint.warn { color: #f0c27a; }
+
+/* iCloud */
+.icloud-panel h4 { margin: 18px 0 6px; font-size: 14px; color: #e3e8e5; }
+.icloud-status { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
+.icloud-services { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.icloud-services button { min-height: 32px; padding: 4px 12px; }
+.icloud-panel .field input { width: 100%; max-width: 360px; margin-bottom: 8px; }
+.icloud-check { margin: 8px 0 0; padding-left: 18px; font-size: 13px; }
+.icloud-check .ok { color: #9fd8b5; }
+.icloud-check .err { color: #f0a08a; }

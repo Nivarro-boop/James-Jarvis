@@ -2,6 +2,23 @@ import assert from 'node:assert/strict'
 import { it } from 'node:test'
 import { budgetCompletedHistory, budgetConversation } from '@shared/conversationBudget'
 
+it('bounds normal-mode history too, retaining current constraints and paired tool results', () => {
+  const history = [
+    { role: 'user', content: 'Nur lesen. ' + 'x'.repeat(100000) + ' Nichts senden.' },
+    { role: 'assistant', content: '', tool_calls: [{ id: 'one', function: { name: 'read', arguments: '{}' } }] },
+    { role: 'tool', content: 'y'.repeat(100000), tool_call_id: 'one' },
+    { role: 'assistant', content: 'Gelesen.' }
+  ]
+  const result = budgetCompletedHistory(history, false)
+  assert.ok(JSON.stringify(result).length < 20000)
+  assert.match(JSON.stringify(result), /Nur lesen/)
+  assert.match(JSON.stringify(result), /Nichts senden/)
+  assert.equal(result.find(item => item.role === 'tool')?.tool_call_id, 'one')
+  const chat = budgetConversation([{ role: 'user', content: history[0].content }, { role: 'assistant', content: history[2].content }], false)
+  assert.ok(JSON.stringify(chat).length < 20000)
+  assert.match(JSON.stringify(chat), /Nichts senden/)
+})
+
 it('retains the newest user constraints and full tool pairing when text exceeds the saving budget', () => {
   const history = [
     { role: 'user', content: 'Nur lokal arbeiten. ' + 'Details '.repeat(2000) + ' Nichts hochladen.' },

@@ -7,6 +7,8 @@ import { useCrystal } from '../store/crystalStore'
  * Zwischenzeit lassen sich ChatGPT und WhatsApp verbinden. Verschwindet von
  * selbst, sobald alles Nötige auf dem Rechner liegt.
  */
+const DISMISSED = 'james.firstRun.dismissed'
+
 export function FirstRun({ ready }: { ready: boolean }): JSX.Element | null {
   const settings = useCrystal(s => s.settings)
   const [assets, setAssets] = useState<LocalAsset[] | null>(null)
@@ -18,6 +20,10 @@ export function FirstRun({ ready }: { ready: boolean }): JSX.Element | null {
   /** `hidden`: dieser Build hat keinen eingebauten Google-Zugang, dann gehört die Zeile nicht hierher. */
   const [google, setGoogle] = useState<'unknown' | 'connected' | 'missing' | 'busy' | 'hidden'>('unknown')
   const [error, setError] = useState('')
+  // „Später einrichten“ gilt auch beim nächsten Start; die Konten bleiben unter Einstellungen erreichbar.
+  const [dismissed, setDismissed] = useState(() => {
+    try { return localStorage.getItem(DISMISSED) === '1' } catch { return false }
+  })
   const alive = useRef(true)
   const loginRun = useRef(0)
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -68,7 +74,9 @@ export function FirstRun({ ready }: { ready: boolean }): JSX.Element | null {
       provider: 'piper', thinkProvider: 'chatgpt', hearProvider: 'whisper' } }).catch(() => undefined)
   }, [settings, ready, chatgpt, missing.length, assets])
 
-  if (!assets || !missing.length) return null
+  // Downloads können vor der Anmeldung fertig sein. Die Kontoknöpfe müssen
+  // dann erreichbar bleiben, bis der Nutzer fertig ist oder überspringt.
+  if (!assets || (!missing.length && (ready || dismissed))) return null
 
   const batch = downloadBatch.current ?? missing
   const total = batch.reduce((n, a) => n + (progress[a.id]?.total || a.bytes), 0)
@@ -135,12 +143,12 @@ export function FirstRun({ ready }: { ready: boolean }): JSX.Element | null {
       <span className="first-run-spinner" aria-hidden="true" />
       <div>
         <small>JAMES</small>
-        <h2>James richtet sich ein</h2>
-        <p>Stimme und Gehör vorbereiten. Deine Konten kannst du daneben verbinden.</p>
+        <h2>{missing.length ? 'James richtet sich ein' : 'Bei deinem Konto anmelden'}</h2>
+        <p>{missing.length ? 'Stimme und Gehör vorbereiten. Deine Konten kannst du daneben verbinden.' : 'Mit ChatGPT anmelden und James über dein Abo nutzen. Weitere Konten sind optional.'}</p>
       </div>
     </header>
 
-    <div className="first-run-row" data-active="true">
+    {missing.length > 0 && <div className="first-run-row" data-active="true">
       <div className="first-run-line">
         <span>Stimme und Gehör laden</span>
         <em>{failed ? 'unterbrochen' : running ? `läuft seit ${seconds} s` : 'startet gleich'}</em>
@@ -150,7 +158,7 @@ export function FirstRun({ ready }: { ready: boolean }): JSX.Element | null {
       </div>
       <p>{failed ? failed : `Zusammen etwa ${size(total)}, im Hintergrund. ${percent ? `${percent} % geladen.` : ''}`}</p>
       {failed && <button className="first-run-btn" onClick={retry}>Erneut versuchen</button>}
-    </div>
+    </div>}
 
     <div className="first-run-row">
       <div className="first-run-line">
@@ -180,6 +188,10 @@ export function FirstRun({ ready }: { ready: boolean }): JSX.Element | null {
     </div>
 
     {error && <p className="first-run-error" role="alert">{error}</p>}
+    {!missing.length && <button className="first-run-btn" onClick={() => {
+      try { localStorage.setItem(DISMISSED, '1') } catch { /* nur für diese Sitzung */ }
+      setDismissed(true)
+    }}>Später einrichten</button>}
     <footer>Stimme und Gehör laufen lokal. Verbundene Onlinedienste erhalten die Daten, die sie für deine Aufträge benötigen.</footer>
   </section>
 }

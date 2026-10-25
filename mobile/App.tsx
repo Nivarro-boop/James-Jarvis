@@ -198,36 +198,51 @@ function RemoteScreen({ pairing, onOffline, onUnpair }: { pairing: Pairing; onOf
   // Apple Health: aus, bis der Nutzer es einschaltet. Danach gehen die
   // Tageswerte bei jedem Öffnen der App an den Rechner.
   const [health, setHealth] = useState<'off' | 'on' | 'unavailable'>(() => (healthAvailable() ? 'off' : 'unavailable'))
+  const [healthBusy, setHealthBusy] = useState(false)
+  const [healthError, setHealthError] = useState('')
+  const healthRequest = useRef(false)
   useEffect(() => {
     void loadHealthSharing().then(on => { if (on && healthAvailable()) setHealth('on') }).catch(() => undefined)
   }, [])
 
   const pushHealth = useCallback(async () => {
-    const data = await healthSummary().catch(() => null)
-    if (data) web.current?.injectJavaScript(`window.__jarvisHealth && window.__jarvisHealth(${JSON.stringify(data)}); true;`)
+    try {
+      const data = await healthSummary()
+      if (!data) throw new Error('Apple Health ist hier nicht verfügbar.')
+      web.current?.injectJavaScript(`window.__jarvisHealth && window.__jarvisHealth(${JSON.stringify(data)}); true;`)
+      setHealthError('')
+    } catch {
+      setHealthError('Health-Werte konnten nicht geladen werden. Beim nächsten Öffnen versuchen wir es erneut.')
+    }
   }, [])
 
   useEffect(() => {
     if (health !== 'on') return
-    void pushHealth()
+    void Promise.resolve().then(pushHealth)
     const subscription = AppState.addEventListener('change', state => { if (state === 'active') void pushHealth() })
     return () => subscription.remove()
   }, [health, pushHealth])
 
   const toggleHealth = async () => {
+    if (healthRequest.current) return
     if (health === 'on') {
       Alert.alert('Apple Health nicht mehr teilen?', 'Der Rechner behält den letzten Stand, bis du ihn dort löschst.', [
         { text: 'Abbrechen', style: 'cancel' },
-        { text: 'Nicht mehr teilen', style: 'destructive', onPress: () => { void saveHealthSharing(false).then(() => setHealth('off')) } }
+        { text: 'Nicht mehr teilen', style: 'destructive', onPress: () => { void saveHealthSharing(false).then(() => { setHealth('off'); setHealthError('') }).catch(() => Alert.alert('Apple Health', 'Die Änderung konnte nicht gespeichert werden. Bitte erneut versuchen.')) } }
       ])
       return
     }
+    healthRequest.current = true
+    setHealthBusy(true)
     try {
-      if (!(await requestHealth())) return
+      if (!(await requestHealth())) throw new Error('Apple Health ist auf diesem Gerät nicht verfügbar.')
       await saveHealthSharing(true)
       setHealth('on')
     } catch (err) {
       Alert.alert('Apple Health', err instanceof Error ? err.message : 'Der Zugriff ging nicht.')
+    } finally {
+      healthRequest.current = false
+      setHealthBusy(false)
     }
   }
 
@@ -263,10 +278,12 @@ function RemoteScreen({ pairing, onOffline, onUnpair }: { pairing: Pairing; onOf
       {watch.paired && !watch.installed && <Text style={styles.body}>Watch gekoppelt · James-Watch-App über die Watch-App installieren.</Text>}
       <Pressable accessibilityRole="button" onPress={onUnpair}><Text style={styles.body}>Rechner wechseln · neuen QR-Code scannen</Text></Pressable>
       {health !== 'unavailable' && (
-        <Pressable accessibilityRole="switch" accessibilityState={{ checked: health === 'on' }} onPress={() => { void toggleHealth() }}>
-          <Text style={styles.body}>{health === 'on' ? 'Apple Health: wird geteilt ✓' : 'Apple Health teilen · antippen'}</Text>
+        <Pressable disabled={healthBusy} accessibilityRole="switch" accessibilityState={{ checked: health === 'on', disabled: healthBusy, busy: healthBusy }} onPress={() => { void toggleHealth() }}>
+          <Text style={styles.body}>{healthBusy ? 'Apple Health wird eingerichtet …' : health === 'on' ? 'Apple Health: Teilen eingeschaltet' : 'Apple Health verbinden · antippen'}</Text>
         </Pressable>
       )}
+      {health === 'on' && <Text style={styles.body}>Freigegebene Werte werden beim Öffnen übertragen. Leserechte verwaltest du in Apple Health.</Text>}
+      {healthError && <Text accessibilityRole="alert" style={styles.error}>{healthError}</Text>}
       <JamesWebView
         ref={web}
         source={{ uri: pairing.url }}

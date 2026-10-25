@@ -15,4 +15,9 @@ assert.ok(!files.some(f => /out[\\/][^\\/]+\.(?:cjs|mjs)$/.test(f)), 'UI test wr
 for (const name of ['index.html', 'app.js', 'style.css', 'sw.js', 'mic-worklet.js']) {
   assert.ok(fs.readFileSync('dist/win-unpacked/resources/companion/' + name).equals(fs.readFileSync('resources/companion/' + name)), 'Phone resource is outdated: ' + name)
 }
+// Der eingebaute Google-Client darf nur verschleiert im Installer stehen.
+if (fs.existsSync('.env.google')) {
+  const googleId = /^JARVIS_GOOGLE_CLIENT_ID=(.+)$/m.exec(fs.readFileSync('.env.google', 'utf8'))?.[1]?.trim()
+  if (googleId) assert.ok(!asar.extractFile(path, require('node:path').normalize('out/main/index.js')).toString('latin1').includes(googleId), 'Google client ID readable in package')
+}
 console.log('PASS packaged version '+version+': UI, main, wake models, Windows helpers; no audit logs')

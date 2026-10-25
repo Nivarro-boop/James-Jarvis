@@ -47,6 +47,7 @@ import { stopUia } from './automation/uia'
 import { installPendingUpdate, startAutoUpdate } from './updater'
 import { needsGeminiForVoice } from '../shared/startupRequirements'
 import { constants as priorities, setPriority } from 'node:os'
+import { isTransientNetworkError } from '../shared/transientError'
 
 // Als Allererstes, noch vor jeder anderen Zeile Arbeit: Was hier passiert,
 // soll auch dann nachlesbar sein, wenn es beim Start schiefgeht.
@@ -602,6 +603,10 @@ app.on('will-quit', (event) => {
 })
 
 process.on('uncaughtException', (err) => {
+  if (isTransientNetworkError(err)) {
+    console.warn('[main] Verbindung abgerissen:', (err as NodeJS.ErrnoException).code)
+    return
+  }
   console.error('[main] Unbehandelter Fehler:', err)
   broadcast('toast:error', { message: err.message })
 })
