@@ -25,3 +25,17 @@ it('clamps native website bounds to the host and rejects malformed geometry', ()
     assert.equal(clampBrowserBounds(input, 1000, 640), null)
   }
 })
+
+it('keeps the browser window to a stated purpose with safe text', async () => {
+  const { cleanPurpose, browserHost, DEFAULT_PURPOSE } = await import('@shared/browser')
+  assert.deepEqual(cleanPurpose(null), DEFAULT_PURPOSE)
+  assert.deepEqual(cleanPurpose({ kind: 'login', title: 'Bei Apple anmelden', hint: 'Anmelden', watch: 'icloud' }),
+    { kind: 'login', title: 'Bei Apple anmelden', hint: 'Anmelden', watch: 'icloud' })
+  const odd = cleanPurpose({ kind: 'evil', title: 'x'.repeat(200) + '\u0000', hint: '', watch: 'other' })
+  assert.equal(odd.kind, 'choice')
+  assert.equal(odd.title.length, 80)
+  assert.equal(odd.hint, DEFAULT_PURPOSE.hint)
+  assert.equal('watch' in odd, false)
+  assert.equal(browserHost('https://idmsa.apple.com/appleauth'), 'idmsa.apple.com')
+  assert.equal(browserHost('about:blank'), '')
+})

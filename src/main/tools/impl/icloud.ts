@@ -1,11 +1,11 @@
-import { readdir, readFile, stat } from 'node:fs/promises'
-import { extname, join, relative, resolve, sep } from 'node:path'
+import { readFile, stat } from 'node:fs/promises'
+import { extname } from 'node:path'
 import { z } from 'zod'
 import { defineTool, type ToolDefinition } from '../registry'
 import { createCrystalWindow, getCrystalWindow } from '../../windows/crystal'
 import { openBrowser, readBrowserText, browserState, browserAction } from '../../browser/panel'
-import { iCloudDrivePath, iCloudEvents, iCloudMailList, iCloudMailRead, iCloudMailSend } from '../../providers/icloud'
-import { ICLOUD_SERVICE_IDS, ICLOUD_SERVICES, isICloudContentUrl, isICloudServiceUrl } from '@shared/icloud'
+import { iCloudDriveList, iCloudDrivePath, iCloudEvents, iCloudMailList, iCloudMailRead, iCloudMailSend, insideDrive } from '../../providers/icloud'
+import { ICLOUD_SERVICE_IDS, ICLOUD_SERVICE_LABELS, ICLOUD_SERVICES, isICloudContentUrl, isICloudServiceUrl } from '@shared/icloud'
 import { RANGES, resolveRange } from './calendarTime'
 
 const service = z.enum(ICLOUD_SERVICE_IDS)
@@ -13,14 +13,15 @@ const service = z.enum(ICLOUD_SERVICE_IDS)
 const open = defineTool({
   name: 'icloud_open',
   group: 'mail',
-  description: 'Nur für erforderliche Anmeldung, Auswahl oder Freigabe des Nutzers verwenden; zum Nachlesen icloud_read verwenden. Öffnet iCloud Mail, Kalender, Drive, Fotos, Kontakte, Notizen, Erinnerungen, Pages, Numbers, Keynote oder „Wo ist?“ rechts im integrierten James-Browser. Apple-Anmeldung und Gerätefreigabe erledigt der Nutzer direkt dort. Apple Health benötigt die native iPhone-App.',
+  description: 'Nur für erforderliche Anmeldung, Auswahl oder Freigabe des Nutzers verwenden; zum Nachlesen icloud_read verwenden. Öffnet Fotos, Kontakte, Notizen, Erinnerungen, Pages, Numbers, Keynote oder „Wo ist?“ im Anmeldefenster von James. Für Mail, Kalender und Drive zuerst icloud_mail_list, icloud_calendar und icloud_drive_list verwenden. Apple-Anmeldung und Gerätefreigabe erledigt der Nutzer direkt dort. Apple Health benötigt die native iPhone-App.',
   schema: z.object({ service }),
   async execute({ service }) {
     createCrystalWindow()
     const existing = browserState().tabs.find(tab => isICloudServiceUrl(tab.url, service))
-    if (existing) { browserAction('select', existing.id); browserAction('show') }
-    else openBrowser(ICLOUD_SERVICES[service], true)
-    return { adresse: ICLOUD_SERVICES[service], hinweis: 'Rechts in James geöffnet. Das bestätigt keine Anmeldung. Apple Account und Gerätefreigabe übernimmt der Nutzer direkt im Browserbereich.' }
+    const why = { kind: 'choice' as const, title: `iCloud ${ICLOUD_SERVICE_LABELS[service]}`, hint: 'Erledige deinen Schritt auf der iCloud-Seite und tippe danach auf „Fertig“. Bei Bedarf zuerst mit dem Apple Account anmelden.' }
+    if (existing) { browserAction('select', existing.id); openBrowser(existing.url, true, true, why) }
+    else openBrowser(ICLOUD_SERVICES[service], true, true, why)
+    return { adresse: ICLOUD_SERVICES[service], hinweis: 'Im Anmeldefenster von James geöffnet. Das bestätigt keine Anmeldung. Apple Account und Gerätefreigabe übernimmt der Nutzer direkt dort.' }
   }
 }) as ToolDefinition
 
@@ -153,13 +154,6 @@ const calendar = defineTool({
 const TEXT_TYPES = new Set(['.txt', '.md', '.csv', '.json', '.log', '.xml', '.html', '.htm', '.yaml', '.yml', '.ini', '.tsv'])
 const NO_DRIVE = 'Kein iCloud-Drive-Ordner auf diesem PC. Der Nutzer kann „iCloud für Windows“ aus dem Microsoft Store installieren und dort iCloud Drive einschalten; sonst icloud_open mit service drive verwenden.'
 
-/** Pfad innerhalb des Drive-Ordners auflösen; alles außerhalb wird abgelehnt. */
-function insideDrive(root: string, path: string | undefined): string {
-  const target = resolve(root, (path ?? '').replace(/^[\\/]+/, ''))
-  if (target !== root && !target.startsWith(root + sep)) throw new Error('Der Pfad liegt außerhalb von iCloud Drive.')
-  return target
-}
-
 const driveList = defineTool({
   name: 'icloud_drive_list',
   group: 'workspace',
@@ -167,27 +161,9 @@ const driveList = defineTool({
   description: 'Listet Ordner und Dateien in iCloud Drive auf diesem PC (Ordner von „iCloud für Windows“). Pfad relativ zu iCloud Drive, leer für die oberste Ebene. Optional mit Suchwort im Namen (durchsucht Unterordner).',
   schema: z.object({ pfad: z.string().max(500).optional(), suche: z.string().max(100).optional() }),
   async execute({ pfad, suche }) {
-    const root = iCloudDrivePath()
-    if (!root) return { verfuegbar: false, hinweis: NO_DRIVE }
-    const base = insideDrive(root, pfad)
-    const needle = suche?.trim().toLowerCase()
-    const out: Array<{ pfad: string; ordner: boolean; groesse?: number; geaendert?: string }> = []
-    const walk = async (dir: string, depth: number): Promise<void> => {
-      if (out.length >= 200) return
-      const entries = await readdir(dir, { withFileTypes: true })
-      for (const entry of entries) {
-        if (out.length >= 200) return
-        if (entry.name.startsWith('.') || entry.name === 'desktop.ini') continue
-        const full = join(dir, entry.name)
-        if (!needle || entry.name.toLowerCase().includes(needle)) {
-          const info = await stat(full).catch(() => null)
-          out.push({ pfad: relative(root, full), ordner: entry.isDirectory(), ...(info && !entry.isDirectory() ? { groesse: info.size } : {}), ...(info ? { geaendert: info.mtime.toISOString() } : {}) })
-        }
-        if (needle && entry.isDirectory() && depth < 6) await walk(full, depth + 1)
-      }
-    }
-    await walk(base, 0)
-    return { ordner: relative(root, base) || '/', eintraege: out, ...(out.length >= 200 ? { gekuerzt: true } : {}) }
+    const result = await iCloudDriveList(pfad, suche)
+    if (!result) return { verfuegbar: false, hinweis: NO_DRIVE }
+    return { ordner: result.ordner || '/', eintraege: result.eintraege.map(({ name: _name, ...rest }) => rest), ...(result.gekuerzt ? { gekuerzt: true } : {}) }
   }
 }) as ToolDefinition
 
@@ -200,7 +176,7 @@ const driveRead = defineTool({
   async execute({ pfad, maxZeichen }) {
     const root = iCloudDrivePath()
     if (!root) return { verfuegbar: false, hinweis: NO_DRIVE }
-    const file = insideDrive(root, pfad)
+    const file = await insideDrive(root, pfad)
     const info = await stat(file)
     if (!info.isFile()) throw new Error('Das ist keine Datei.')
     if (!TEXT_TYPES.has(extname(file).toLowerCase())) return { pfad, groesse: info.size, hinweis: 'Kein reines Textformat. Der Nutzer kann die Datei im iCloud-Drive-Ordner öffnen.' }

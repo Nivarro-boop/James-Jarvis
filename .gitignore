@@ -55,3 +55,6 @@ __pycache__/
 # nach ihm wertlos — fünf Megabyte Ton und Bild, die in der Historie für
 # immer stehenblieben.
 .codex-video-review/
+
+# Lokaler UI-Prüf-Wrapper
+.jarvis-ui-check.cjs

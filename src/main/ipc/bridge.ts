@@ -14,7 +14,7 @@ import { skillProposals, decideSkill } from '../agent/skillProposals'
 import { realtimeAccess } from '../providers/realtimeAccess'
 import { diagnosticReport } from '@shared/diagnosticReport'
 import { sendDiagnosticReport } from '../providers/diagnosticSender'
-import { app, BrowserWindow, clipboard, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
+import { app, BrowserWindow, clipboard, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import type { IpcInvokeMap } from '@shared/ipc'
 import { revealLog } from '../logging'
 import { resourceFile } from '../resources'
@@ -22,6 +22,8 @@ import { readWakeAsset, wakeStatus } from '../providers/wakeStatus'
 import { isValidTile, readTile } from '../maps/tiles'
 import { getSettings, resetSettings, setSettings } from '../store/settings'
 import { createBackup, listBackups, revealBackups } from '../store/backups'
+import { cancelRestore, inspectBackup, restorePending, stageRestore } from '../store/restore'
+import { maybeShowBriefing } from '../agent/dailyBriefing'
 import {
   clearMcpSecrets,
   clearSecret,
@@ -90,7 +92,10 @@ import { chatGptModels, chatGptResponse, chatGptTools } from '../providers/chatg
 import { consumeModelCall, withModelBudget } from '../agent/modelBudget'
 import { connectGoogle, disconnectGoogle, googleAccountEmail, hasCalendarAuth, hasGoogleAuth, hasWorkspaceAuth } from '../providers/googleAuth'
 import { builtinGoogleClient } from '../providers/googleBuiltin'
-import { clearHealth, latestHealth } from '../health/store'
+import { clearHealth, latestHealth, saveHealth } from '../health/store'
+import { readHealthExport } from '../health/appleExport'
+import { HealthImportSession } from '../health/importSession'
+import { mailDispatcher } from '../providers/mailDispatch'
 import { describeHealth } from '@shared/health'
 import { listModels as listOpenRouterModels } from '../providers/openrouter'
 import {
@@ -125,9 +130,9 @@ import { installLocalAsset, localAssets } from '../local/assets'
 import { createSettingsWindow } from '../windows/settings'
 import { createCrystalWindow, getCrystalWindow, setAlwaysOnTop } from '../windows/crystal'
 import { browserAction, browserCookies, browserState, clearBrowserSite, openBrowser, setBrowserBounds } from '../browser/panel'
-import { forgetICloudCache, iCloudCheck, iCloudCredentials, iCloudDrivePath } from '../providers/icloud'
+import { forgetICloudCache, iCloudCheck, iCloudCredentials, iCloudDriveList, iCloudDrivePath, iCloudEvents, iCloudMailList, iCloudMailRead, iCloudMailSend, insideDrive } from '../providers/icloud'
 import { voicePreview } from '../providers/voicePreview'
-import { ICLOUD_SERVICES, ICLOUD_SERVICE_IDS, hasICloudAuthCookie, isICloudServiceUrl, normalizeAppPassword, normalizeICloudAddress, type ICloudStatus } from '@shared/icloud'
+import { APPLE_APP_PASSWORD_URL, ICLOUD_FOR_WINDOWS_STORE, ICLOUD_SERVICES, ICLOUD_SERVICE_IDS, ICLOUD_SERVICE_LABELS, hasICloudAuthCookie, isICloudServiceUrl, normalizeAppPassword, normalizeICloudAddress, type ICloudStatus } from '@shared/icloud'
 import { broadcast, sendToCrystal, speak } from './emit'
 import { existsSync, readFileSync } from 'node:fs'
 import { resolve as resolvePath, sep as pathSep } from 'node:path'
@@ -151,6 +156,13 @@ type Handler<C extends keyof IpcInvokeMap> = (
  * Einstellungen, und ein eingebetteter Rahmen oder ein künftiges Fenster ohne
  * Riegel soll sie nicht dadurch erreichen, dass anderswo etwas übersehen wurde.
  */
+const HEALTH_DIALOG: Electron.OpenDialogOptions = {
+  title: 'Apple-Health-Export wählen',
+  buttonLabel: 'Einlesen',
+  properties: ['openFile'],
+  filters: [{ name: 'Health-Export', extensions: ['zip', 'xml'] }]
+}
+
 function trustedSender(event: IpcMainInvokeEvent): boolean {
   const frame = event.senderFrame
   // Über Prozess- und Routing-Nummer vergleichen, nicht über die Objektidentität:
@@ -203,6 +215,8 @@ function keepLocalModelWarm(settings: ReturnType<typeof getSettings>): void {
 }
 
 export function registerIpcHandlers(version: string): void {
+  const dispatchMail = mailDispatcher()
+  const healthImport = new HealthImportSession()
   let diagnosticSending = false
   // ── Einstellungen ──────────────────────────────────────────
   handle('settings:get', () => getSettings())
@@ -222,6 +236,19 @@ export function registerIpcHandlers(version: string): void {
   handle('backup:list', () => listBackups())
   handle('backup:create', () => createBackup())
   handle('backup:openFolder', () => revealBackups())
+  handle('backup:restoreStatus', () => ({ pending: restorePending(app.getPath('userData')) }))
+  handle('backup:cancelRestore', () => cancelRestore(app.getPath('userData')))
+  handle('backup:restore', async () => {
+    const choice = await dialog.showOpenDialog({ title: 'James-Sicherung wiederherstellen', properties: ['openFile'], filters: [{ name: 'James-Sicherung', extensions: ['gz'] }] })
+    if (choice.canceled || !choice.filePaths[0]) return { ok: false, detail: 'Keine Sicherung gewählt.' }
+    const root = app.getPath('userData')
+    const backup = inspectBackup(choice.filePaths[0], root)
+    const confirmation = await dialog.showMessageBox({ type: 'question', title: 'Wiederherstellung nach Neustart', message: `Sicherung vom ${new Date(backup.createdAt).toLocaleString('de-DE')} wiederherstellen?`, detail: `${Object.keys(backup.files).length} Dateien werden beim nächsten Start ersetzt. Vorher wird ein Rückfallbestand im Sicherungsordner angelegt. Zugangsdaten bleiben erhalten. Zusätzliche Dateien, die in der Sicherung fehlen, bleiben bestehen.`, buttons: ['Abbrechen', 'Wiederherstellung vormerken'], defaultId: 0, cancelId: 0 })
+    if (confirmation.response !== 1) return { ok: false, detail: 'Wiederherstellung abgebrochen.' }
+    stageRestore(root, backup.files)
+    return { ok: true, detail: 'Wiederherstellung geprüft und vorgemerkt. James vollständig beenden und neu starten. Vorher lässt sich der Vorgang hier abbrechen.' }
+  })
+  handle('briefing:refresh', () => maybeShowBriefing(true))
   handle('settings:set', (patch) => {
     const before = getSettings()
     const next = setSettings(patch)
@@ -470,12 +497,20 @@ export function registerIpcHandlers(version: string): void {
   })
   handle('study:decks', () => listDecks().map(d => ({ id: d.id, title: d.title, stats: deckStats(d) })))
   handle('study:next', ({ deckId, skip }) => quizNext(deckId, skip))
-  handle('study:answer', ({ deckId, cardId, answer }) => {
-    const r = quizAnswer(deckId, cardId, answer)
+  handle('study:answer', ({ deckId, cardId, questionToken, answer }) => {
+    const r = quizAnswer(deckId, cardId, answer, questionToken)
     return { correct: r.correct, solution: r.solution, stats: r.stats }
   })
   handle('study:delete', ({ deckId }) => deleteDeck(deckId))
   handle('pc:status', () => pcStatus(readPcProfile()))
+  handle('pc:preview', () => {
+    const profile = getSettings().pcProfile ? readPcProfile() : null
+    return { folders: profile?.folders ?? [], documents: profile?.documents.slice(0, 10).map(({ path, name, excerpt }) => ({ path, name, excerpt })) ?? [] }
+  })
+  handle('pc:chooseFolders', async () => {
+    const result = await dialog.showOpenDialog({ title: 'Ordner fürs PC-Profil wählen', properties: ['openDirectory', 'multiSelections'] })
+    return result.canceled ? [] : result.filePaths.filter(path => !path.startsWith('\\\\'))
+  })
   handle('pc:rescan', async () => pcStatus(await refreshPcProfile(true)))
   handle('pc:clear', () => { clearPcProfile(); return pcStatus(null) })
   handle('location:locate', async () => {
@@ -584,7 +619,7 @@ export function registerIpcHandlers(version: string): void {
   // es diese Seite gibt.
   handle('connect:status', (req) => checkConnections(req?.start ?? true))
   handle('browser:status', () => browserState())
-  handle('browser:open', (req) => { createCrystalWindow(); return openBrowser(req?.url) })
+  handle('browser:open', (req) => { createCrystalWindow(); return openBrowser(req?.url, false, true, req?.purpose) })
   handle('browser:bounds', (req) => setBrowserBounds(req))
   handle('browser:action', (req) => browserAction(req?.action, req?.id, req?.url))
   handle('connect:login', async ({ target }) => {
@@ -599,7 +634,12 @@ export function registerIpcHandlers(version: string): void {
     try {
       if (target === 'icloud') {
         createCrystalWindow()
-        openBrowser(LOGIN_PAGES.icloud, true)
+        openBrowser(LOGIN_PAGES.icloud, true, true, {
+          kind: 'login',
+          title: 'Bei Apple anmelden',
+          hint: 'Auf „Anmelden“ tippen, Apple Account und Passwort eingeben und auf dem iPhone bestätigen. Das Fenster merkt die Anmeldung und schließt sich.',
+          watch: 'icloud'
+        })
         return { ok: true }
       }
       await openForLogin(LOGIN_PAGES[target] ?? LOGIN_PAGES.gmail)
@@ -649,9 +689,10 @@ export function registerIpcHandlers(version: string): void {
     if (!ICLOUD_SERVICE_IDS.includes(service)) return { ok: false, error: 'Unbekannter iCloud-Dienst.' }
     try {
       createCrystalWindow()
+      const why = { kind: 'choice' as const, title: `iCloud ${ICLOUD_SERVICE_LABELS[service]}`, hint: 'Hier erledigst du deinen Schritt direkt bei Apple. Danach auf „Fertig“ tippen.' }
       const existing = browserState().tabs.find((tab) => isICloudServiceUrl(tab.url, service))
-      if (existing) { browserAction('select', existing.id); browserAction('show') }
-      else openBrowser(ICLOUD_SERVICES[service], true)
+      if (existing) { browserAction('select', existing.id); openBrowser(existing.url, true, true, why) }
+      else openBrowser(ICLOUD_SERVICES[service], true, true, why)
       return { ok: true }
     } catch (err) {
       return { ok: false, error: err instanceof Error ? err.message : String(err) }
@@ -662,6 +703,42 @@ export function registerIpcHandlers(version: string): void {
     if (!path) return { ok: false, error: 'Kein iCloud-Drive-Ordner gefunden. „iCloud für Windows“ aus dem Microsoft Store installieren und anmelden.' }
     const error = await shell.openPath(path)
     return error ? { ok: false, error } : { ok: true }
+  })
+  handle('icloud:mailList', (req) => iCloudMailList({ folder: req?.folder, unreadOnly: req?.unreadOnly, query: req?.query, limit: req?.limit }))
+  handle('icloud:mailRead', (req) => iCloudMailRead(Number(req?.uid), req?.folder, 20_000))
+  handle('icloud:mailSend', async (req) => {
+    const to = String(req?.to ?? '').trim()
+    if (!normalizeICloudAddress(to)) throw new Error('Bitte eine gültige Empfängeradresse eintragen.')
+    const input = { to, subject: String(req?.subject ?? '').slice(0, 300), body: String(req?.body ?? '').slice(0, 50_000), inReplyTo: req?.inReplyTo }
+    const result = await dispatchMail(String(req?.operationId ?? ''), { account: iCloudCredentials()?.address, ...input }, () => iCloudMailSend(input))
+    return { verschickt: true as const, an: result.an }
+  })
+  handle('icloud:events', async (req) => {
+    const days = Math.min(Math.max(Math.round(Number(req?.days) || 14), 1), 60)
+    const from = new Date(); from.setHours(0, 0, 0, 0)
+    const events = await iCloudEvents(from.getTime(), from.getTime() + days * 86_400_000)
+    return events.map((e) => ({ title: e.title, start: e.start, end: e.end, allDay: e.allDay, kalender: e.kalender, ...(e.location ? { location: e.location } : {}) }))
+  })
+  handle('icloud:driveList', (req) => iCloudDriveList(req?.path, req?.query))
+  handle('icloud:driveOpen', async (req) => {
+    const root = iCloudDrivePath()
+    if (!root) return { ok: false, error: 'Kein iCloud-Drive-Ordner gefunden.' }
+    const error = await shell.openPath(await insideDrive(root, String(req?.path ?? '')))
+    return error ? { ok: false, error } : { ok: true }
+  })
+  handle('icloud:installWindows', async () => { await shell.openExternal(ICLOUD_FOR_WINDOWS_STORE) })
+  handle('icloud:createAppPassword', async () => {
+    try {
+      createCrystalWindow()
+      openBrowser(APPLE_APP_PASSWORD_URL, false, true, {
+        kind: 'login',
+        title: 'App-spezifisches Passwort erstellen',
+        hint: 'Mit dem Apple Account anmelden → „App-spezifische Passwörter“ → „+“ → Name „James“. Das angezeigte Passwort kopieren, dann „Fertig“ und in James einfügen.'
+      })
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    }
   })
   handle('voice:preview', (request) => voicePreview(request))
 
@@ -904,7 +981,23 @@ export function registerIpcHandlers(version: string): void {
     const snapshot = latestHealth()
     return { takenAt: snapshot?.takenAt ?? null, summary: snapshot ? describeHealth(snapshot) : null }
   })
-  handle('health:clear', () => clearHealth())
+  handle('health:clear', () => { healthImport.cancel(); clearHealth() })
+  handle('health:cancelImport', () => healthImport.cancel())
+  handle('health:import', () => healthImport.run(async signal => {
+    const parent = BrowserWindow.getFocusedWindow() ?? getCrystalWindow() ?? undefined
+    const choice = await (parent ? dialog.showOpenDialog(parent, HEALTH_DIALOG) : dialog.showOpenDialog(HEALTH_DIALOG))
+    const path = choice.filePaths[0]
+    if (choice.canceled || !path) return { ok: false, detail: 'Keine Datei gewählt.' }
+    try {
+      const { snapshot, records } = await readHealthExport(path, records => broadcast('health:importProgress', { records }), signal)
+      signal.throwIfAborted()
+      if (!snapshot) return { ok: false, detail: records ? `${records.toLocaleString('de-DE')} Einträge gelesen, aber keine Werte aus den sieben Tagen vor dem Export.` : 'In der Datei stehen keine Health-Werte.' }
+      if (!saveHealth(snapshot)) return { ok: false, detail: 'Am Rechner liegen schon neuere Health-Werte. Für ältere zuerst „Löschen“.' }
+      return { ok: true, detail: `Eingelesen: ${records.toLocaleString('de-DE')} Einträge, ${snapshot.days.length} Tage.`, takenAt: snapshot.takenAt }
+    } catch (err) {
+      return { ok: false, detail: err instanceof Error ? err.message : String(err) }
+    }
+  }))
 
   // ── ChatGPT-Abo ────────────────────────────────────────────
   handle('chatgpt:connect', async () => {
@@ -1003,6 +1096,12 @@ export function registerIpcHandlers(version: string): void {
   handle('local:install', ({ id, choice }) => installLocalAsset(id, choice))
 
   // ── App ────────────────────────────────────────────────────
+  handle('app:openAccounts', (payload) => {
+    const section = payload && typeof payload.section === 'string' && /^[a-z]{2,20}$/.test(payload.section) ? payload.section : undefined
+    const win = createCrystalWindow()
+    win.restore(); win.show(); win.focus()
+    sendToCrystal('accounts:open', { section })
+  })
   handle('app:openSettings', (payload) => {
     const section = payload && typeof payload.section === 'string' ? payload.section : undefined
     createSettingsWindow(section && /^[a-z]{2,20}$/.test(section) ? section : undefined)

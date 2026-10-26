@@ -61,8 +61,11 @@ const assert = require('node:assert/strict')
     await settings.evaluate(() => window.jarvis.invoke('app:openSettings', { section: 'connections' }))
     const panel = settings.getByRole('region', { name: 'Apple iCloud' })
     await panel.waitFor()
-    for (const label of ['Mail', 'Kalender', 'iCloud Drive', 'Fotos', 'Notizen', 'Wo ist?']) {
-      await panel.getByRole('group', { name: 'iCloud-Apps öffnen' }).getByRole('button', { name: label, exact: true }).waitFor()
+    for (const label of ['Mail', 'Kalender', 'iCloud Drive', 'Apple Health']) {
+      await panel.getByRole('group', { name: 'In James öffnen' }).getByRole('button', { name: label, exact: true }).waitFor()
+    }
+    for (const label of ['Fotos', 'Notizen', 'Wo ist?']) {
+      await panel.getByRole('group', { name: 'Auf iCloud.com erledigen' }).getByRole('button', { name: label, exact: true }).waitFor()
     }
     await panel.getByLabel('iCloud-Mailadresse').fill('hans@icloud.com')
     await panel.getByLabel('App-spezifisches Passwort').fill('meinApplePasswort')

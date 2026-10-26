@@ -1,3 +1,16 @@
+# Backend und Frontend abgesichert – 1.3.25 (26.10.2026)
+
+Berechtigungen, Diagnose-Opt-outs, Projektzuordnung, Drive-Pfadgrenzen und
+Mailzustände repariert. Health-Import validiert ZIP/CRC, meldet Fortschritt und
+lässt sich abbrechen. Vollständige geprüfte Restore-Vormerkung mit Rückfallbestand,
+PC-Ordnerauswahl/-vorschau, Briefing-Teilresultate und begrenzte Workspace-Streams.
+
+Desktop: 2.299 Tests, Typecheck und Build bestanden. Mobile: Typecheck, Lint und
+6 Tests einschließlich lokaler Schutzpatches; Dashboard: 11 Tests bestanden.
+Lokales Paket unter `out/audit/package-final-2026-10-26/`; die neue Fassung wurde
+nicht installiert oder veröffentlicht. Echte Konto-/Geräteabnahme bleibt offen.
+[Änderungen, Speicherinventar, Nachweise und Grenzen](docs/Umsetzung-2026-10-26.md).
+
 # iCloud-Anmeldung und Stimmen-Galerie – 1.3.24 (25.10.2026)
 
 - **iCloud sichtbar:** Die Apple-Anmeldung lag eingeklappt unter „Technischer

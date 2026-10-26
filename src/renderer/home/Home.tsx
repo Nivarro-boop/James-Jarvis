@@ -1,4 +1,5 @@
 import { SkillsPanel } from './SkillsPanel'
+import { AccountsView } from '../accounts/AccountsView'
 import { SkillProposalPanel } from './SkillProposalPanel'
 import { useEffect, useState, type CSSProperties, type JSX } from 'react'
 import { ORB_LOOKS, PixelOrb } from '../crystal/PixelOrb'
@@ -345,7 +346,7 @@ export function Home(): JSX.Element {
             onClick={() => openSettings('diagnose')}><i aria-hidden="true" />{healthLine}</button>
           <ConnectionPill ready={hasVoiceAccess} />
           <Clock />
-          <button className="browser-launch" onClick={() => { void window.jarvis.invoke('browser:action', { action: 'show' }).catch(() => useCrystal.getState().setError('Browser konnte nicht geöffnet werden.')) }}>Browser</button>
+          <button className="home-accounts-btn" onClick={() => window.dispatchEvent(new CustomEvent('jarvis:accounts'))}>Konten</button>
           <MainMenu onBrain={() => setBrainOpen(true)} />
         </div>
       </header>
@@ -398,6 +399,7 @@ export function Home(): JSX.Element {
 
 
       {brainOpen && <BrainMap onClose={() => setBrainOpen(false)} />}
+      <AccountsView />
 
       {state === 'confirm' && confirmation && (
         <ConfirmDialog toolName={confirmation.toolName} question={confirmation.spokenQuestion} />

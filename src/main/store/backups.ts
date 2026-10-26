@@ -9,6 +9,7 @@ import { getSettings } from './settings'
 import { listSkills } from '../agent/skills'
 import { listDecks } from '../study/store'
 import type { BackupInfo } from '@shared/types'
+import { backupSupplement } from './restore'
 
 const BACKUP_FILE = /^(automatic-\d{4}-\d{2}-\d{2}|manual-\d+-[a-f0-9-]+)\.james-backup\.json\.gz$/
 let ticker: NodeJS.Timeout | null = null
@@ -64,8 +65,9 @@ async function snapshot(automatic: boolean, now: number): Promise<BackupInfo> {
     const payload = { format: 'void-james-backup', version: 1, createdAt: now,
       appVersion: app.getVersion(), settings, skills: listSkills(),
       study: { version: 1, decks: listDecks() },
+      filesVersion: 1, files: backupSupplement(app.getPath('userData')),
       database: { encoding: 'base64', sqlite: readFileSync(databaseFile).toString('base64') },
-      excluded: ['Keystore', 'OAuth-Tokens', 'MCP-Umgebungswerte', 'Sprachmodelle', 'Protokolldateien'] }
+      excluded: ['Keystore', 'OAuth-Tokens', 'MCP-Umgebungswerte', 'Browser-Sitzungen', 'Health-Werte', 'Sprachmodelle', 'Protokolldateien'] }
     const compressed = await compress(JSON.stringify(payload))
     writeFileSync(staging, compressed, { flag: 'wx', flush: true })
     renameSync(staging, file)

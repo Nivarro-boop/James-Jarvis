@@ -48,22 +48,27 @@ export function listProjects(): Project[] {
 }
 
 /** Findet ein Projekt über Slug oder einen Teil des Titels. */
-export function findProject(name: string): Project | undefined {
+export function findProject(name: string, exact = false): Project | undefined {
+  const lower = name.toLowerCase().trim()
+  if (!lower) throw new Error('Bitte einen eindeutigen Projektnamen angeben.')
   const all = listProjects()
   const slug = slugify(name)
-  const lower = name.toLowerCase().trim()
-  return all.find((p) => p.slug === slug) ??
-    all.find((p) => p.title.toLowerCase() === lower) ??
-    all.find((p) => p.title.toLowerCase().includes(lower) || p.slug.includes(slug))
+  const identity = all.find((p) => p.slug === lower) ?? all.find((p) => p.title.toLowerCase() === lower)
+  if (identity || exact) return identity
+  const matches = all.filter((p) => p.title.toLowerCase().includes(lower) || p.slug.includes(slug))
+  if (matches.length > 1) throw new Error(`Mehrere Projekte passen: ${matches.map(p => p.title).join(', ')}. Bitte den vollständigen Namen angeben.`)
+  return matches[0]
 }
 
 export function saveProject(project: Project): Project {
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(project.slug)) throw new Error('Ungültige Projektkennung.')
   const next = { ...project, updated: new Date().toISOString() }
   writeAtomic(projectPath(next.slug), renderProject(next))
   return next
 }
 
 export function createProject(title: string, stand = ''): Project {
+  if (!title.trim() || title.length > 300) throw new Error('Projektname muss 1 bis 300 Zeichen haben.')
   let slug = slugify(title)
   for (let n = 2; existsSync(projectPath(slug)); n++) slug = `${slugify(title)}-${n}`
   return saveProject({ slug, title: title.trim(), status: 'aktiv', updated: '', stand, decisions: [], steps: [] })

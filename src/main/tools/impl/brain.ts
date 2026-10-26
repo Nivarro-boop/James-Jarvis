@@ -51,10 +51,10 @@ export async function dayEvents(offsetDays = 0): Promise<Awaited<ReturnType<type
 
 // ─── Projekte ──────────────────────────────────────────────────────────
 
-const projectSchema = z.string().describe('Name des Projekts, auch ein Teil davon.')
+const projectSchema = z.string().trim().min(1).max(300).describe('Vollständiger Projektname oder Kennung aus project_list.')
 
-function mustFind(name: string): ReturnType<typeof listProjects>[number] {
-  const project = findProject(name)
+function mustFind(name: string, exact = false): ReturnType<typeof listProjects>[number] {
+  const project = findProject(name, exact)
   if (!project) throw new Error(`Kein Projekt „${name}“. Mit project_list nachsehen oder mit project_create anlegen.`)
   return project
 }
@@ -108,7 +108,7 @@ const projectUpdate = defineTool({
     abschliessen: z.boolean().optional()
   }),
   async execute({ projekt, stand, entscheidung, neuerSchritt, erledigt, abschliessen }) {
-    const p = mustFind(projekt)
+    const p = mustFind(projekt, true)
     const changes: string[] = []
     if (stand !== undefined) { p.stand = stand; changes.push('Stand') }
     if (entscheidung) {
@@ -117,7 +117,9 @@ const projectUpdate = defineTool({
     }
     if (neuerSchritt) { p.steps.push({ done: false, text: neuerSchritt }); changes.push('Schritt') }
     if (erledigt) {
-      const step = p.steps.find((s) => !s.done && s.text.toLowerCase().includes(erledigt.toLowerCase()))
+      const candidates = p.steps.filter((s) => !s.done && s.text.toLowerCase().includes(erledigt.trim().toLowerCase()))
+      if (!erledigt.trim() || candidates.length > 1) throw new Error('Schritt ist nicht eindeutig. Bitte den vollständigen Text angeben.')
+      const step = candidates[0]
       if (!step) throw new Error(`Kein offener Schritt passt zu „${erledigt}“.`)
       step.done = true
       changes.push('abgehakt')

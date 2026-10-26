@@ -1,54 +1,51 @@
-.james-workspace { display: flex; width: 100%; height: 100dvh; overflow: hidden; background: #101718; }
+/* Anmeldefenster: erscheint nur für einen Schritt des Nutzers und liegt mittig über James. */
+.james-workspace { position: relative; display: flex; width: 100%; height: 100dvh; overflow: hidden; background: #101718; }
 .james-conversation { flex: 1; min-width: 0; height: 100%; }
-.browser-is-open .james-conversation { flex: 0 0 43%; }
-.browser-panel { flex: 1; min-width: 0; display: flex; flex-direction: column; background: #141a1c; color: #e6eeec; border-left: 1px solid #3b4949; font-family: var(--font-body, sans-serif); }
-.browser-panel button, .browser-panel input { font: inherit; }
-.browser-panel button { cursor: pointer; color: inherit; }
+.browser-backdrop { position: absolute; inset: 0; z-index: 29; background: #050a0acc; backdrop-filter: blur(3px); }
+.browser-panel {
+  position: absolute; z-index: 30; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: min(1040px, calc(100vw - 32px)); height: min(820px, calc(100dvh - 32px)); min-height: 260px;
+  display: flex; flex-direction: column; overflow: hidden;
+  background: #141a1c; color: #e6eeec; border: 1px solid #4b6460; border-radius: 16px; box-shadow: 0 24px 80px #000a;
+  font-family: var(--font-body, sans-serif);
+}
+.browser-panel button { font: inherit; cursor: pointer; color: inherit; }
 .browser-panel button:disabled { opacity: .35; cursor: default; }
-.browser-panel button:focus-visible, .browser-panel input:focus-visible { outline: 2px solid #a8e3d0; outline-offset: -2px; }
-.browser-tabbar { display: flex; align-items: center; gap: 4px; padding: 10px 8px 5px; min-height: 49px; }
-.browser-tabs { flex: 1; min-width: 0; display: flex; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
-.browser-tab { display: flex; flex: 0 1 190px; min-width: 100px; border: 1px solid transparent; border-radius: 9px; }
+.browser-panel button:focus-visible { outline: 2px solid #a8e3d0; outline-offset: -2px; }
+.browser-purpose { display: flex; align-items: flex-start; gap: 16px; padding: 16px 18px 14px; background: linear-gradient(135deg, #213a35, #19282a); border-bottom: 1px solid #334142; }
+.browser-purpose > div:first-child { flex: 1; min-width: 0; }
+.browser-kind { display: inline-block; font-size: 10px; letter-spacing: 1.4px; text-transform: uppercase; color: #a8e3d0; background: #a8e3d01a; border-radius: 999px; padding: 3px 9px; }
+.browser-panel[data-kind='approval'] .browser-kind { color: #f3d58b; background: #f3d58b1a; }
+.browser-purpose h2 { margin: 8px 0 4px; font-size: 19px; font-weight: 600; letter-spacing: -.3px; }
+.browser-purpose p { margin: 0; font-size: 13px; line-height: 1.55; color: #b9cdc7; max-width: 72ch; }
+.browser-purpose-actions { display: flex; gap: 6px; align-items: center; flex: none; }
+.browser-done { border: 0; border-radius: 10px; padding: 9px 18px; background: #b8dac7; color: #10211b !important; font-weight: 650; font-size: 13px; }
+.browser-done:hover { background: #cdebd9; }
+.browser-icon { flex: none; width: 34px; height: 34px; border: 0; background: transparent; border-radius: 9px; font-size: 19px !important; }
+.browser-icon:hover:not(:disabled) { background: #354243; }
+.browser-site { display: flex; align-items: center; gap: 4px; padding: 7px 12px; border-bottom: 1px solid #2c393a; background: #182123; }
+.browser-address { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 14px; border-radius: 18px; background: #222d2f; border: 1px solid #344546; font-size: 13px; }
+.browser-address i { font-style: normal; font-size: 12px; }
+.browser-address strong { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.browser-address em { font-style: normal; font-size: 11px; color: #f0b48c; }
+.browser-address[data-secure='false'] { border-color: #7a5a3f; }
+.browser-tabs { display: flex; gap: 4px; padding: 6px 10px; overflow-x: auto; border-bottom: 1px solid #2c393a; }
+.browser-tab { display: flex; flex: 0 1 220px; min-width: 110px; border: 1px solid transparent; border-radius: 9px; }
 .browser-tab.selected { background: #293335; border-color: #435253; }
-.browser-tab button { border: 0; background: transparent; padding: 8px; font-size: 12px; }
+.browser-tab button { border: 0; background: transparent; padding: 7px 8px; font-size: 12px; }
 .browser-tab button[role=tab] { display: flex; gap: 8px; flex: 1; min-width: 0; align-items: center; }
 .browser-tab span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.browser-icon { flex: none; width: 32px; height: 32px; border: 0; background: transparent; border-radius: 8px; font-size: 19px !important; }
-.browser-icon:hover:not(:disabled), .browser-tab button:hover { background: #354243; }
-.browser-toolbar { display: flex; gap: 3px; padding: 6px 10px 9px; align-items: center; }
-.browser-toolbar input { flex: 1; min-width: 0; height: 36px; border: 1px solid #3b4b4c; border-radius: 20px; padding: 0 14px; color: #e6eeec; background: #222d2f; font-size: 12px; }
-.browser-go { border: 0; border-radius: 8px; background: #253b36; width: 32px; height: 32px; }
-.browser-bookmarks { display: flex; flex-wrap: wrap; gap: 5px; padding: 0 12px 10px; border-bottom: 1px solid #334142; }
-.browser-bookmarks button { border: 0; border-radius: 5px; background: transparent; font-size: 11px; color: #b6ccc6; padding: 5px 7px; }
-.browser-bookmarks button:hover { background: #2a3938; }
-.browser-viewport { flex: 1; min-height: 0; position: relative; overflow: auto; background: #11191c; }
-.browser-start { max-width: 650px; margin: auto; padding: clamp(24px, 4vw, 54px) 28px; }
-.browser-eyebrow { color: #a8e3d0; letter-spacing: 2px; font-size: 9px; }
-.browser-start h2 { font-size: clamp(25px, 3vw, 40px); line-height: 1.15; letter-spacing: -1.5px; font-weight: 500; margin: 15px 0; }
-.browser-start p { color: #a6bab5; font-size: 13px; line-height: 1.7; }
-.browser-shortcuts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin: 28px 0; }
-.browser-shortcuts button { display: flex; flex-direction: column; text-align: left; border: 1px solid #384c4c; border-radius: 16px; padding: 20px; gap: 8px; background: linear-gradient(145deg,#233c3d,#182527); }
-.browser-shortcuts button:hover { border-color: #9acdbb; background: #294744; }
-.browser-service-icon { font-size: 25px; color: #b6efda; margin-bottom: 8px; }
-.browser-shortcuts strong { font-size: 14px; }
-.browser-shortcuts small { color: #a0b8b1; font-size: 11px; }
-.browser-start .browser-footnote { font-size: 11px; color: #91a9a3; }
+.browser-viewport { flex: 1; min-height: 0; position: relative; background: #fff; }
+.browser-success { position: absolute; inset: 0; display: grid; place-content: center; justify-items: center; gap: 6px; background: #142420; color: #dff3e8; text-align: center; }
+.browser-success span { display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%; background: #b8dac7; color: #10211b; font-size: 32px; font-weight: 700; }
+.browser-success strong { font-size: 20px; margin-top: 8px; }
+.browser-success p { margin: 0; color: #a6bab5; font-size: 13px; }
 .browser-error { margin: 0; padding: 10px 14px; color: #ffd3b9; background: #483126; font-size: 12px; }
-.browser-status { display: flex; justify-content: space-between; padding: 7px 12px; border-top: 1px solid #334142; color: #9db4ad; font-size: 10px; }
-.browser-wait { padding: 24px; color: #b6ccc6; }
-.browser-is-open .home-bar { flex-wrap: wrap; gap: 8px; }
-.browser-is-open .home-actions { flex-wrap: wrap; }
-.browser-is-open .james-ui.home .home-stage .orb { width: clamp(130px, 23vh, 240px); }
-.browser-is-open .james-ui.home .home-stage h1 { font-size: 28px; }
-.browser-is-open .james-ui.home .home-dock { padding: 10px 20px 16px; }
-.browser-is-open .top-clock, .browser-is-open .home-health, .browser-is-open .top-pill { display: none; }
-.browser-launch { border: 1px solid #4b6460; border-radius: 9px; padding: 8px 11px; background: #203532; color: #cce9dd; font: inherit; font-size: 12px; cursor: pointer; }
-@media (max-width: 760px) { .browser-is-open .james-conversation { display: none; } .browser-panel { border-left: 0; } .browser-status span { display: none; } }
-
-/* Movable handoff window; opening it never exposes the conversation composer. */
-.james-workspace { position: relative; }
-.browser-is-open .james-conversation { flex: 1; display: block; }
-.browser-panel { position: absolute; z-index: 30; width: min(780px, calc(100vw - 24px)); height: min(740px, calc(100dvh - 96px)); min-height: 220px; border: 1px solid #4b6460; border-radius: 14px; overflow: hidden; box-shadow: 0 18px 70px #0009; }
-.browser-drag-handle { display: flex; align-items: center; gap: 10px; flex: none; width: 100%; padding: 12px 16px; border: 0; border-bottom: 1px solid #334142; background: #20312e; cursor: grab !important; touch-action: none; user-select: none; }
-.browser-drag-handle:active { cursor: grabbing !important; }
-.browser-drag-handle small { margin-left: auto; font-size: 10px; color: #a6bab5; }
+.browser-wait { padding: 24px; color: #b6ccc6; background: #11191c; margin: 0; height: 100%; }
+.browser-status { display: flex; justify-content: space-between; gap: 12px; padding: 7px 14px; border-top: 1px solid #334142; color: #9db4ad; font-size: 11px; }
+@media (max-width: 640px) {
+  .browser-panel { width: 100vw; height: 100dvh; border-radius: 0; border: 0; }
+  .browser-purpose { flex-direction: column; }
+  .browser-purpose-actions { align-self: stretch; justify-content: space-between; }
+  .browser-status span { display: none; }
+}

@@ -27,7 +27,7 @@ export function ICloudPanel(): JSX.Element {
   const signIn = (): Promise<void> => run(async () => {
     const result = await window.jarvis.invoke('connect:login', { target: 'icloud' })
     setNote(result.ok
-      ? { ok: true, text: 'iCloud ist rechts im James-Hauptfenster geöffnet. Dort mit dem Apple Account anmelden und auf dem iPhone bestätigen. Danach hier „Status aktualisieren“.' }
+      ? { ok: true, text: 'Das Anmeldefenster ist im James-Hauptfenster offen. Dort mit dem Apple Account anmelden und auf dem iPhone bestätigen; danach schließt es sich von selbst.' }
       : { ok: false, text: `Der Browser ließ sich nicht öffnen: ${result.error ?? 'unbekannter Fehler'}` })
   })
 
@@ -62,6 +62,15 @@ export function ICloudPanel(): JSX.Element {
     setNote({ ok: true, text: 'Im James-Browser von iCloud abgemeldet.' })
   })
 
+  const accounts = (section: string): Promise<void> => run(async () => { await window.jarvis.invoke('app:openAccounts', { section }) })
+
+  const createPassword = (): Promise<void> => run(async () => {
+    const result = await window.jarvis.invoke('icloud:createAppPassword')
+    setNote(result.ok
+      ? { ok: true, text: 'Das Anmeldefenster bei Apple ist im James-Hauptfenster offen. Passwort dort erstellen, kopieren und hier einfügen.' }
+      : { ok: false, text: result.error ?? 'Anmeldefenster ließ sich nicht öffnen.' })
+  })
+
   const drive = (): Promise<void> => run(async () => {
     const result = await window.jarvis.invoke('icloud:openDrive')
     if (!result.ok) setNote({ ok: false, text: result.error ?? 'Ordner ließ sich nicht öffnen.' })
@@ -73,25 +82,33 @@ export function ICloudPanel(): JSX.Element {
 
       <div className="icloud-status" role="status">
         <span className={status?.web ? 'badge ok' : 'badge missing'}>{status?.web ? 'Browser angemeldet' : 'Browser nicht angemeldet'}</span>
-        <span className={status?.mailConfigured ? 'badge ok' : 'badge missing'}>{status?.mailConfigured ? 'Mail & Kalender direkt' : 'Mail & Kalender nur im Browser'}</span>
-        <span className={status?.drivePath ? 'badge ok' : 'badge missing'}>{status?.drivePath ? 'iCloud Drive auf diesem PC' : 'Drive nur im Browser'}</span>
+        <span className={status?.mailConfigured ? 'badge ok' : 'badge missing'}>{status?.mailConfigured ? 'Mail & Kalender verbunden' : 'Mail & Kalender nicht verbunden'}</span>
+        <span className={status?.drivePath ? 'badge ok' : 'badge missing'}>{status?.drivePath ? 'iCloud Drive auf diesem PC' : 'iCloud für Windows fehlt'}</span>
       </div>
 
       <h4>1 · Mit Apple Account anmelden</h4>
       <p className="hint">
-        Öffnet iCloud rechts in James. Passwort und Bestätigungscode gibst du nur dort bei Apple ein — James sieht sie nicht.
-        Danach sind alle iCloud-Apps offen: Mail, Kalender, Drive, Fotos, Kontakte, Notizen, Erinnerungen, Pages, Numbers, Keynote und „Wo ist?“.
+        Öffnet das Anmeldefenster bei Apple. Passwort und Bestätigungscode gibst du nur dort ein — James sieht sie nicht.
+        Das Fenster erkennt die Anmeldung und schließt sich. Mail, Kalender, Drive und Health zeigt James danach selbst unter „Konten“.
       </p>
       <div className="row">
-        <button className="primary" onClick={() => void signIn()} disabled={busy}>{status?.web ? 'iCloud öffnen' : 'Mit Apple Account anmelden'}</button>
+        <button className="primary" onClick={() => void signIn()} disabled={busy}>{status?.web ? 'Erneut anmelden' : 'Mit Apple Account anmelden'}</button>
         <button className="ghost" onClick={() => void refresh()} disabled={busy}>Status aktualisieren</button>
         {status?.web && <button className="ghost" onClick={() => void signOut()} disabled={busy}>Im Browser abmelden</button>}
       </div>
-      <div className="icloud-services" role="group" aria-label="iCloud-Apps öffnen">
-        {ICLOUD_SERVICE_IDS.map((service) => (
+      <div className="icloud-services" role="group" aria-label="In James öffnen">
+        {(['mail', 'calendar', 'drive', 'health'] as const).map((section) => (
+          <button key={section} type="button" className="primary" onClick={() => void accounts(section)} disabled={busy}>
+            {section === 'mail' ? 'Mail' : section === 'calendar' ? 'Kalender' : section === 'drive' ? 'iCloud Drive' : 'Apple Health'}
+          </button>
+        ))}
+      </div>
+      <div className="icloud-services" role="group" aria-label="Auf iCloud.com erledigen">
+        {ICLOUD_SERVICE_IDS.filter((service) => !['mail', 'calendar', 'drive'].includes(service)).map((service) => (
           <button key={service} type="button" onClick={() => void open(service)} disabled={busy}>{ICLOUD_SERVICE_LABELS[service]}</button>
         ))}
       </div>
+      <p className="hint">Fotos, Notizen und die übrigen iCloud-Apps haben keine Schnittstelle für Programme; sie öffnen im Anmeldefenster.</p>
 
       <h4>2 · Mail und Kalender direkt (empfohlen)</h4>
       <p className="hint">
@@ -99,6 +116,7 @@ export function ICloudPanel(): JSX.Element {
         Apple verlangt dafür ein <strong>app-spezifisches Passwort</strong>: account.apple.com → Anmeldung und Sicherheit →
         App-spezifische Passwörter → „James“. Dein Apple-Account-Passwort gehört hier nicht hinein.
       </p>
+      <div className="row"><button onClick={() => void createPassword()} disabled={busy}>Passwort bei Apple erstellen</button></div>
       <div className="field">
         <label htmlFor="icloud-address">iCloud-Mailadresse</label>
         <input id="icloud-address" type="email" autoComplete="off" spellCheck={false} placeholder="name@icloud.com"
@@ -127,17 +145,18 @@ export function ICloudPanel(): JSX.Element {
       <p className="hint">
         {status?.drivePath
           ? 'Gefunden: Der iCloud-Drive-Ordner von „iCloud für Windows“. James kann darin suchen und Textdateien lesen.'
-          : 'Für Dateizugriff ohne Browser „iCloud für Windows“ aus dem Microsoft Store installieren und iCloud Drive einschalten. Bis dahin öffnet James Drive im Browser.'}
+          : 'Für Dateizugriff „iCloud für Windows“ aus dem Microsoft Store installieren und dort iCloud Drive einschalten. Danach zeigt James deine Dateien unter „Konten“.'}
       </p>
       <div className="row">
-        {status?.drivePath && <button onClick={() => void drive()} disabled={busy}>Drive-Ordner öffnen</button>}
-        <button className="ghost" onClick={() => void open('drive')} disabled={busy}>Drive im Browser</button>
+        {status?.drivePath
+          ? <button onClick={() => void drive()} disabled={busy}>Drive-Ordner öffnen</button>
+          : <button onClick={() => { void window.jarvis.invoke('icloud:installWindows') }} disabled={busy}>iCloud für Windows installieren</button>}
       </div>
 
       {note && <p className={note.ok ? 'hint' : 'hint warn'} role="status">{note.text}</p>}
       <p className="hint">
         Zum Beispiel: „Habe ich neue Mails in iCloud?“, „Was steht morgen in meinem iCloud-Kalender?“, „Such in iCloud Drive nach der Einkaufsliste.“
-        Apple Health teilst du in der nativen James-App auf dem iPhone; über iCloud.com ist Health nicht verfügbar.
+        Apple Health: unter Konten → Apple Health den Export aus der Health-App einlesen oder die native James-App koppeln.
       </p>
     </section>
   )

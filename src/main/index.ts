@@ -46,6 +46,7 @@ import { stopLocalServices } from './local/service'
 import { stopUia } from './automation/uia'
 import { installPendingUpdate, startAutoUpdate } from './updater'
 import { needsGeminiForVoice } from '../shared/startupRequirements'
+import { applyPendingRestore } from './store/restore'
 import { constants as priorities, setPriority } from 'node:os'
 import { isTransientNetworkError } from '../shared/transientError'
 
@@ -421,6 +422,12 @@ app.whenReady().then(async () => {
   electronApp.setAppUserModelId('dev.void.jarvis')
   app.on('browser-window-created', (_, window) => optimizer.watchWindowShortcuts(window))
 
+  try { applyPendingRestore(app.getPath('userData')) }
+  catch (error) {
+    dialog.showErrorBox('Wiederherstellung fehlgeschlagen', 'James hat die Wiederherstellung angehalten. Der Rückfallbestand liegt im Sicherungsordner. Bitte James erneut starten; bei wiederholtem Fehler die Rückfallsicherung wiederherstellen.\n\n' + (error instanceof Error ? error.message : String(error)))
+    app.exit(1)
+    return
+  }
   try {
     initDb()
   } catch (err) {

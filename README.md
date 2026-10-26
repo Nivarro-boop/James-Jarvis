@@ -1,5 +1,13 @@
 # James-Jarvis
 
+Version **1.3.25 vom 26.10.2026**: Berechtigungen und Datenzugriffe abgesichert,
+Mailentwürfe bleiben erhalten, Health-Import mit Fortschritt und Abbruch,
+Backup-Wiederherstellung und auswählbare PC-Profilordner. Backend-/Frontend-Prüfungen,
+Mobile-Schutzpatches und noch offene echte Konto-/Gerätetests stehen im
+[aktuellen Umsetzungsbericht](docs/Umsetzung-2026-10-26.md).
+
+Die folgenden Update-Einträge sind die bisherige Historie.
+
 Lokale Version **1.3.22**: integrierter Browser rechts neben dem Gespräch,
 Tabs und gespeicherte Anmeldungen, iCloud Mail/Kalender/Drive/Fotos direkt in James.
 [Prüfungen und verbleibende Konto-/Health-Schritte](docs/Integrierter-Browser-1.3.22.md).

@@ -6,7 +6,7 @@ const assert = require('node:assert/strict')
 ;(async()=>{
  const root=mkdtempSync(join(tmpdir(),'james-context-ui-')),userData=join(root,'void-jarvis')
  mkdirSync(join(userData,'skills'),{recursive:true})
- writeFileSync(join(userData,'settings.json'),JSON.stringify({setupDone:true,wake:{enabled:false,clap:false},automaticBackups:false}))
+ writeFileSync(join(userData,'settings.json'),JSON.stringify({setupDone:true,gamingMode:true,pcProfile:false,dailyBriefing:false,useDeviceLocation:false,diagnosticReporting:{enabled:false,automatic:false,capabilityGaps:false,url:''},wake:{enabled:false,clap:false},automaticBackups:false}))
  writeFileSync(join(userData,'working-context.json'),JSON.stringify({goal:'Stream vorbereiten',decisions:['OBS lokal verwenden'],completed:['Szene geprüft'],next:['Mikrofon prüfen'],blockers:['Kamera fehlt'],status:'active',updatedAt:Date.now(),plan:{title:'Stream vorbereiten',steps:[{text:'Szene geprüft',status:'erledigt'},{text:'Mikrofon prüfen',status:'läuft'}],updatedAt:Date.now()}}))
  writeFileSync(join(userData,'skills','stream-vorbereiten.md'),'---\nname: Stream vorbereiten\ndescription: OBS für den Stream vorbereiten\nsource: manual\nuses: 2\nupdated: 2026-10-13\n---\n\n1. OBS öffnen.\n2. Mikrofon prüfen.\n')
  const wrapper=resolve('out/context-ui-wrapper.cjs')

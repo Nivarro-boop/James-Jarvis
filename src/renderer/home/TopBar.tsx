@@ -87,12 +87,15 @@ export function MainMenu({ onBrain }: { onBrain: () => void }): JSX.Element {
     } },
     { label: paused ? 'Mikrofon aktivieren' : 'Mikrofon pausieren', run: () => window.dispatchEvent(new Event('jarvis:togglePause')) },
     { label: 'Gespräch & Schreiben', run: () => window.dispatchEvent(new Event('jarvis:conversation')) },
-    { label: 'Browser & iCloud', run: () => { void window.jarvis.invoke('browser:action', { action: 'show' }).catch(() => setNote('Browser konnte nicht geöffnet werden.')) } },
+    { label: 'Konten & iCloud', run: () => window.dispatchEvent(new CustomEvent('jarvis:accounts')) },
     { label: 'iPhone & Apple Watch', run: () => openSettings('companion') },
     { label: 'Mit James einrichten', run: () => openSettings('setup') },
     { label: 'Lernen & Quiz', run: () => window.dispatchEvent(new Event('jarvis:learn')) },
     { label: 'Deine Fähigkeiten', run: () => window.dispatchEvent(new Event('jarvis:skills')) },
     { label: 'Gehirn & Projekte', run: onBrain },
+    { label: 'Tagesüberblick aktualisieren', run: () => {
+      void window.jarvis.invoke('briefing:refresh').catch(() => setNote('Tagesüberblick konnte nicht geladen werden. Bitte erneut versuchen.'))
+    } },
     { label: 'Verbindungen', run: () => openSettings('connections') },
     { label: 'Einstellungen', run: () => openSettings() },
     { label: 'Nach Updates suchen', run: () => {

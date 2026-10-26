@@ -8,10 +8,56 @@ export interface BrowserTabState {
   error: string | null
 }
 
+/**
+ * Wozu das Browserfenster gerade offen ist.
+ *
+ * Der Browser ist kein allgemeiner Webbrowser, sondern ein Fenster für einen
+ * Schritt, den nur der Nutzer selbst erledigen kann: anmelden, freigeben,
+ * auswählen. Der Zweck steht oben im Fenster, damit klar ist, was zu tun ist.
+ */
+export interface BrowserPurpose {
+  kind: 'login' | 'approval' | 'choice'
+  title: string
+  hint: string
+  /** Erkennt die Anmeldung selbst und meldet „fertig“. */
+  watch?: 'icloud'
+}
+
 export interface BrowserPanelState {
   open: boolean
   activeId: string | null
   tabs: BrowserTabState[]
+  purpose: BrowserPurpose | null
+  /** Der Zweck ist erfüllt (z. B. Anmeldung erkannt). */
+  done: boolean
+}
+
+export const DEFAULT_PURPOSE: BrowserPurpose = {
+  kind: 'choice',
+  title: 'Dein Schritt im Browser',
+  hint: 'Erledige den Schritt auf der Webseite und tippe danach auf „Fertig“.'
+}
+
+export function cleanPurpose(raw: unknown): BrowserPurpose {
+  if (!raw || typeof raw !== 'object') return DEFAULT_PURPOSE
+  const value = raw as Partial<BrowserPurpose>
+  const kind = value.kind === 'login' || value.kind === 'approval' || value.kind === 'choice' ? value.kind : 'choice'
+  const text = (input: unknown, fallback: string, max: number): string =>
+    typeof input === 'string' && input.trim() ? input.replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max) : fallback
+  return {
+    kind,
+    title: text(value.title, DEFAULT_PURPOSE.title, 80),
+    hint: text(value.hint, DEFAULT_PURPOSE.hint, 400),
+    ...(value.watch === 'icloud' ? { watch: 'icloud' as const } : {})
+  }
+}
+
+/** Nur der Rechnername — er steht im Fenster, damit der Nutzer sieht, wem er Daten gibt. */
+export function browserHost(url: string): string {
+  try {
+    const parsed = new URL(url)
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.hostname : ''
+  } catch { return '' }
 }
 
 export interface BrowserBounds { x: number; y: number; width: number; height: number }

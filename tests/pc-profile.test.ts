@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { it } from 'node:test'
 import { app } from 'electron'
-import { mkdtempSync, rmSync, existsSync, writeFileSync } from 'node:fs'
+import { mkdtempSync, rmSync, existsSync, writeFileSync, mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { deflateRawSync } from 'node:zlib'
-import { clearPcProfile, docxText, refreshPcProfile, searchPcProfile } from '@main/agent/pcProfile'
+import { clearPcProfile, docxText, refreshPcProfile, searchPcProfile, profilePathAllowed, readPcProfile } from '@main/agent/pcProfile'
 import { setSettings } from '@main/store/settings'
 
 function archive(text: string): Buffer {
@@ -24,6 +24,26 @@ it('liest begrenzten Dokumenttext und weist defekte oder zu große ZIP-Inhalte a
   assert.equal(docxText(archive('x'.repeat(3 * 1024 * 1024))), '')
   const invalid = archive('Test'); invalid.writeUInt32LE(0xffffffff, invalid.length - 22 + 16)
   assert.equal(docxText(invalid), '')
+})
+
+it('scans selected folders, excludes subtrees, and invalidates old profiles after scope changes', async t => {
+  const root = mkdtempSync(join(tmpdir(), 'james-profile-scope-'))
+  t.mock.method(app, 'getPath', () => root)
+  const previous = process.env.ProgramData
+  process.env.ProgramData = root
+  t.after(() => { if (previous === undefined) delete process.env.ProgramData; else process.env.ProgramData = previous; rmSync(root, { recursive: true, force: true }) })
+  const chosen = join(root, 'chosen'), excluded = join(chosen, 'excluded')
+  mkdirSync(excluded, { recursive: true })
+  writeFileSync(join(chosen, 'allowed.txt'), 'Allowed content')
+  writeFileSync(join(excluded, 'other.txt'), 'Excluded content')
+  setSettings({ pcProfile: true, gamingMode: false, pcProfileFolders: [chosen], pcProfileExcludedFolders: [excluded] })
+  assert.equal(profilePathAllowed(excluded), false)
+  assert.equal(profilePathAllowed(join(excluded, 'other.txt')), false)
+  const profile = await refreshPcProfile(true)
+  assert.ok(profile?.documents.some(d => d.name === 'allowed.txt'))
+  assert.ok(!profile?.documents.some(d => d.name === 'other.txt'))
+  setSettings({ pcProfileExcludedFolders: [chosen] })
+  assert.equal(readPcProfile(), null)
 })
 it('ein gelöschtes Profil wird von einem bereits gestarteten Scan nicht neu gespeichert', async t => {
   const root = mkdtempSync(join(tmpdir(), 'james-profile-'))

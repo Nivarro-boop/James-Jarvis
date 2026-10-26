@@ -9,7 +9,6 @@ import {
   isHardDenied,
   issueChallenge,
   permissionFor,
-  regrantConfirmation,
   verifyConfirmation
 } from './permissions'
 import { resolveRecipient } from './impl/contacts'
@@ -211,7 +210,7 @@ export async function runTool(req: ToolCallRequest, parentSignal?: AbortSignal):
         source: req.parentId ? 'agent' : 'jarvis'
       })
       const question = buildQuestion(req.name, args)
-      const instruction = issueChallenge(req.name, args, question)
+      const instruction = issueChallenge(req.name, args, question, req.userTurn?.lastUserTextAt)
       sendToCrystal('confirm:request', {
         id: randomUUID(),
         toolName: req.name,
@@ -322,17 +321,16 @@ export async function runTool(req: ToolCallRequest, parentSignal?: AbortSignal):
       return finish(false, { error: 'Vom Nutzer abgebrochen.' }, args, confirmed)
     }
 
-    // Die Zustimmung ist beim Prüfen verbraucht worden, die Aktion aber nie
-    // passiert. Für einen zweiten Versuch mit denselben Argumenten gilt sie
-    // deshalb kurz weiter — sonst müsste der Nutzer eine Frage beantworten,
-    // die er gerade eben schon beantwortet hat.
-    if (confirmed) regrantConfirmation(req.name, args)
-
     const message = err instanceof Error ? err.message : String(err)
     noteGap(req, 'error', message)
     const failed = activityEnd(req.id, false, message)
     if (failed) noteFinishedStep(failed)
-    return finish(false, { error: message }, args, confirmed)
+    // A lost response does not prove a write failed. Never restore a consumed
+    // approval after execution; another attempt needs an explicit new approval.
+    const error = confirmed && !tool.readOnly
+      ? `${message} Ob die Aktion beim Dienst bereits ausgeführt wurde, ist unklar. Vor einem erneuten Versuch den Stand prüfen; nicht automatisch wiederholen.`
+      : message
+    return finish(false, { error }, args, confirmed)
   } finally {
     running.delete(req.id)
     if (running.size === 0) {

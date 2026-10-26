@@ -573,6 +573,8 @@ export interface Settings {
   useDeviceLocation: boolean
   /** PC lokal einlesen (Programme, Ordner, letzte Dateien, Textausschnitte), wenn James im Vordergrund ist. */
   pcProfile: boolean
+  pcProfileFolders: string[]
+  pcProfileExcludedFolders: string[]
   /** Beim ersten Öffnen am Tag ein kurzes Briefing zeigen und sprechen. */
   dailyBriefing: boolean
   diagnosticReporting: { enabled: boolean; automatic: boolean; url: string; capabilityGaps: boolean }

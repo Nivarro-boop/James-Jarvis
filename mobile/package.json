@@ -24,7 +24,9 @@
   "scripts": {
     "start": "expo start --dev-client",
     "ios": "expo start --ios",
-    "test": "node --test src/*.test.ts",
+    "test": "node --test src/*.test.ts scripts/security.test.cjs",
+    "postinstall": "node scripts/security-patches.cjs",
+    "security:patch": "node scripts/security-patches.cjs",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit"
   },

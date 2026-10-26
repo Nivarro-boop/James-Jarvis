@@ -197,3 +197,45 @@ export interface ICloudCheck {
   mail: { ok: boolean; detail: string }
   calendar: { ok: boolean; detail: string }
 }
+
+export interface ICloudMailSummary {
+  uid: number
+  von: string
+  betreff: string
+  datum: string | null
+  gelesen: boolean
+}
+
+export interface ICloudMailMessage {
+  uid: number
+  von: string
+  an: string
+  betreff: string
+  datum: string | null
+  messageId: string | null
+  anhaenge: string[]
+  text: string
+  gekuerzt: boolean
+}
+
+export interface ICloudCalendarEvent {
+  title: string
+  start: number
+  end: number
+  allDay: boolean
+  location?: string
+  kalender: string
+}
+
+export interface ICloudDriveEntry {
+  /** Relativ zum Drive-Ordner, mit `\` unter Windows. */
+  pfad: string
+  name: string
+  ordner: boolean
+  groesse?: number
+  geaendert?: string
+}
+
+/** Microsoft-Store-Seite von „iCloud für Windows“. */
+export const ICLOUD_FOR_WINDOWS_STORE = 'ms-windows-store://pdp/?productid=9PKTQ5699M62'
+export const APPLE_APP_PASSWORD_URL = 'https://account.apple.com/account/manage/section/security'

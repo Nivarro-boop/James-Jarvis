@@ -11,6 +11,10 @@ export function validateSettingsPatch(patch: unknown): void {
     }
     if (Array.isArray(template)) {
       if (!Array.isArray(value)) return bad()
+      if (path === 'pcProfileFolders' || path === 'pcProfileExcludedFolders') {
+        if (value.length > 30 || value.some(item => typeof item !== 'string' || !item.trim() || item.length > 1000 || /[\0\r\n]/.test(item) || item.startsWith('\\\\'))) bad()
+        return
+      }
       if (path === 'mcpServers') {
         const ids = new Set<string>()
         for (const server of value) {

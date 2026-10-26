@@ -7,7 +7,7 @@ const assert = require('node:assert/strict')
 ;(async () => {
  const profile = mkdtempSync(join(tmpdir(), 'james-learning-ui-'))
  const userData = join(profile, 'void-jarvis'); mkdirSync(userData)
- writeFileSync(join(userData, 'settings.json'), JSON.stringify({ setupDone: true, wake: { enabled: false, clap: false }, automaticBackups: false }))
+ writeFileSync(join(userData, 'settings.json'), JSON.stringify({ setupDone: true, gamingMode:true,pcProfile:false,dailyBriefing:false,useDeviceLocation:false,diagnosticReporting:{enabled:false,automatic:false,capabilityGaps:false,url:''},wake: { enabled: false, clap: false }, automaticBackups: false }))
  await build({ entryPoints: ['src/main/agent/skillProposals.ts'], bundle: true, platform: 'node', format: 'cjs', packages: 'external', outfile: 'out/proposals-ui-test.cjs', alias: { '@shared': resolve('src/shared') }, plugins: [{ name: 'test-emitter', setup(b) { b.onLoad({ filter: /ipc[\\/]emit\.ts$/ }, () => ({ contents: `import { BrowserWindow } from 'electron'; export function broadcast(c,p){ for(const w of BrowserWindow.getAllWindows())w.webContents.send(c,p) }`, loader: 'ts' })) } }] })
  const wrapper = resolve('out/learning-ui-wrapper.cjs')
  writeFileSync(wrapper, `const {app,ipcMain}=require('electron');app.setPath('appData',${JSON.stringify(profile)});app.setPath('userData',${JSON.stringify(userData)});globalThis.learningTest=require('./proposals-ui-test.cjs');require('./main/index.js');app.whenReady().then(()=>{ipcMain.removeHandler('skills:decide');ipcMain.handle('skills:decide',(_e,p)=>globalThis.learningTest.decideSkill(p.id,p.accept))})`)

@@ -23,9 +23,44 @@ jobs:
       # Build application code without fetching optional voice assets.
       - run: npx electron-vite build
       - run: node scripts/check-redesign-ui.cjs
+      - run: node scripts/check-integrated-browser.cjs
+      - run: node scripts/audit-frontend-2026-10-26.cjs
+      - run: node scripts/check-recovery-ui.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: isolated-ui-screenshots
           path: out/audit/redesign/*.png
           if-no-files-found: ignore
+  mobile:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm test
+  dashboard:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: error-dashboard
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 26
+          cache: npm
+          cache-dependency-path: error-dashboard/package-lock.json
+      - run: npm ci
+      - run: npm test

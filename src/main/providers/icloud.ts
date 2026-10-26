@@ -1,6 +1,9 @@
 import { existsSync, statSync } from 'node:fs'
+import { readdir, stat, realpath, lstat } from 'node:fs/promises'
+import { join, relative, resolve, isAbsolute } from 'node:path'
 import { homedir } from 'node:os'
 import { getSecret } from '../secrets/keystore'
+import { limitedResponseText } from './httpBody'
 import { eventsInRange, type IcsEvent } from '@shared/ics'
 import {
   ICLOUD_CALDAV,
@@ -12,7 +15,10 @@ import {
   isICloudDavUrl,
   normalizeAppPassword,
   normalizeICloudAddress,
-  type DavCalendar
+  type DavCalendar,
+  type ICloudDriveEntry,
+  type ICloudMailMessage,
+  type ICloudMailSummary
 } from '@shared/icloud'
 
 /**
@@ -89,13 +95,6 @@ async function withImap<T>(fn: (client: import('imapflow').ImapFlow) => Promise<
   }
 }
 
-export interface ICloudMailSummary {
-  uid: number
-  von: string
-  betreff: string
-  datum: string | null
-  gelesen: boolean
-}
 
 function addressText(list: Array<{ name?: string; address?: string }> | undefined): string {
   return (list ?? []).map((a) => (a.name ? `${a.name} <${a.address ?? ''}>` : a.address ?? '')).join(', ')
@@ -137,7 +136,8 @@ export async function iCloudMailList(options: { folder?: string; unreadOnly?: bo
   })
 }
 
-export async function iCloudMailRead(uid: number, folder: string | undefined, maxChars = 6000): Promise<Record<string, unknown>> {
+export async function iCloudMailRead(uid: number, folder: string | undefined, maxChars = 6000): Promise<ICloudMailMessage> {
+  if (!Number.isSafeInteger(uid) || uid < 1) throw new Error('Ungültige Mailkennung.')
   return withImap(async (client) => {
     const lock = await client.getMailboxLock(folderName(folder), { readOnly: true })
     try {
@@ -205,14 +205,15 @@ export async function iCloudMailSend(input: { to: string; subject: string; body:
 // Kalender (CalDAV)
 // ─────────────────────────────────────────────────────────────
 
-async function dav(url: string, method: 'PROPFIND' | 'REPORT', depth: '0' | '1', body: string): Promise<{ url: string; text: string }> {
+async function dav(url: string, method: 'PROPFIND' | 'REPORT', depth: '0' | '1', body: string, redirects = 0, signal = AbortSignal.timeout(20_000)): Promise<{ url: string; text: string }> {
+  if (redirects > 4) throw new Error('iCloud-Kalender leitet zu oft weiter.')
   if (!isICloudDavUrl(url)) throw new Error('Unerwartete Kalenderadresse; Anfrage abgebrochen.')
   const { address, password } = requireCredentials()
   const response = await fetch(url, {
     method,
     // Weiterleitungen selbst prüfen: Die Zugangsdaten dürfen nur an Apple gehen.
     redirect: 'manual',
-    signal: AbortSignal.timeout(20_000),
+    signal,
     headers: {
       Authorization: 'Basic ' + Buffer.from(`${address}:${password}`).toString('base64'),
       Depth: depth,
@@ -223,12 +224,12 @@ async function dav(url: string, method: 'PROPFIND' | 'REPORT', depth: '0' | '1',
   if (response.status >= 300 && response.status < 400) {
     const next = response.headers.get('location')
     if (!next) throw new Error(`iCloud-Kalender leitet ohne Ziel weiter (HTTP ${response.status}).`)
-    return dav(new URL(next, url).toString(), method, depth, body)
+    await response.body?.cancel()
+    return dav(new URL(next, url).toString(), method, depth, body, redirects + 1, signal)
   }
   if (response.status === 401 || response.status === 403) throw Object.assign(new Error('401'), { authenticationFailed: true })
   if (!response.ok && response.status !== 207) throw new Error(`iCloud-Kalender antwortet mit HTTP ${response.status}.`)
-  const text = await response.text()
-  if (text.length > 16 * 1024 * 1024) throw new Error('Die Kalenderantwort ist zu groß.')
+  const text = await limitedResponseText(response, 16 * 1024 * 1024)
   return { url: response.url || url, text }
 }
 
@@ -318,4 +319,57 @@ export async function iCloudCheck(): Promise<{ mail: { ok: boolean; detail: stri
 
 export function forgetICloudCache(): void {
   discovered = null
+}
+
+/** Pfad innerhalb des Drive-Ordners auflösen; alles außerhalb wird abgelehnt. */
+export async function insideDrive(root: string, path: string | undefined): Promise<string> {
+  const input = path ?? ''
+  const refusal = 'Der Pfad liegt außerhalb von iCloud Drive.'
+  if (isAbsolute(input) || input.includes(':') || input.includes('\0')) throw new Error(refusal)
+  const realRoot = await realpath(root)
+  const target = await realpath(resolve(realRoot, input))
+  const rel = relative(realRoot, target)
+  if (rel === '..' || rel.startsWith('..\\') || rel.startsWith('../') || isAbsolute(rel) || target.startsWith('\\\\')) throw new Error(refusal)
+  return target
+}
+
+/** Ordnerinhalt oder Suchtreffer im Drive-Ordner, höchstens 200 Einträge, Ordner zuerst. */
+export async function iCloudDriveList(path?: string, query?: string, signal?: AbortSignal, driveRoot?: string): Promise<{ root: string; ordner: string; eintraege: ICloudDriveEntry[]; gekuerzt: boolean } | null> {
+  const root = driveRoot ?? iCloudDrivePath()
+  if (!root) return null
+  const base = await insideDrive(root, path)
+  const needle = query?.trim().toLowerCase()
+  const out: ICloudDriveEntry[] = []
+  let visited = 0, truncated = false
+  const deadline = Date.now() + 5000
+  const walk = async (dir: string, depth: number): Promise<void> => {
+    signal?.throwIfAborted()
+    if (out.length >= 200 || visited >= 5000 || Date.now() > deadline) { truncated = true; return }
+    const entries = await readdir(dir, { withFileTypes: true })
+    for (const entry of entries) {
+      signal?.throwIfAborted()
+      if (out.length >= 200 || ++visited > 5000 || Date.now() > deadline) { truncated = true; return }
+      if (entry.name.startsWith('.') || entry.name === 'desktop.ini') continue
+      const full = join(dir, entry.name)
+      const link = await lstat(full).catch(() => null)
+      if (!link || link.isSymbolicLink()) continue
+      // Revalidate every target before touching its contents (including junctions).
+      await insideDrive(root, relative(root, full))
+      if (!needle || entry.name.toLowerCase().includes(needle)) {
+        const info = await stat(full).catch(() => null)
+        out.push({
+          pfad: relative(root, full), name: entry.name, ordner: entry.isDirectory(),
+          ...(info && !entry.isDirectory() ? { groesse: info.size } : {}),
+          ...(info ? { geaendert: info.mtime.toISOString() } : {})
+        })
+      }
+      if (needle && entry.isDirectory()) {
+        if (depth < 6) await walk(full, depth + 1)
+        else truncated = true
+      }
+    }
+  }
+  await walk(base, 0)
+  out.sort((a, b) => Number(b.ordner) - Number(a.ordner) || a.name.localeCompare(b.name, 'de'))
+  return { root, ordner: relative(root, base), eintraege: out, gekuerzt: truncated }
 }

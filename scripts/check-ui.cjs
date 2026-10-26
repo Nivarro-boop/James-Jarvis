@@ -6,12 +6,12 @@ const assert = require('node:assert/strict')
 
 ;(async () => {
   const profile = mkdtempSync(join(tmpdir(), 'jarvis-ui-'))
-  const wrapper = resolve('.jarvis-ui-check.cjs')
+  const wrapper = resolve('out/ui-check-wrapper.cjs')
   const userData = join(profile, 'void-jarvis')
   mkdirSync(resolve('out/audit'), { recursive: true })
   mkdirSync(userData, { recursive: true })
   writeFileSync(join(userData, 'settings.json'), JSON.stringify({ setupDone: true, gamingMode: true, pcProfile: false, dailyBriefing: false, speech: { provider: 'gemini', hearProvider: 'gemini', thinkProvider: 'gemini' }, wake: { enabled: false, clap: false }, automaticBackups: false, useDeviceLocation: false, diagnosticReporting: { enabled: false, automatic: false, capabilityGaps: false, url: '' } }))
-  writeFileSync(wrapper, `const {app}=require('electron'); app.setPath('appData',${JSON.stringify(profile)}); app.setPath('userData',${JSON.stringify(userData)}); require('./out/main/index.js')`)
+  writeFileSync(wrapper, `const {app}=require('electron'); app.setPath('appData',${JSON.stringify(profile)}); app.setPath('userData',${JSON.stringify(userData)}); require('./main/index.js')`)
   let app
   try {
     app = await _electron.launch({ executablePath: require('electron'), args: [wrapper, '--use-fake-device-for-media-stream', '--use-fake-ui-for-media-stream'], timeout: 30000 })
@@ -37,11 +37,12 @@ const assert = require('node:assert/strict')
     await page.getByRole('button', { name: 'Menü', exact: true }).click()
     await page.getByRole('menuitem', { name: 'Gespräch & Schreiben', exact: true }).click()
     console.log('PASS: home with text fallback, microphone button toggles mute')
-    // Startseite: Status, Verbindung, Uhr und Menü; alles Weitere steht im Menü.
-    assert.equal(await page.locator('.home-bar button').count(), 3)
+    // Startseite: Status, Verbindung, Uhr, Konten und Menü; alles Weitere steht im Menü.
+    assert.equal(await page.locator('.home-bar button').count(), 4)
+    await page.getByRole('button', { name: 'Konten', exact: true }).waitFor()
     await page.getByRole('timer').waitFor()
     await page.getByRole('button', { name: 'Menü', exact: true }).click()
-    for (const item of ['Neues Gespräch', 'Mit James einrichten', 'Deine Fähigkeiten', 'Verbindungen', 'Einstellungen', 'Nach Updates suchen', 'Lizenzen']) {
+    for (const item of ['Neues Gespräch', 'Konten & iCloud', 'Mit James einrichten', 'Deine Fähigkeiten', 'Verbindungen', 'Einstellungen', 'Nach Updates suchen', 'Lizenzen']) {
       await page.getByRole('menuitem', { name: item, exact: true }).waitFor()
     }
     await page.keyboard.press('Escape')
@@ -91,6 +92,7 @@ const assert = require('node:assert/strict')
     await settings.keyboard.press('Alt')
     assert.ok(await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows().every(w => !w.isMenuBarVisible())), 'Alt revealed the settings menu')
     await settings.getByRole('button', { name: 'Stimme & Modelle', exact: true }).click()
+    await settings.getByText('Anbieter und Feineinstellung', { exact: true }).click()
     await settings.getByRole('button', { name: /OpenAI Realtime.*Schlüssel/ }).click()
     await settings.getByRole('button', { name: 'Gespeicherten Zugang testen', exact: true }).click()
     await settings.getByRole('status').filter({ hasText: /OpenAI API-Schlüssel fehlt/ }).waitFor()

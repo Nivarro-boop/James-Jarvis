@@ -4917,17 +4917,45 @@ export function MemorySection(): JSX.Element {
  */
 function AppleHealthPanel(): JSX.Element {
   const [state, setState] = useState<{ takenAt: number | null; summary: string | null } | null>(null)
+  const [checkedAt, setCheckedAt] = useState<number | null>(null)
   const [error, setError] = useState('')
-  const load = (): void => { void window.jarvis.invoke('health:status').then(result => { setState(result); setError('') }).catch(() => setError('Health-Status konnte nicht geladen werden. Bitte erneut prüfen.')) }
+  const [note, setNote] = useState<{ ok: boolean; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  // Vorher sah ein Klick ohne Werte genauso aus wie vorher: Jetzt steht immer da, wann geprüft wurde.
+  const load = (): void => { void window.jarvis.invoke('health:status').then(result => { setState(result); setCheckedAt(Date.now()); setError('') }).catch(() => setError('Health-Status konnte nicht geladen werden. Bitte erneut prüfen.')) }
   useEffect(load, [])
+  const importExport = async (): Promise<void> => {
+    setBusy(true)
+    setNote({ ok: true, text: 'Lese den Export … bei großen Exporten kann das eine Minute dauern.' })
+    try {
+      const result = await window.jarvis.invoke('health:import')
+      setNote({ ok: result.ok, text: result.detail })
+      load()
+    } catch (err) {
+      setNote({ ok: false, text: err instanceof Error ? err.message.replace(/^Error invoking remote method '[^']+': (Error: )?/, '') : String(err) })
+    } finally { setBusy(false) }
+  }
+  useEffect(() => window.jarvis.on('health:importProgress', ({ records }) => setNote({ ok: true, text: `${records.toLocaleString('de-DE')} Health-Einträge gelesen …` })), [])
   return (
     <div className="field">
       <h3>Apple Health</h3>
-      <button onClick={load}>Health-Verbindung prüfen</button>
+      <div className="row">
+        <button onClick={load}>Health-Verbindung prüfen</button>
+        <button className="primary" disabled={busy} onClick={() => void importExport()}>{busy ? 'Liest …' : 'Health-Export einlesen'}</button>
+        {busy && <button onClick={() => void window.jarvis.invoke('health:cancelImport').catch(err => setError(String(err)))}>Import abbrechen</button>}
+        <button className="ghost" onClick={() => { void window.jarvis.invoke('app:openAccounts', { section: 'health' }) }}>In James öffnen</button>
+      </div>
+      {checkedAt && (
+        <p className="hint" role="status">
+          Geprüft um {new Date(checkedAt).toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}:{' '}
+          {state?.takenAt ? `Werte vom ${new Date(state.takenAt).toLocaleString('de-DE')} sind da.` : 'noch keine Werte am PC.'}
+        </p>
+      )}
       {error && <p className="hint" role="alert">{error}</p>}
+      {note && <p className={note.ok ? 'hint' : 'hint warn'} role="status">{note.text}</p>}
       {state?.summary ? (
         <>
-          <p className="hint ok">Werte vom iPhone sind da. Frag James z. B. „Wie viele Schritte hab ich heute?“ oder „Wie hab ich geschlafen?“</p>
+          <p className="hint ok">Frag James z. B. „Wie viele Schritte hab ich heute?“ oder „Wie hab ich geschlafen?“</p>
           <details className="settings-fold">
             <summary>Was James sieht</summary>
             <p className="hint" style={{ whiteSpace: 'pre-line' }}>{state.summary}</p>
@@ -4936,8 +4964,9 @@ function AppleHealthPanel(): JSX.Element {
         </>
       ) : (
         <p className="hint">
-          In der nativen James-App auf dem iPhone oben auf „Apple Health teilen“ tippen und erlauben. Die Web-App und iCloud.com haben keinen Health-Zugriff. Danach kommen Schritte,
-          Schlaf, Aktivität, Puls und Gewicht bei jedem Öffnen der App hierher — nur auf diesen Rechner, verschlüsselt.
+          Sofort möglich: iPhone → Health-App → Profilbild oben rechts → „Alle Gesundheitsdaten exportieren“, die Datei „Export.zip“
+          auf den PC legen und oben „Health-Export einlesen“. Automatisch geht es mit der nativen James-App auf dem iPhone
+          („Apple Health teilen“). Die Web-App und iCloud.com haben keinen Health-Zugriff.
         </p>
       )}
     </div>

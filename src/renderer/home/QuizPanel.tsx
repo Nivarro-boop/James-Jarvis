@@ -58,7 +58,7 @@ export function QuizPanel(): JSX.Element | null {
     if (!question || 'done' in question || feedback || !given.trim() || locked.current) return
     const id = ++request.current
     locked.current = true; setBusy(true); setError('')
-    void window.jarvis.invoke('study:answer', { deckId: question.deckId, cardId: question.cardId, answer: given })
+    void window.jarvis.invoke('study:answer', { deckId: question.deckId, cardId: question.cardId, questionToken: question.questionToken, answer: given })
       .then(r => { if (id === request.current) { setFeedback({ correct: r.correct, solution: r.solution, given }); setQuestion({ ...question, stats: r.stats }) } })
       .catch(e => { if (id === request.current) setError(e instanceof Error ? e.message : String(e)) })
       .finally(() => { if (id === request.current) { locked.current = false; setBusy(false) } })

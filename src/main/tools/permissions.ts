@@ -72,29 +72,14 @@ const ALWAYS_CONFIRM = new Set(['order_place'])
 /** Eine Rückfrage verfällt, wenn nicht zeitnah darauf reagiert wird. */
 const CHALLENGE_TTL_MS = 3 * 60 * 1000
 
-/**
- * Wie lange eine bereits erteilte Zustimmung einen zweiten Versuch deckt.
- *
- * Kürzer als die Rückfrage selbst: Das soll den Fall auffangen, dass die
- * Ausführung an etwas Äußerem gescheitert ist (Netz weg, Browser nicht da) und
- * das Modell es gleich noch einmal versucht — nicht eine halbe Unterhaltung
- * später erneut greifen.
- */
-const GRANT_TTL_MS = 2 * 60 * 1000
-
 interface Challenge {
   toolName: string
   argsHash: string
   issuedAt: number
+  previousUserTextAt?: number
 }
 
 const challenges = new Map<string, Challenge>()
-
-/**
- * Zustimmungen, die einmal erteilt und dabei verbraucht wurden, deren Aktion
- * aber fehlgeschlagen ist. Siehe `regrantConfirmation`.
- */
-const grants = new Map<string, number>()
 
 /** Der Nutzer-Turn, den der Renderer beim Tool-Aufruf mitschickt. */
 export interface UserTurnContext {
@@ -141,10 +126,10 @@ export function permissionFor(toolName: string): ToolPermission {
   const configured = settings.permissions[toolName]
   if (configured === 'deny') return 'deny'
   if (ALWAYS_CONFIRM.has(toolName)) return 'ask'
+  const tool = getTool(toolName)
+  if (tool?.alwaysAsk || configured === 'ask') return 'ask'
   if (!settings.confirmActions) return 'allow'
   if (FORCED_ASK.has(toolName)) return 'ask'
-  const tool = getTool(toolName)
-  if (tool?.alwaysAsk) return 'ask'
   if (configured) return configured
   return defaultPermission(toolName)
 }
@@ -294,9 +279,9 @@ function defaultPermission(toolName: string): ToolPermission {
 }
 
 /** Legt eine Rückfrage an und liefert den Text, den das Modell stellen soll. */
-export function issueChallenge(toolName: string, args: unknown, question: string): string {
+export function issueChallenge(toolName: string, args: unknown, question: string, previousUserTextAt?: number): string {
   const argsHash = hashArgs(toolName, args)
-  challenges.set(argsHash, { toolName, argsHash, issuedAt: Date.now() })
+  challenges.set(argsHash, { toolName, argsHash, issuedAt: Date.now(), previousUserTextAt })
   pruneChallenges()
 
   return [
@@ -316,22 +301,6 @@ export type ConfirmVerdict =
    */
   | { ok: false; reason: string; reissue?: boolean }
 
-/**
- * Hält eine bereits erteilte Zustimmung kurz am Leben.
- *
- * Der Anlass steht im Aktionslog vom 28. Juli 2026: Ein bestätigtes
- * `chrome_open_tab` lief los, scheiterte an etwas ganz anderem, und weil die
- * Zustimmung beim Ausführen verbraucht wird, war sie beim Wiederholen weg. Das
- * Modell schickte viermal `confirmed: true` und bekam viermal "dafür gab es
- * keine Rückfrage" — eine Sackgasse, aus der es nicht herausfand.
- *
- * Bewusst nur nach einem *gescheiterten* Versuch. Nach einem erfolgreichen
- * wäre es die Erlaubnis, dieselbe Mail zweimal zu verschicken.
- */
-export function regrantConfirmation(toolName: string, args: unknown): void {
-  grants.set(hashArgs(toolName, args), Date.now())
-}
-
 /** Prüft, ob ein `confirmed: true` wirklich gedeckt ist. */
 export function verifyConfirmation(
   toolName: string,
@@ -339,12 +308,6 @@ export function verifyConfirmation(
   turn: UserTurnContext | undefined
 ): ConfirmVerdict {
   const argsHash = hashArgs(toolName, args)
-
-  const granted = grants.get(argsHash)
-  if (granted !== undefined) {
-    grants.delete(argsHash)
-    if (Date.now() - granted <= GRANT_TTL_MS) return { ok: true }
-  }
 
   const challenge = challenges.get(argsHash)
 
@@ -367,7 +330,7 @@ export function verifyConfirmation(
   }
 
   // Der Nutzer muss seit der Rückfrage tatsächlich etwas gesagt haben.
-  if (!turn || turn.lastUserTextAt < challenge.issuedAt) {
+  if (!turn || turn.lastUserTextAt < challenge.issuedAt || (challenge.previousUserTextAt !== undefined && turn.lastUserTextAt <= challenge.previousUserTextAt)) {
     return {
       ok: false,
       reason:
@@ -417,16 +380,12 @@ function pruneChallenges(): void {
   for (const [key, value] of challenges) {
     if (value.issuedAt < cutoff) challenges.delete(key)
   }
-  const grantCutoff = Date.now() - GRANT_TTL_MS
-  for (const [key, issuedAt] of grants) {
-    if (issuedAt < grantCutoff) grants.delete(key)
-  }
+
 }
 
 /** Not-Aus: alle offenen Rückfragen und erteilten Zustimmungen verwerfen. */
 export function clearChallenges(): void {
   challenges.clear()
-  grants.clear()
 }
 
 export function isHardDenied(toolName: string): boolean {

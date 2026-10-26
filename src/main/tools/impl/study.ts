@@ -40,14 +40,15 @@ const quiz = defineTool({
   schema: z.object({
     stapel: z.string().describe('Name oder ID des Stapels'),
     karte: z.string().optional().describe('ID der zuletzt gestellten Karte'),
+    fragekennung: z.string().optional().describe('Fragekennung aus der zuletzt gestellten Frage; bei einer Antwort immer mitgeben.'),
     antwort: z.string().optional().describe('Antwort des Nutzers, wörtlich')
   }),
-  async execute({ stapel, karte, antwort }) {
+  async execute({ stapel, karte, fragekennung, antwort }) {
     const deck = findDeck(stapel)
     if (!deck) return { fehler: `Kein Stapel „${stapel}“.`, stapel: listDecks().map(d => d.title) }
     let result: Record<string, unknown> = {}
     if (karte && antwort !== undefined) {
-      const r = quizAnswer(deck.id, karte, antwort)
+      const r = quizAnswer(deck.id, karte, antwort, fragekennung ?? '')
       result = { richtig: r.correct, ...(r.correct ? {} : { loesung: r.solution }) }
     }
     const next = quizNext(deck.id, karte)
@@ -55,6 +56,7 @@ const quiz = defineTool({
     return {
       ...result,
       karte: next.cardId,
+      fragekennung: next.questionToken,
       frage: next.question,
       ...(next.options ? { optionen: next.options.map((o, i) => `${String.fromCharCode(97 + i)}) ${o}`) } : {}),
       offen: next.stats.due

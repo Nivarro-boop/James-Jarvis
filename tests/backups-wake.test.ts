@@ -11,7 +11,7 @@ import { closeDb, initDb } from '@main/db'
 import { createReminder } from '@main/scheduler/reminders'
 import { setSettings } from '@main/store/settings'
 import { wakeStatus } from '@main/providers/wakeStatus'
-import { addCards, quizAnswer } from '@main/study/store'
+import { addCards, quizAnswer, quizNext } from '@main/study/store'
 
 it('sichert die offene Datenbank konsistent, hält sieben tägliche Kopien und lässt Kontodateien aus', async t => {
   const root = mkdtempSync(join(tmpdir(), 'james-backup-'))
@@ -20,7 +20,9 @@ it('sichert die offene Datenbank konsistent, hält sieben tägliche Kopien und l
   setSettings({automaticBackups:false, mcpServers:[{id:'test',name:'Test',enabled:false,command:'node',args:[],env:{API_KEY:'test-private-value'}}]})
   createReminder({text:'Wichtiger Termin',inMinutes:60})
   const deck = addCards('Testwissen', [{ question: 'Hauptstadt Frankreichs', answer: 'Paris' }])
-  quizAnswer(deck.id, deck.cards[0].id, 'Paris')
+  const question = quizNext(deck.id)
+  assert.ok(!('done' in question))
+  quizAnswer(deck.id, deck.cards[0].id, 'Paris', question.questionToken)
   const manual = await createBackup()
   const payload = JSON.parse(gunzipSync(readFileSync(manual.file)).toString())
   assert.equal(payload.format, 'void-james-backup')

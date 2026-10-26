@@ -4,7 +4,27 @@ import { app } from 'electron'
 import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { addCards, findDeck, listDecks, quizAnswer } from '@main/study/store'
+import { addCards, findDeck, listDecks, quizAnswer, quizNext } from '@main/study/store'
+
+it('grades each presented question once and rejects obsolete or mismatched presentations', t => {
+  const root = mkdtempSync(join(tmpdir(), 'james-quiz-once-'))
+  t.mock.method(app, 'getPath', () => root)
+  t.after(() => rmSync(root, { recursive: true, force: true }))
+  const deck = addCards('Quiz once', [{ question: 'Capital?', answer: 'Paris' }])
+  const old = quizNext(deck.id), current = quizNext(deck.id)
+  assert.ok(!('done' in old) && !('done' in current))
+  assert.throws(() => quizAnswer(deck.id, old.cardId, 'Paris', old.questionToken), /nicht mehr aktuell/)
+  assert.throws(() => quizAnswer('wrong-deck', current.cardId, 'Paris', current.questionToken), /nicht mehr aktuell/)
+  const first = quizAnswer(deck.id, current.cardId, 'London', current.questionToken)
+  const duplicate = quizAnswer(deck.id, current.cardId, 'London', current.questionToken)
+  assert.deepEqual(duplicate, first)
+  assert.equal(findDeck(deck.id)?.cards[0].wrong, 1)
+  assert.throws(() => quizAnswer(deck.id, current.cardId, 'Paris', current.questionToken), /bereits/)
+  const retry = quizNext(deck.id)
+  assert.ok(!('done' in retry))
+  quizAnswer(deck.id, retry.cardId, 'Paris', retry.questionToken)
+  assert.equal(findDeck(deck.id)?.cards[0].right, 1)
+})
 
 it('erhält beschädigte und unbekannte Lernbestände unverändert', t => {
   const root = mkdtempSync(join(tmpdir(), 'james-study-'))
@@ -32,7 +52,9 @@ it('schreibt nur in exakt passende Stapel und speichert konsistente Auswahlkarte
   assert.throws(() => addCards(' ', []), /Namen/)
   assert.equal(deck.cards[0].options?.length, 6)
   assert.ok(deck.cards[0].options?.includes(deck.cards[0].answer))
-  quizAnswer(deck.id, deck.cards[0].id, deck.cards[0].answer)
+  const question = quizNext(deck.id)
+  assert.ok(!('done' in question))
+  quizAnswer(deck.id, deck.cards[0].id, deck.cards[0].answer, question.questionToken)
   assert.equal(findDeck(deck.id)?.cards[0].right, 1)
   assert.equal(JSON.parse(readFileSync(join(root, 'study.json'), 'utf8')).version, 1)
 })

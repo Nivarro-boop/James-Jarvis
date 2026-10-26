@@ -198,14 +198,25 @@ export async function wakeReadiness(): Promise<WakeReadiness> {
     }
   }
 
+  // Erst die Treibereinstellung („Bei Magic Packet aufwecken“) und die Liste der
+  // Geräte, die wecken dürfen. Get-NetAdapterPowerManagement allein reicht nicht:
+  // Manche Treiber (z. B. Realtek PCIe GbE) beantworten die Abfrage mit
+  // „Windows System Error 31“, obwohl Wake-on-LAN eingeschaltet ist.
   const script = `
 $ErrorActionPreference = 'SilentlyContinue'
-$adapter = Get-NetAdapter | Where-Object { $_.MacAddress -replace '-','' -eq '${target.mac.replace(/:/g, '')}' } | Select-Object -First 1
-$pm = if ($adapter) { Get-NetAdapterPowerManagement -Name $adapter.Name } else { $null }
+${adapterLookup(target.mac)}
+$magic = $null; $device = $null
+if ($adapter) {
+  $prop = Get-NetAdapterAdvancedProperty -Name $adapter.Name -RegistryKeyword '*WakeOnMagicPacket'
+  if ($prop) { $magic = "$($prop.RegistryValue)" -eq '1' }
+  if ($magic -eq $null) { $pm = Get-NetAdapterPowerManagement -Name $adapter.Name; if ($pm) { $magic = "$($pm.WakeOnMagicPacket)" -match 'Enabled' } }
+  $device = [bool](powercfg /devicequery wake_armed | Where-Object { $_.Trim() -eq $adapter.InterfaceDescription })
+}
 $hiberboot = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power' -Name HiberbootEnabled).HiberbootEnabled
 [pscustomobject]@{
   adapter = $(if ($adapter) { $adapter.Name } else { $null })
-  magic   = $(if ($pm) { "$($pm.WakeOnMagicPacket)" } else { $null })
+  magic   = $magic
+  device  = $device
   hiberboot = $hiberboot
 } | ConvertTo-Json -Compress`
 
@@ -213,22 +224,23 @@ $hiberboot = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\
     const { stdout } = await execFileAsync(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
-      { windowsHide: true, maxBuffer: 1024 * 1024 }
+      { windowsHide: true, maxBuffer: 1024 * 1024, timeout: 20_000 }
     )
     const data = JSON.parse(stdout.trim() || '{}') as {
       adapter?: string | null
-      magic?: string | null
+      magic?: boolean | null
+      device?: boolean | null
       hiberboot?: number | null
     }
 
-    const armed = data.magic ? /enabled/i.test(data.magic) : null
+    const armed = typeof data.magic === 'boolean' ? data.magic && data.device !== false : null
     const fastStartup = data.hiberboot === null || data.hiberboot === undefined ? null : data.hiberboot === 1
 
     return {
       armed,
       fastStartup,
       adapter: data.adapter ?? target.adapter,
-      note: buildNote(armed, fastStartup)
+      note: buildNote(armed, fastStartup, data.magic === true && data.device === false)
     }
   } catch (err) {
     console.warn('[wol] Bereitschaft nicht feststellbar:', err)
@@ -241,9 +253,37 @@ $hiberboot = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\
   }
 }
 
-function buildNote(armed: boolean | null, fastStartup: boolean | null): string {
+/** Findet die Karte über ihre MAC-Adresse. Die Adresse kommt aus Windows selbst, nicht von außen. */
+function adapterLookup(mac: string): string {
+  const clean = mac.replace(/[^0-9a-f]/gi, '').toUpperCase()
+  return `$adapter = Get-NetAdapter | Where-Object { ($_.MacAddress -replace '-','') -eq '${clean}' } | Select-Object -First 1`
+}
+
+/** Nur der Grund aus PowerShells Fehlerausgabe, ohne den mitgeschickten Befehl. */
+export function powershellReason(err: unknown): string {
+  const stderr = (err as { stderr?: unknown })?.stderr
+  const text = typeof stderr === 'string' && stderr.trim() ? stderr : err instanceof Error ? err.message.replace(/^Command failed:[\s\S]*?\r?\n/, '') : String(err)
+  return text.replace(/#< CLIXML[\s\S]*$/, '').split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !/^(In Zeile|At line|\+ |CategoryInfo|FullyQualifiedErrorId|\+)/.test(line)).slice(0, 2).join(' ').slice(0, 240)
+}
+
+/** Übersetzt die häufigen Gründe in einen Schritt, den der Nutzer gehen kann. */
+export function armFailureNote(reason: string, adapter: string): string {
+  if (/Zugriff|Access is denied|Administrator|erforderlich|0x80070005|PermissionDenied|Berechtigung|elevat/i.test(reason)) {
+    return 'Dafür fehlen die Rechte. Starte James einmal als Administrator, dann bleibt die ' +
+      'Einstellung dauerhaft — oder setze sie im Geräte-Manager unter Energieverwaltung.'
+  }
+  if (/System Error 31|funktioniert nicht|not functioning/i.test(reason)) {
+    return `Der Treiber von „${adapter}“ lässt sich von Windows aus nicht umstellen. Geräte-Manager → ` +
+      'Netzwerkadapter → Eigenschaften: unter „Erweitert“ „Bei Magic Packet aufwecken“ aktivieren und unter ' +
+      '„Energieverwaltung“ „Gerät kann den Computer aus dem Ruhezustand aktivieren“ anhaken.'
+  }
+  return `Windows hat abgelehnt: ${reason || 'ohne Begründung'}`
+}
+
+function buildNote(armed: boolean | null, fastStartup: boolean | null, deviceBlocked = false): string {
   const parts: string[] = []
-  if (armed === false) parts.push('Die Netzwerkkarte hört nicht auf das Zauberpaket.')
+  if (deviceBlocked) parts.push('Die Karte hört auf das Zauberpaket, darf den Rechner aber nicht wecken (Geräte-Manager → Energieverwaltung).')
+  else if (armed === false) parts.push('Die Netzwerkkarte hört nicht auf das Zauberpaket.')
   if (armed === null) parts.push('Ob die Karte zuhört, war nicht feststellbar.')
   if (fastStartup) {
     parts.push(
@@ -270,28 +310,38 @@ export async function armWake(): Promise<{ ok: boolean; note: string }> {
   const target = localWakeTarget()
   if (!target) return { ok: false, note: 'Keine passende Netzwerkkarte gefunden.' }
 
+  // Bereits eingerichtet? Dann nichts anfassen. Sonst zuerst die
+  // Treibereinstellung, die auch dort geht, wo die Energieverwaltung über
+  // CIM mit „Windows System Error 31“ antwortet.
   const script = `
-$adapter = Get-NetAdapter | Where-Object { $_.MacAddress -replace '-','' -eq '${target.mac.replace(/:/g, '')}' } | Select-Object -First 1
-if (-not $adapter) { Write-Error 'Adapter nicht gefunden'; exit 1 }
-Set-NetAdapterPowerManagement -Name $adapter.Name -WakeOnMagicPacket Enabled -ErrorAction Stop
+$ErrorActionPreference = 'Stop'
+${adapterLookup(target.mac)}
+if (-not $adapter) { throw 'Adapter nicht gefunden' }
+$prop = Get-NetAdapterAdvancedProperty -Name $adapter.Name -RegistryKeyword '*WakeOnMagicPacket' -ErrorAction SilentlyContinue
+$device = [bool](powercfg /devicequery wake_armed | Where-Object { $_.Trim() -eq $adapter.InterfaceDescription })
+$magic = $prop -and "$($prop.RegistryValue)" -eq '1'
+if ($magic -and $device) { Write-Output 'already'; exit 0 }
+if (-not $magic) {
+  if ($prop) { Set-NetAdapterAdvancedProperty -Name $adapter.Name -RegistryKeyword '*WakeOnMagicPacket' -RegistryValue 1 }
+  else { Set-NetAdapterPowerManagement -Name $adapter.Name -WakeOnMagicPacket Enabled }
+}
+if (-not $device) {
+  powercfg /deviceenablewake "$($adapter.InterfaceDescription)" | Out-Null
+  if ($LASTEXITCODE -ne 0) { throw "Zugriff verweigert (powercfg $LASTEXITCODE)" }
+}
 Write-Output 'ok'`
 
   try {
-    await execFileAsync(
+    const { stdout } = await execFileAsync(
       'powershell.exe',
       ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-Command', script],
-      { windowsHide: true }
+      { windowsHide: true, timeout: 30_000, maxBuffer: 1024 * 1024 }
     )
+    const checked = await wakeReadiness()
+    if (checked.armed !== true) return { ok: false, note: `Die Änderung wurde angefordert, konnte aber nicht bestätigt werden. ${checked.note}` }
+    if (/already/.test(stdout)) return { ok: true, note: `${target.adapter} ist schon eingerichtet und hört auf das Zauberpaket.` }
     return { ok: true, note: `${target.adapter} hört jetzt auf das Zauberpaket.` }
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err)
-    const denied = /Zugriff|Access is denied|Administrator|erforderlich/i.test(message)
-    return {
-      ok: false,
-      note: denied
-        ? 'Dafür fehlen die Rechte. Starte James einmal als Administrator, dann bleibt die ' +
-          'Einstellung dauerhaft — oder setze sie im Geräte-Manager unter Energieverwaltung.'
-        : `Windows hat abgelehnt: ${message.slice(0, 200)}`
-    }
+    return { ok: false, note: armFailureNote(powershellReason(err), target.adapter) }
   }
 }

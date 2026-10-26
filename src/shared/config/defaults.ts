@@ -6,6 +6,8 @@ export const DEFAULT_SETTINGS: Settings = {
   homeLocation: '',
   useDeviceLocation: false,
   pcProfile: true,
+  pcProfileFolders: [],
+  pcProfileExcludedFolders: [],
   dailyBriefing: true,
   diagnosticReporting: { enabled: true, automatic: true, capabilityGaps: false, url: 'https://jocular-otter-624907.netlify.app/api/error-report' },
 

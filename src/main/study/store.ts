@@ -10,7 +10,7 @@ import type { QuizQuestion } from '@shared/ipc'
 
 const file = (): string => join(app.getPath('userData'), 'study.json')
 const count = z.number().int().nonnegative().safe()
-const storeSchema = z.object({
+export const studyStoreSchema = z.object({
   version: z.literal(1).optional(),
   decks: z.array(z.object({
     id: z.string().min(1), title: z.string().trim().min(1), created: count,
@@ -28,7 +28,7 @@ export function listDecks(): StudyDeck[] {
     if ((error as NodeJS.ErrnoException).code === 'ENOENT') return []
     throw new Error('Lernkarten können nicht gelesen werden. Die vorhandene Datei bleibt unverändert.')
   }
-  try { return storeSchema.parse(JSON.parse(raw)).decks }
+  try { return studyStoreSchema.parse(JSON.parse(raw)).decks }
   catch { throw new Error('Die Lernkartendatei ist beschädigt oder hat ein unbekanntes Format. Bitte study.json aus einer Sicherung wiederherstellen. Sie wurde nicht verändert.') }
 }
 
@@ -91,8 +91,12 @@ export function deleteDeck(id: string): boolean {
   const next = decks.filter(d => d.id !== id)
   if (next.length === decks.length) return false
   save(next)
+  for (const [token, presentation] of presentations) if (presentation.deckId === id) presentations.delete(token)
   return true
 }
+
+type QuizResult = { correct: boolean; solution: string; card: StudyCard; stats: StudyStats }
+const presentations = new Map<string, { deckId: string; cardId: string; at: number; answer?: string; result?: QuizResult }>()
 
 export function quizNext(deckId: string, skip?: string): QuizQuestion {
   const deck = findDeck(deckId)
@@ -100,18 +104,33 @@ export function quizNext(deckId: string, skip?: string): QuizQuestion {
   // Die gerade beantwortete Karte nicht sofort wieder — außer sie ist die letzte fällige.
   const card = nextCard(deck, Date.now(), skip) ?? null
   const stats = deckStats(deck)
+  for (const [token, pending] of presentations) {
+    if (Date.now() - pending.at > 30 * 60_000 || (!pending.result && pending.deckId === deck.id)) presentations.delete(token)
+  }
+  while (presentations.size >= 512) presentations.delete(presentations.keys().next().value!)
+  const questionToken = randomUUID()
+  if (card) presentations.set(questionToken, { deckId: deck.id, cardId: card.id, at: Date.now() })
   return card
-    ? { deckId: deck.id, deckTitle: deck.title, cardId: card.id, question: card.question, options: card.options, stats }
+    ? { deckId: deck.id, deckTitle: deck.title, cardId: card.id, questionToken, question: card.question, options: card.options, stats }
     : { deckId: deck.id, deckTitle: deck.title, done: true, stats }
 }
 
-export function quizAnswer(deckId: string, cardId: string, answer: string): { correct: boolean; solution: string; card: StudyCard; stats: StudyStats } {
+export function quizAnswer(deckId: string, cardId: string, answer: string, questionToken: string): QuizResult {
+  if (typeof answer !== 'string' || !answer.trim() || answer.length > 5000) throw new Error('Bitte eine kurze Antwort eingeben.')
+  const presentation = presentations.get(questionToken)
+  if (!presentation || presentation.deckId !== deckId || presentation.cardId !== cardId || Date.now() - presentation.at > 30 * 60_000) throw new Error('Diese Quizfrage ist nicht mehr aktuell. Bitte die nächste Frage laden.')
+  if (presentation.result) {
+    if (presentation.answer !== answer.trim()) throw new Error('Diese Frage wurde bereits beantwortet.')
+    return structuredClone(presentation.result)
+  }
   const decks = listDecks()
-  const deck = lookup(decks, deckId)
+  const deck = decks.find(d => d.id === deckId)
   const index = deck?.cards.findIndex(c => c.id === cardId) ?? -1
   if (!deck || index < 0) throw new Error('Diese Karte gibt es nicht mehr.')
   const correct = checkAnswer(deck.cards[index], answer)
   deck.cards[index] = grade(deck.cards[index], correct)
   save(decks)
-  return { correct, solution: deck.cards[index].answer, card: deck.cards[index], stats: deckStats(deck) }
+  const result = { correct, solution: deck.cards[index].answer, card: deck.cards[index], stats: deckStats(deck) }
+  presentation.answer = answer.trim(); presentation.result = structuredClone(result)
+  return result
 }

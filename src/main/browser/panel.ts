@@ -1,6 +1,7 @@
 import { BrowserWindow, WebContentsView, session, type WebContents } from 'electron'
 import { randomUUID } from 'node:crypto'
-import { allowedBrowserNavigation, browserUrl, clampBrowserBounds, type BrowserBounds, type BrowserPanelState } from '@shared/browser'
+import { allowedBrowserNavigation, browserUrl, clampBrowserBounds, cleanPurpose, type BrowserBounds, type BrowserPanelState, type BrowserPurpose } from '@shared/browser'
+import { hasICloudAuthCookie } from '@shared/icloud'
 
 const PARTITION = 'persist:james-browser'
 const MAX_TABS = 12
@@ -11,9 +12,12 @@ let activeId: string | null = null
 let opened = false
 let viewport: BrowserBounds | null = null
 let sessionReady = false
+let purpose: BrowserPurpose | null = null
+let done = false
+let watchTimer: NodeJS.Timeout | null = null
 
 export function browserState(): BrowserPanelState {
-  return { open: opened, activeId, tabs: tabs.filter(t => !t.view.webContents.isDestroyed()).map(t => {
+  return { open: opened, purpose: opened ? purpose : null, done: opened && done, activeId, tabs: tabs.filter(t => !t.view.webContents.isDestroyed()).map(t => {
     const wc = t.view.webContents
     return { id: t.id, title: wc.getTitle() || 'Neuer Tab', url: wc.getURL(), loading: wc.isLoading(),
       canGoBack: wc.navigationHistory.canGoBack(), canGoForward: wc.navigationHistory.canGoForward(), error: t.error }
@@ -44,7 +48,8 @@ export function bindBrowserWindow(window: BrowserWindow): void {
   window.webContents.on('did-finish-load', emit)
   window.on('closed', () => {
     const old = tabs
-    tabs = []; host = null; activeId = null; opened = false; viewport = null
+    tabs = []; host = null; activeId = null; opened = false; viewport = null; purpose = null; done = false
+    if (watchTimer) { clearInterval(watchTimer); watchTimer = null }
     for (const tab of old) if (!tab.view.webContents.isDestroyed()) tab.view.webContents.close()
   })
 }
@@ -111,7 +116,12 @@ function createTab(popupOptions?: Electron.BrowserWindowConstructorOptions): Tab
   return tab
 }
 
-export function openBrowser(url?: string, reuse = false, visible = true): BrowserPanelState {
+/**
+ * Lädt eine Seite. Sichtbar wird sie nur mit `visible`, und dann immer mit
+ * einem Zweck: Der Browser ist das Fenster für einen Schritt des Nutzers
+ * (anmelden, freigeben, auswählen), kein allgemeiner Webbrowser.
+ */
+export function openBrowser(url?: string, reuse = false, visible = true, why?: BrowserPurpose): BrowserPanelState {
   const target = url === undefined ? null : browserUrl(url)
   let tab = reuse && target ? tabs.find(t => t.view.webContents.getURL() === target) : undefined
   if (!tab) {
@@ -120,9 +130,28 @@ export function openBrowser(url?: string, reuse = false, visible = true): Browse
     else void tab.view.webContents.loadURL('about:blank')
   }
   activeId = tab.id
-  if (visible) { opened = true; host?.restore(); host?.show(); host?.focus() }
+  if (visible) {
+    opened = true
+    purpose = cleanPurpose(why)
+    done = false
+    watchPurpose()
+    host?.restore(); host?.show(); host?.focus()
+  }
   layout(); emit()
   return browserState()
+}
+
+/** Prüft bei Anmeldezwecken, ob die Anmeldung schon geklappt hat. */
+function watchPurpose(): void {
+  if (watchTimer) { clearInterval(watchTimer); watchTimer = null }
+  if (!opened || purpose?.watch !== 'icloud') return
+  const check = async (): Promise<void> => {
+    if (!opened || purpose?.watch !== 'icloud' || done) { if (watchTimer) clearInterval(watchTimer); watchTimer = null; return }
+    const cookies = await session.fromPartition(PARTITION).cookies.get({ domain: 'icloud.com' }).catch(() => [])
+    if (hasICloudAuthCookie(cookies)) { done = true; emit() }
+  }
+  watchTimer = setInterval(() => { void check() }, 1500)
+  void check()
 }
 
 export function setBrowserBounds(bounds: BrowserBounds | null): void {
@@ -132,8 +161,11 @@ export function setBrowserBounds(bounds: BrowserBounds | null): void {
 
 export function browserAction(action: string, id?: string, url?: string): BrowserPanelState {
   const tab = tabs.find(t => t.id === (id ?? activeId))
-  if (action === 'hide') { opened = false; viewport = null }
-  else if (action === 'show') { opened = true }
+  if (action === 'hide' || action === 'done') {
+    opened = false; viewport = null; purpose = null; done = false
+    if (watchTimer) { clearInterval(watchTimer); watchTimer = null }
+  }
+  else if (action === 'show') { if (tabs.length) { opened = true; purpose ??= cleanPurpose(null); watchPurpose() } }
   else if (action === 'select' && tab) activeId = tab.id
   else if (action === 'close' && tab) {
     tabs = tabs.filter(t => t !== tab)

@@ -85,12 +85,8 @@ export function getSettings(): Settings {
       // Host des Dashboards. Nur die alte Voreinstellung umstellen, eigene
       // Adressen bleiben.
       if (LEGACY_REPORT_URLS.includes(current.diagnosticReporting.url)) current.diagnosticReporting.url = DEFAULT_SETTINGS.diagnosticReporting.url
-      // Einmalig beim Update, an dem der Standort-Schalter dazukam: Fehlerberichte
-      // gehen ab jetzt standardmäßig automatisch an den eingetragenen Empfänger.
-      // Abschalten unter Diagnose & Werkzeuge bleibt jederzeit möglich.
-      if (saved && typeof saved === 'object' && !('useDeviceLocation' in saved)) {
-        current.diagnosticReporting = { ...current.diagnosticReporting, enabled: true, automatic: true }
-      }
+      // Missing location settings never imply consent to diagnostic uploads.
+      // merge() already fills missing fields without replacing explicit opt-outs.
     } catch (err) {
       console.error('[settings] Datei unlesbar, nutze Standardwerte:', err)
       // Die kaputte Datei beiseitelegen, bevor die nächste Änderung sie mit

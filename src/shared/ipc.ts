@@ -2,8 +2,8 @@ import type { WebsiteAccountInfo, WebsiteAccountInput } from './websiteAccounts'
 import type { WorkingContext } from './workingContext'
 import type { SkillProposal } from './skillProposal'
 import type { BrainGraph, Widget } from './brain'
-import type { BrowserBounds, BrowserPanelState } from './browser'
-import type { ICloudCheck, ICloudService, ICloudStatus } from './icloud'
+import type { BrowserBounds, BrowserPanelState, BrowserPurpose } from './browser'
+import type { ICloudCalendarEvent, ICloudCheck, ICloudDriveEntry, ICloudMailMessage, ICloudMailSummary, ICloudService, ICloudStatus } from './icloud'
 import type { VoicePreviewRequest, VoicePreviewResult } from './voiceGallery'
 /**
  * Typisierter IPC-Vertrag.
@@ -77,7 +77,7 @@ import type {
 /** Renderer → Main, mit Antwort. */
 /** Eine Quizfrage ohne Lösung — die bleibt im Hauptprozess. */
 export type QuizQuestion =
-  | { deckId: string; deckTitle: string; cardId: string; question: string; options?: string[]; stats: StudyStats }
+  | { deckId: string; deckTitle: string; cardId: string; questionToken: string; question: string; options?: string[]; stats: StudyStats }
   | { deckId: string; deckTitle: string; done: true; stats: StudyStats }
 
 /** Was der PC-Abgleich zuletzt gefunden hat — nur Zahlen, keine Inhalte. */
@@ -113,6 +113,12 @@ export interface IpcInvokeMap {
   'backup:list': { req: void; res: import('./types').BackupInfo[] }
   'backup:create': { req: void; res: import('./types').BackupInfo }
   'backup:openFolder': { req: void; res: void }
+  'pc:chooseFolders': { req: void; res: string[] }
+  'pc:preview': { req: void; res: { folders: Array<{ name: string; entries: string[] }>; documents: Array<{ path: string; name: string; excerpt: string }> } }
+  'backup:restore': { req: void; res: { ok: boolean; detail: string } }
+  'backup:restoreStatus': { req: void; res: { pending: boolean } }
+  'backup:cancelRestore': { req: void; res: void }
+  'briefing:refresh': { req: void; res: void }
   'settings:set': { req: Partial<Settings>; res: Settings }
   'settings:reset': { req: void; res: Settings }
 
@@ -192,7 +198,7 @@ export interface IpcInvokeMap {
   'diagnostics:send': { req: void; res: { ok: boolean; detail: string } }
   'study:decks': { req: void; res: { id: string; title: string; stats: StudyStats }[] }
   'study:next': { req: { deckId: string; skip?: string }; res: QuizQuestion }
-  'study:answer': { req: { deckId: string; cardId: string; answer: string }; res: { correct: boolean; solution: string; stats: StudyStats } }
+  'study:answer': { req: { deckId: string; cardId: string; questionToken: string; answer: string }; res: { correct: boolean; solution: string; stats: StudyStats } }
   'study:delete': { req: { deckId: string }; res: boolean }
   'pc:status': { req: void; res: PcProfileStatus }
   'pc:rescan': { req: void; res: PcProfileStatus }
@@ -288,13 +294,28 @@ export interface IpcInvokeMap {
   'icloud:signOutWeb': { req: void; res: ICloudStatus }
   'icloud:open': { req: { service: ICloudService }; res: { ok: boolean; error?: string } }
   'icloud:openDrive': { req: void; res: { ok: boolean; error?: string } }
+  'icloud:mailList': { req: { folder?: string; unreadOnly?: boolean; query?: string; limit?: number }; res: ICloudMailSummary[] }
+  'icloud:mailRead': { req: { uid: number; folder?: string }; res: ICloudMailMessage }
+  'icloud:mailSend': { req: { operationId: string; to: string; subject: string; body: string; inReplyTo?: string }; res: { verschickt: true; an: string } }
+  'icloud:events': { req: { days: number }; res: ICloudCalendarEvent[] }
+  'icloud:driveList': { req: { path?: string; query?: string }; res: { ordner: string; eintraege: ICloudDriveEntry[]; gekuerzt: boolean } | null }
+  'icloud:driveOpen': { req: { path: string }; res: { ok: boolean; error?: string } }
+  /** Öffnet die Microsoft-Store-Seite von „iCloud für Windows“. */
+  'icloud:installWindows': { req: void; res: void }
+  /** Anmeldefenster bei account.apple.com, um ein app-spezifisches Passwort zu erstellen. */
+  'icloud:createAppPassword': { req: void; res: { ok: boolean; error?: string } }
+  /** Health-Export (Export.zip oder export.xml) wählen und einlesen. */
+  'health:import': { req: void; res: { ok: boolean; detail: string; takenAt?: number } }
+  'health:cancelImport': { req: void; res: void }
+  /** Holt das Hauptfenster nach vorn und öffnet dort die Konten-Ansicht. */
+  'app:openAccounts': { req: { section?: string } | void; res: void }
   /** Hörprobe einer Galerie-Stimme, ohne die Einstellungen zu ändern. */
   'voice:preview': { req: VoicePreviewRequest; res: VoicePreviewResult }
 
-  'browser:open': { req: { url?: string }; res: BrowserPanelState }
+  'browser:open': { req: { url?: string; purpose?: BrowserPurpose }; res: BrowserPanelState }
   'browser:status': { req: void; res: BrowserPanelState }
   'browser:bounds': { req: BrowserBounds | null; res: void }
-  'browser:action': { req: { action: 'hide' | 'show' | 'select' | 'close' | 'navigate' | 'back' | 'forward' | 'reload' | 'stop'; id?: string; url?: string }; res: BrowserPanelState }
+  'browser:action': { req: { action: 'hide' | 'done' | 'show' | 'select' | 'close' | 'navigate' | 'back' | 'forward' | 'reload' | 'stop'; id?: string; url?: string }; res: BrowserPanelState }
   'app:openSettings': { req: { section?: string } | void; res: void }
   'app:quit': { req: void; res: void }
   /**
@@ -545,6 +566,7 @@ export interface IpcInvokeMap {
 
 /** Main → Renderer, ohne Antwort. */
 export interface IpcEventMap {
+  'health:importProgress': { records: number }
   'browser:state': BrowserPanelState
   'state:set': { state: CrystalState; reason?: string }
   /** Die Kacheln auf der Startseite haben sich geändert. */
@@ -612,6 +634,7 @@ export interface IpcEventMap {
   /** Ein Stück Antworttext aus `chatgpt:respond`, sobald es da ist. */
   'chatgpt:delta': { requestId: string; text: string }
   'study:open': { deckId?: string }
+  'accounts:open': { section?: string }
 }
 
 export type IpcInvokeChannel = keyof IpcInvokeMap
@@ -633,6 +656,12 @@ export const IPC_INVOKE_CHANNELS = [
   'backup:list',
   'backup:create',
   'backup:openFolder',
+  'pc:chooseFolders',
+  'pc:preview',
+  'backup:restore',
+  'backup:restoreStatus',
+  'backup:cancelRestore',
+  'briefing:refresh',
   'settings:set',
   'settings:reset',
   'secrets:status',
@@ -708,6 +737,17 @@ export const IPC_INVOKE_CHANNELS = [
   'icloud:open',
   'icloud:openDrive',
   'voice:preview',
+  'icloud:mailList',
+  'icloud:mailRead',
+  'icloud:mailSend',
+  'icloud:events',
+  'icloud:driveList',
+  'icloud:driveOpen',
+  'icloud:installWindows',
+  'icloud:createAppPassword',
+  'health:import',
+  'health:cancelImport',
+  'app:openAccounts',
   'browser:open',
   'browser:status',
   'browser:bounds',
@@ -798,6 +838,7 @@ export const IPC_INVOKE_CHANNELS = [
 ] as const satisfies readonly IpcInvokeChannel[]
 
 export const IPC_EVENT_CHANNELS = [
+  'health:importProgress',
   'browser:state',
   'state:set',
   'brain:widgets',
@@ -825,7 +866,8 @@ export const IPC_EVENT_CHANNELS = [
   'local:progress',
   'hub:progress',
   'chatgpt:delta',
-  'study:open'
+  'study:open',
+  'accounts:open'
 ] as const satisfies readonly IpcEventChannel[]
 
 /**

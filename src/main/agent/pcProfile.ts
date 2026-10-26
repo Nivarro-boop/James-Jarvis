@@ -1,7 +1,7 @@
 import { app, type BrowserWindow } from 'electron'
 import { existsSync, readFileSync, writeFileSync, renameSync, rmSync } from 'node:fs'
 import { readdir, lstat, readFile } from 'node:fs/promises'
-import { basename, extname, join } from 'node:path'
+import { basename, extname, join, isAbsolute, relative, resolve } from 'node:path'
 import { inflateRawSync } from 'node:zlib'
 import { getSettings } from '../store/settings'
 
@@ -19,6 +19,7 @@ import { getSettings } from '../store/settings'
 
 export interface PcDocument { path: string; name: string; modified: number; excerpt: string }
 export interface PcProfile {
+  scope?: string
   scannedAt: number
   recentAt: number
   programs: string[]
@@ -39,7 +40,20 @@ const SKIP_DIRS = /^(node_modules|\.git|\$recycle\.bin|appdata|cache|temp|tmp)$/
 function profilePath(): string { return join(app.getPath('userData'), 'pc-profile.json') }
 
 export function readPcProfile(): PcProfile | null {
-  try { return JSON.parse(readFileSync(profilePath(), 'utf8')) as PcProfile } catch { return null }
+  try {
+    const profile = JSON.parse(readFileSync(profilePath(), 'utf8')) as PcProfile
+    const settings = getSettings()
+    if (profile.scope !== undefined ? profile.scope !== profileScope() : settings.pcProfileFolders.length > 0 || settings.pcProfileExcludedFolders.length > 0) return null
+    return profile
+  } catch { return null }
+}
+function profileScope(): string { const s = getSettings(); return JSON.stringify([s.pcProfileFolders, s.pcProfileExcludedFolders]) }
+export function profilePathAllowed(path: string): boolean {
+  if (!isAbsolute(path) || path.startsWith('\\\\') || path.startsWith('//')) return false
+  return !getSettings().pcProfileExcludedFolders.some(folder => {
+    const rel = relative(resolve(folder), resolve(path))
+    return !rel || (!rel.startsWith('..\\') && !rel.startsWith('../') && rel !== '..' && !isAbsolute(rel))
+  })
 }
 
 function save(profile: PcProfile): void {
@@ -56,6 +70,8 @@ async function safeList(dir: string): Promise<string[]> {
 }
 
 function knownFolders(): { name: string; path: string }[] {
+  const selected = getSettings().pcProfileFolders
+  if (selected.length) return selected.filter(profilePathAllowed).map(path => ({ name: basename(path) || path, path }))
   const home = app.getPath('home')
   const pick = (name: string, key: Parameters<typeof app.getPath>[0]): { name: string; path: string } | null => {
     try { return { name, path: app.getPath(key) } } catch { return null }
@@ -156,10 +172,13 @@ async function scanFolders(valid: () => boolean): Promise<{ folders: PcProfile['
   for (const folder of knownFolders()) {
     const entries: string[] = []
     const walk = async (dir: string, depth: number): Promise<void> => {
+      if (!profilePathAllowed(dir)) return
+      try { if ((await lstat(dir)).isSymbolicLink()) return } catch { return }
       for (const entry of await safeList(dir)) {
         if (++visited > 10000 || Date.now() > deadline || !valid()) return
         if (entry.startsWith('.') || SKIP_DIRS.test(entry) || SENSITIVE.test(entry)) continue
         const full = join(dir, entry)
+        if (!profilePathAllowed(full)) continue
         let info
         try { info = await lstat(full) } catch { continue }
         if (info.isSymbolicLink()) continue
@@ -193,7 +212,8 @@ export async function refreshPcProfile(force = false): Promise<PcProfile | null>
   if (!recentDue) return current
   running = true
   const run = generation
-  const valid = (): boolean => run === generation && getSettings().pcProfile && !getSettings().gamingMode
+  const scope = profileScope()
+  const valid = (): boolean => run === generation && scope === profileScope() && getSettings().pcProfile && !getSettings().gamingMode
   try {
     // Ein Tick Pause, damit das Fenster beim Fokus nicht ruckelt.
     await new Promise(r => setTimeout(r, 1500))
@@ -202,7 +222,7 @@ export async function refreshPcProfile(force = false): Promise<PcProfile | null>
       ? { scannedAt: now, recentAt: now, programs: await programs(), recent: await recentFiles(), ...await scanFolders(valid) }
       : { ...current, recentAt: now, recent: await recentFiles() }
     if (!valid()) return readPcProfile()
-    save(next)
+    save({ ...next, scope })
     return next
   } catch (error) {
     console.error('[pc-profile] Abgleich fehlgeschlagen:', error)
